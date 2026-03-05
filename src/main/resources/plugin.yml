@@ -1,0 +1,17 @@
+name: Contender
+version: '${project.version}'
+main: me.advait.contender.Contender
+api-version: '1.21'
+commands:
+  duel:
+    description: Open the duel setup menu
+    permission: contender.master
+    usage: /duel
+  contender:
+    description: Contender admin commands
+    permission: contender.master
+    usage: /contender <reload>
+permissions:
+  contender.master:
+    description: Allows access to duel management
+    default: op

@@ -1,12 +1,11 @@
 package me.advait.contender;
 
-import me.advait.contender.command.ContenderCommand;
-import me.advait.contender.command.DuelCommand;
-import me.advait.contender.command.EndDuelCommand;
+import me.advait.contender.command.*;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.kit.KitManager;
 import me.advait.contender.listener.*;
 import me.advait.contender.map.MapManager;
+import me.advait.contender.vote.VoteManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
@@ -19,13 +18,17 @@ public final class Contender extends JavaPlugin {
     private DuelManager duelManager;
     private KitManager kitManager;
     private MapManager mapManager;
+    private VoteManager voteManager;
+    private LobbyManager lobbyManager;
     private final Map<UUID, Consumer<String>> chatInputHandlers = new HashMap<>();
 
     @Override
     public void onEnable() {
+        lobbyManager = new LobbyManager(this);
         kitManager = new KitManager(this);
         mapManager = new MapManager(this);
         duelManager = new DuelManager(this);
+        voteManager = new VoteManager(this, duelManager);
 
         registerListeners();
         registerCommands();
@@ -35,6 +38,9 @@ public final class Contender extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (voteManager != null && voteManager.isVoteActive()) {
+            voteManager.getActiveSession().end();
+        }
         if (duelManager != null) {
             duelManager.cleanup();
         }
@@ -49,22 +55,31 @@ public final class Contender extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new ArenaProtectionListener(duelManager), this);
         getServer().getPluginManager().registerEvents(
-                new GUIListener(this, duelManager, kitManager, mapManager), this);
+                new GUIListener(this, duelManager, kitManager, mapManager, voteManager), this);
+        getServer().getPluginManager().registerEvents(
+                new VoteListener(voteManager), this);
+        getServer().getPluginManager().registerEvents(
+                new LobbyListener(this, lobbyManager), this);
     }
 
     private void registerCommands() {
         var duelCmd = getCommand("duel");
-        if (duelCmd != null) {
-            duelCmd.setExecutor(new DuelCommand(this, duelManager));
-        }
+        if (duelCmd != null) duelCmd.setExecutor(new DuelCommand(this, duelManager));
+
         var contenderCmd = getCommand("contender");
-        if (contenderCmd != null) {
-            contenderCmd.setExecutor(new ContenderCommand(this));
-        }
+        if (contenderCmd != null) contenderCmd.setExecutor(new ContenderCommand(this));
+
         var endDuelCmd = getCommand("endduel");
-        if (endDuelCmd != null) {
-            endDuelCmd.setExecutor(new EndDuelCommand(duelManager));
-        }
+        if (endDuelCmd != null) endDuelCmd.setExecutor(new EndDuelCommand(duelManager));
+
+        var startVoteCmd = getCommand("startvote");
+        if (startVoteCmd != null) startVoteCmd.setExecutor(new StartVoteCommand(voteManager));
+
+        var endVoteCmd = getCommand("endvote");
+        if (endVoteCmd != null) endVoteCmd.setExecutor(new EndVoteCommand(voteManager));
+
+        var voteCmd = getCommand("vote");
+        if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager));
     }
 
     public void awaitChatInput(UUID uuid, Consumer<String> handler) {
@@ -75,15 +90,9 @@ public final class Contender extends JavaPlugin {
         return chatInputHandlers.remove(uuid);
     }
 
-    public DuelManager getDuelManager() {
-        return duelManager;
-    }
-
-    public KitManager getKitManager() {
-        return kitManager;
-    }
-
-    public MapManager getMapManager() {
-        return mapManager;
-    }
+    public DuelManager getDuelManager() { return duelManager; }
+    public KitManager getKitManager() { return kitManager; }
+    public MapManager getMapManager() { return mapManager; }
+    public VoteManager getVoteManager() { return voteManager; }
+    public LobbyManager getLobbyManager() { return lobbyManager; }
 }

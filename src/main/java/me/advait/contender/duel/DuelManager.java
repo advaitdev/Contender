@@ -82,6 +82,15 @@ public class DuelManager {
         return isInDuel(player.getUniqueId());
     }
 
+    public boolean isMapInUse(String mapId) {
+        for (Duel duel : activeDuels) {
+            if (duel.getState() != DuelState.ENDED && duel.getMap().getId().equals(mapId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<Duel> getActiveDuels() {
         return Collections.unmodifiableList(activeDuels);
     }

@@ -35,6 +35,12 @@ public class DuelCommand implements CommandExecutor {
             return true;
         }
 
+        if (plugin.getVoteManager().isVoteActive()) {
+            MessageUtil.sendActionBar(player,
+                    "<color:" + MessageUtil.ERROR + ">Cannot start a duel during a vote!</color>");
+            return true;
+        }
+
         if (duelManager.isInDuel(player)) {
             MessageUtil.sendActionBar(player,
                     "<color:" + MessageUtil.ERROR + ">You are already in a duel!</color>");

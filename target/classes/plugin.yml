@@ -16,6 +16,17 @@ commands:
     description: End the duel you are currently in
     permission: contender.master
     usage: /endduel
+  startvote:
+    description: Start a community vote
+    permission: contender.master
+    usage: /startvote <seconds>
+  endvote:
+    description: End the current community vote
+    permission: contender.master
+    usage: /endvote
+  vote:
+    description: Open the voting GUI
+    usage: /vote
 permissions:
   contender.master:
     description: Allows access to duel management

@@ -256,6 +256,7 @@ public class Duel {
     }
 
     private void startRound() {
+        if (state == DuelState.ENDED) return;
         currentRound++;
         state = DuelState.ACTIVE;
 
@@ -408,6 +409,11 @@ public class Duel {
 
         restoreWorldRules();
         manager.endDuel(this);
+
+        for (UUID uuid : getAllParticipants()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) plugin.getLobbyManager().sendToLobby(p);
+        }
 
         // Async arena rollback — fire and forget after duel cleanup
         pasteRegionAsync(null);
@@ -679,5 +685,10 @@ public class Duel {
         clearPlacedBlocks();
         restoreWorldRules();
         manager.endDuel(this);
+
+        for (UUID uuid : getAllParticipants()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) plugin.getLobbyManager().sendToLobby(p);
+        }
     }
 }

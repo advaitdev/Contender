@@ -35,6 +35,7 @@ public class ContenderCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("reload")) {
+            plugin.reloadConfig();
             plugin.getDuelManager().cleanup();
             plugin.getMapManager().loadMaps();
             plugin.getKitManager().loadKits();

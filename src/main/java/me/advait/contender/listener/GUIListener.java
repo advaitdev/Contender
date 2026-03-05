@@ -11,6 +11,7 @@ import me.advait.contender.kit.KitManager;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.map.MapManager;
 import me.advait.contender.util.MessageUtil;
+import me.advait.contender.vote.VoteManager;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -34,13 +35,15 @@ public class GUIListener implements Listener {
     private final DuelManager duelManager;
     private final KitManager kitManager;
     private final MapManager mapManager;
+    private final VoteManager voteManager;
 
     public GUIListener(Contender plugin, DuelManager duelManager,
-                       KitManager kitManager, MapManager mapManager) {
+                       KitManager kitManager, MapManager mapManager, VoteManager voteManager) {
         this.plugin = plugin;
         this.duelManager = duelManager;
         this.kitManager = kitManager;
         this.mapManager = mapManager;
+        this.voteManager = voteManager;
     }
 
     @EventHandler
@@ -54,6 +57,7 @@ public class GUIListener implements Listener {
             case KIT_EDITOR -> handleKitEditor(event, player, holder);
             case MAP_SELECT -> handleMapSelect(event, player, holder);
             case TEAM_SELECT -> handleTeamSelect(event, player, holder);
+            case VOTE_GUI -> {} // handled by VoteListener
         }
     }
 
@@ -127,8 +131,19 @@ public class GUIListener implements Listener {
                 MessageUtil.sendActionBar(player, "<color:" + MessageUtil.ERROR + ">Duel setup cancelled</color>");
             }
             case DuelSetupGUI.START_SLOT -> {
+                if (voteManager.isVoteActive()) {
+                    MessageUtil.sendActionBar(player,
+                            "<color:" + MessageUtil.ERROR + ">Cannot start a duel during a vote!</color>");
+                    return;
+                }
                 if (!setup.isValid()) {
                     MessageUtil.sendActionBar(player, "<color:" + MessageUtil.ERROR + ">Complete the setup first!</color>");
+                    MessageUtil.playClick(player);
+                    return;
+                }
+                if (duelManager.isMapInUse(setup.getSelectedMap().getId())) {
+                    MessageUtil.sendActionBar(player,
+                            "<color:" + MessageUtil.ERROR + ">That arena is already in use!</color>");
                     MessageUtil.playClick(player);
                     return;
                 }

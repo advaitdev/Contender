@@ -146,13 +146,6 @@ public class ArenaProtectionListener implements Listener {
     }
 
     @EventHandler
-    public void onBlockFromTo(BlockFromToEvent event) {
-        if (hasDuelInWorld(event.getBlock().getWorld())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
         if (hasDuelInWorld(event.getBlock().getWorld())) {
             if (!(event.getEntity() instanceof Player)) {

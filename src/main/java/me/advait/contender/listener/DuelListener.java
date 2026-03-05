@@ -5,9 +5,14 @@ import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelState;
 import me.advait.contender.duel.DuelTeam;
+import me.advait.contender.util.MessageUtil;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
+
+import java.util.UUID;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -74,11 +79,21 @@ public class DuelListener implements Listener {
         Duel duel = duelManager.getDuel(player);
         if (duel == null) return;
 
-        if (duel.getState() == DuelState.ACTIVE) {
-            duel.handleDeath(player);
-        } else if (duel.getState() == DuelState.SORTING || duel.getState() == DuelState.STARTING) {
-            duel.forceEnd();
+        // Spectators leaving don't affect the duel
+        if (duel.isSpectator(player.getUniqueId())) return;
+
+        if (duel.getState() == DuelState.ENDED) return;
+
+        // Broadcast disconnect notice to all participants before ending
+        Component msg = MiniMessage.miniMessage().deserialize(
+                MessageUtil.FONT_OPEN + "<color:" + MessageUtil.ERROR + ">" +
+                player.getName() + " disconnected — duel cancelled.</color>" + MessageUtil.FONT_CLOSE);
+        for (UUID uuid : duel.getAllParticipants()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && !p.equals(player)) p.sendMessage(msg);
         }
+
+        duel.forceEnd();
     }
 
     @EventHandler

@@ -1,6 +1,7 @@
 package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.*;
@@ -41,13 +42,16 @@ public class DuelManager {
             playerDuelMap.put(uuid, duel);
         }
 
-        UUID creator = setup.getCreator();
-        if (!setup.isPlayerInAnyTeam(creator)) {
-            duel.addSpectator(creator);
-            playerDuelMap.put(creator, duel);
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            UUID uuid = online.getUniqueId();
+            if (!isInDuel(uuid) && !duel.getAllDuelPlayers().contains(uuid)) {
+                duel.addSpectator(uuid);
+                playerDuelMap.put(uuid, duel);
+            }
         }
 
-        activeSetups.remove(creator);
+        activeSetups.remove(setup.getCreator());
+
         duel.start();
         return duel;
     }

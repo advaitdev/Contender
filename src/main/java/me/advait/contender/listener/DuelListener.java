@@ -6,6 +6,7 @@ import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelState;
 import me.advait.contender.duel.DuelTeam;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -39,6 +40,7 @@ public class DuelListener implements Listener {
         event.setKeepLevel(true);
         event.deathMessage(null);
         event.setDroppedExp(0);
+        event.getPlayer().setGameMode(GameMode.SPECTATOR);
 
         duel.handleDeath(player);
 

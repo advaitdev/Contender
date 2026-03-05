@@ -251,12 +251,14 @@ public class Duel {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 player.teleport(map.getTeam1Spawn());
+                player.setGameMode(GameMode.SURVIVAL);
             }
         }
         for (UUID uuid : team2.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 player.teleport(map.getTeam2Spawn());
+                player.setGameMode(GameMode.SURVIVAL);
             }
         }
 

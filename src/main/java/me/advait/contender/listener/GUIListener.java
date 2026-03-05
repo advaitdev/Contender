@@ -219,6 +219,12 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }
+            case KitEditorGUI.NATURAL_REGEN_SLOT -> {
+                saveKitFromInventory(event.getInventory(), kit);
+                kit.setNaturalRegen(!kit.isNaturalRegen());
+                MessageUtil.playClick(player);
+                KitEditorGUI.open(player, kit, isNew);
+            }
             case KitEditorGUI.SAVE_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kitManager.saveKit(kit);

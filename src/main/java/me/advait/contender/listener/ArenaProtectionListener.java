@@ -13,6 +13,7 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 
@@ -81,6 +82,29 @@ public class ArenaProtectionListener implements Listener {
         }
 
         duel.removePlacedBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        Player player = event.getPlayer();
+        Duel duel = duelManager.getDuel(player);
+        if (duel == null) return;
+
+        if (duel.isSpectator(player.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (duel.getState() != DuelState.ACTIVE) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (!duel.getKit().isAllowBlockPlace()) {
+            event.setCancelled(true);
+            MessageUtil.sendActionBar(player,
+                    "<color:" + MessageUtil.ERROR + ">Block placement is disabled for this kit!</color>");
+        }
     }
 
     @EventHandler

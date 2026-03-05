@@ -45,6 +45,9 @@ public class DuelManager {
         for (Player online : Bukkit.getOnlinePlayers()) {
             UUID uuid = online.getUniqueId();
             if (!isInDuel(uuid) && !duel.getAllDuelPlayers().contains(uuid)) {
+                // clear spectator inventory
+                online.getInventory().clear();
+
                 duel.addSpectator(uuid);
                 playerDuelMap.put(uuid, duel);
             }

@@ -13,6 +13,7 @@ me\advait\contender\map\MapManager.class
 me\advait\contender\kit\KitManager.class
 me\advait\contender\listener\PlayerNoxesiumListener.class
 me\advait\contender\gui\KitEditorGUI.class
+me\advait\contender\listener\LeafDecayListener.class
 me\advait\contender\map\ArenaMap.class
 me\advait\contender\util\MessageUtil.class
 me\advait\contender\kit\Kit.class
@@ -21,6 +22,7 @@ me\advait\contender\listener\ChatListener.class
 me\advait\contender\gui\MapSelectGUI.class
 me\advait\contender\gui\DuelSetupGUI.class
 me\advait\contender\duel\DuelTeam.class
+me\advait\contender\command\EndDuelCommand.class
 me\advait\contender\gui\GUIType.class
 me\advait\contender\listener\DuelListener.class
 me\advait\contender\gui\KitSelectGUI.class

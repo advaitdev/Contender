@@ -64,6 +64,18 @@ public class MapManager {
                 );
             }
 
+            ConfigurationSection rb = section.getConfigurationSection("rollback-region");
+            if (rb != null) {
+                ConfigurationSection c1 = rb.getConfigurationSection("corner1");
+                ConfigurationSection c2 = rb.getConfigurationSection("corner2");
+                if (c1 != null && c2 != null) {
+                    map.setRollbackRegion(
+                            c1.getDouble("x"), c1.getDouble("y"), c1.getDouble("z"),
+                            c2.getDouble("x"), c2.getDouble("y"), c2.getDouble("z")
+                    );
+                }
+            }
+
             maps.put(id, map);
         }
     }

@@ -14,6 +14,7 @@ public class Kit {
     private Material icon;
     private boolean allowBlockPlace;
     private boolean allowBlockBreak;
+    private boolean naturalRegen;
 
     public Kit(String id) {
         this.id = id;
@@ -24,6 +25,7 @@ public class Kit {
         this.icon = Material.DIAMOND_SWORD;
         this.allowBlockPlace = false;
         this.allowBlockBreak = false;
+        this.naturalRegen = true;
     }
 
     public void apply(Player player) {
@@ -109,5 +111,13 @@ public class Kit {
 
     public void setAllowBlockBreak(boolean allowBlockBreak) {
         this.allowBlockBreak = allowBlockBreak;
+    }
+
+    public boolean isNaturalRegen() {
+        return naturalRegen;
+    }
+
+    public void setNaturalRegen(boolean naturalRegen) {
+        this.naturalRegen = naturalRegen;
     }
 }

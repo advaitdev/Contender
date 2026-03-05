@@ -13,6 +13,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -136,11 +137,17 @@ public class DuelListener implements Listener {
     }
 
     @EventHandler
-    public void onFoodChange(FoodLevelChangeEvent event) {
+    public void onEntityRegainHealth(EntityRegainHealthEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         Duel duel = duelManager.getDuel(player);
-        if (duel != null && duel.getState() != DuelState.ENDED) {
-            event.setCancelled(true);
+        if (duel == null || duel.getState() != DuelState.ACTIVE) return;
+
+        if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED
+                || event.getRegainReason() == EntityRegainHealthEvent.RegainReason.REGEN) {
+            if (!duel.getKit().isNaturalRegen()) {
+                event.setCancelled(true);
+            }
         }
     }
+
 }

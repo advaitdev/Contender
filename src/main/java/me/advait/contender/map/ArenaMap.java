@@ -15,6 +15,9 @@ public class ArenaMap {
     private float team2Yaw, team2Pitch;
     private double spectatorX, spectatorY, spectatorZ;
     private float spectatorYaw, spectatorPitch;
+    private double corner1X, corner1Y, corner1Z;
+    private double corner2X, corner2Y, corner2Z;
+    private boolean hasRollbackRegion;
 
     public ArenaMap(String id) {
         this.id = id;
@@ -82,5 +85,26 @@ public class ArenaMap {
         this.spectatorZ = z;
         this.spectatorYaw = yaw;
         this.spectatorPitch = pitch;
+    }
+
+    public boolean hasRollbackRegion() {
+        return hasRollbackRegion;
+    }
+
+    public double getCorner1X() { return corner1X; }
+    public double getCorner1Y() { return corner1Y; }
+    public double getCorner1Z() { return corner1Z; }
+    public double getCorner2X() { return corner2X; }
+    public double getCorner2Y() { return corner2Y; }
+    public double getCorner2Z() { return corner2Z; }
+
+    public void setRollbackRegion(double c1x, double c1y, double c1z, double c2x, double c2y, double c2z) {
+        this.corner1X = c1x;
+        this.corner1Y = c1y;
+        this.corner1Z = c1z;
+        this.corner2X = c2x;
+        this.corner2Y = c2y;
+        this.corner2Z = c2z;
+        this.hasRollbackRegion = true;
     }
 }

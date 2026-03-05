@@ -1,5 +1,16 @@
 package me.advait.contender.duel;
 
+import com.sk89q.worldedit.EditSession;
+import com.sk89q.worldedit.WorldEdit;
+import com.sk89q.worldedit.WorldEditException;
+import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.extent.clipboard.BlockArrayClipboard;
+import com.sk89q.worldedit.function.operation.ForwardExtentCopy;
+import com.sk89q.worldedit.function.operation.Operation;
+import com.sk89q.worldedit.function.operation.Operations;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.regions.CuboidRegion;
+import com.sk89q.worldedit.session.ClipboardHolder;
 import me.advait.contender.Contender;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
@@ -14,6 +25,7 @@ import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
@@ -40,6 +52,9 @@ public class Duel {
     private boolean firstRound;
     private Boolean originalDoDaylightCycle;
     private Boolean originalDoMobSpawning;
+
+    private volatile BlockArrayClipboard clipboard;
+    private volatile boolean clipboardReady = false;
 
     private static ItemStack[] cloneArray(ItemStack[] arr) {
         if (arr == null) return new ItemStack[0];
@@ -88,9 +103,10 @@ public class Duel {
         state = DuelState.STARTING;
 
         configureWorldRules();
+        copyRegionAsync();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.isDead()) player.spigot().respawn(); // Force remove the death screen
+            if (player.isDead()) player.spigot().respawn();
         }
 
         if (map.getTeam1Spawn() == null || map.getTeam2Spawn() == null) {
@@ -245,7 +261,6 @@ public class Duel {
 
         team1.resetAlive();
         team2.resetAlive();
-        clearPlacedBlocks();
 
         for (UUID uuid : team1.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
@@ -338,42 +353,50 @@ public class Duel {
             }
         }
 
-        clearPlacedBlocks();
+        pasteRegionAsync(() -> {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 3...</color>");
+                broadcastSound(SoundType.COUNTDOWN_TICK);
+            }, 20L);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 3...</color>");
-            broadcastSound(SoundType.COUNTDOWN_TICK);
-        }, 20L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 2...</color>");
+                broadcastSound(SoundType.COUNTDOWN_TICK);
+            }, 40L);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 2...</color>");
-            broadcastSound(SoundType.COUNTDOWN_TICK);
-        }, 40L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 1...</color>");
+                broadcastSound(SoundType.COUNTDOWN_TICK);
+            }, 60L);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in 1...</color>");
-            broadcastSound(SoundType.COUNTDOWN_TICK);
-        }, 60L);
-
-        Bukkit.getScheduler().runTaskLater(plugin, this::startRound, 80L);
+            Bukkit.getScheduler().runTaskLater(plugin, this::startRound, 80L);
+        });
     }
 
-    private void endDuel() {
+    public void endDuel() {
+        if (state == DuelState.ENDED) return;
         state = DuelState.ENDED;
 
         if (activeTask != null) {
             activeTask.cancel();
         }
 
+        MiniMessage mm = MiniMessage.miniMessage();
         boolean tie = team1.getScore() == team2.getScore();
 
         if (tie) {
+            String msg = MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">The duel ended in a tie! " +
+                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>" + MessageUtil.FONT_CLOSE;
             broadcastActionBar("<color:" + MessageUtil.WARNING + ">Tie! " +
                     "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
+            broadcastMessage(mm.deserialize(msg));
         } else {
             DuelTeam winner = team1.getScore() > team2.getScore() ? team1 : team2;
+            String msg = MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">" + winner.getName() + " wins the duel! " +
+                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>" + MessageUtil.FONT_CLOSE;
             broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">" + winner.getName() + " wins the duel! " +
                     "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
+            broadcastMessage(mm.deserialize(msg));
 
             for (UUID uuid : winner.getPlayers()) {
                 Player p = Bukkit.getPlayer(uuid);
@@ -383,10 +406,111 @@ public class Duel {
             }
         }
 
-        clearPlacedBlocks();
         restoreWorldRules();
         manager.endDuel(this);
+
+        // Async arena rollback — fire and forget after duel cleanup
+        pasteRegionAsync(null);
     }
+
+    // -------------------------------------------------------------------------
+    // FAWE rollback
+    // -------------------------------------------------------------------------
+
+    private void copyRegionAsync() {
+        if (!map.hasRollbackRegion()) return;
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(Bukkit.getWorld(map.getWorldName()));
+                if (weWorld == null) return;
+
+                BlockVector3 pos1 = BlockVector3.at(
+                        (int) map.getCorner1X(), (int) map.getCorner1Y(), (int) map.getCorner1Z());
+                BlockVector3 pos2 = BlockVector3.at(
+                        (int) map.getCorner2X(), (int) map.getCorner2Y(), (int) map.getCorner2Z());
+
+                CuboidRegion region = new CuboidRegion(weWorld, pos1, pos2);
+                BlockArrayClipboard cb = new BlockArrayClipboard(region);
+
+                try (EditSession session = WorldEdit.getInstance().newEditSession(weWorld)) {
+                    ForwardExtentCopy copy = new ForwardExtentCopy(session, region, cb, region.getMinimumPoint());
+                    copy.setCopyingBiomes(true);
+                    copy.setCopyingEntities(false);
+                    Operations.complete(copy);
+                } catch (WorldEditException e) {
+                    e.printStackTrace();
+                    return;
+                }
+
+                this.clipboard = cb;
+                this.clipboardReady = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void pasteRegionAsync(Runnable onComplete) {
+        if (!map.hasRollbackRegion() || !clipboardReady || clipboard == null) {
+            clearPlacedBlocks();
+            if (onComplete != null) {
+                Bukkit.getScheduler().runTask(plugin, onComplete);
+            }
+            return;
+        }
+
+        placedBlocks.clear();
+        cleanupEntitiesInRegion();
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(Bukkit.getWorld(map.getWorldName()));
+                if (weWorld == null) {
+                    if (onComplete != null) Bukkit.getScheduler().runTask(plugin, onComplete);
+                    return;
+                }
+
+                try (EditSession editSession = WorldEdit.getInstance().newEditSession(weWorld)) {
+                    Operation operation = new ClipboardHolder(clipboard)
+                            .createPaste(editSession)
+                            .to(clipboard.getMinimumPoint())
+                            .copyEntities(false)
+                            .copyBiomes(true)
+                            .build();
+                    Operations.complete(operation);
+                } catch (WorldEditException e) {
+                    e.printStackTrace();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                if (onComplete != null) {
+                    Bukkit.getScheduler().runTask(plugin, onComplete);
+                }
+            }
+        });
+    }
+
+    private void cleanupEntitiesInRegion() {
+        World world = Bukkit.getWorld(map.getWorldName());
+        if (world == null) return;
+
+        double minX = Math.min(map.getCorner1X(), map.getCorner2X());
+        double maxX = Math.max(map.getCorner1X(), map.getCorner2X());
+        double minZ = Math.min(map.getCorner1Z(), map.getCorner2Z());
+        double maxZ = Math.max(map.getCorner1Z(), map.getCorner2Z());
+
+        for (Entity entity : world.getEntities()) {
+            if (entity instanceof Player) continue;
+            Location loc = entity.getLocation();
+            if (loc.getX() >= minX && loc.getX() <= maxX && loc.getZ() >= minZ && loc.getZ() <= maxZ) {
+                entity.remove();
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
 
     private void clearPlacedBlocks() {
         for (Location loc : placedBlocks) {
@@ -450,6 +574,15 @@ public class Duel {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 MessageUtil.sendActionBar(p, message);
+            }
+        }
+    }
+
+    private void broadcastMessage(Component message) {
+        for (UUID uuid : getAllParticipants()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) {
+                p.sendMessage(message);
             }
         }
     }
@@ -538,6 +671,7 @@ public class Duel {
     }
 
     public void forceEnd() {
+        if (state == DuelState.ENDED) return;
         state = DuelState.ENDED;
         if (activeTask != null) {
             activeTask.cancel();

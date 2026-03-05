@@ -2,6 +2,7 @@ package me.advait.contender;
 
 import me.advait.contender.command.ContenderCommand;
 import me.advait.contender.command.DuelCommand;
+import me.advait.contender.command.EndDuelCommand;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.kit.KitManager;
 import me.advait.contender.listener.*;
@@ -41,6 +42,7 @@ public final class Contender extends JavaPlugin {
 
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(new PlayerNoxesiumListener(), this);
+        getServer().getPluginManager().registerEvents(new LeafDecayListener(), this);
         getServer().getPluginManager().registerEvents(
                 new DuelListener(this, duelManager), this);
         getServer().getPluginManager().registerEvents(new ChatListener(), this);
@@ -58,6 +60,10 @@ public final class Contender extends JavaPlugin {
         var contenderCmd = getCommand("contender");
         if (contenderCmd != null) {
             contenderCmd.setExecutor(new ContenderCommand(this));
+        }
+        var endDuelCmd = getCommand("endduel");
+        if (endDuelCmd != null) {
+            endDuelCmd.setExecutor(new EndDuelCommand(duelManager));
         }
     }
 

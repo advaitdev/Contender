@@ -1,5 +1,6 @@
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\ContenderCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\DuelCommand.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\EndDuelCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\Contender.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\duel\Duel.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\duel\DuelManager.java
@@ -19,6 +20,7 @@ C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listene
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listener\ChatListener.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listener\DuelListener.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listener\GUIListener.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listener\LeafDecayListener.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listener\PlayerNoxesiumListener.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\map\ArenaMap.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\map\MapManager.java

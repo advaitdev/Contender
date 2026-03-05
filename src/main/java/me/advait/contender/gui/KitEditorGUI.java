@@ -31,6 +31,7 @@ public final class KitEditorGUI {
 
     public static final int BLOCK_PLACE_SLOT = 42;
     public static final int BLOCK_BREAK_SLOT = 43;
+    public static final int NATURAL_REGEN_SLOT = 44;
     public static final int DELETE_SLOT = 46;
     public static final int CANCEL_SLOT = 48;
     public static final int SAVE_SLOT = 50;
@@ -49,7 +50,6 @@ public final class KitEditorGUI {
 
         ItemStack filler = controlItem(Material.GRAY_STAINED_GLASS_PANE, " ");
         inv.setItem(41, filler);
-        inv.setItem(44, filler);
         for (int i = 45; i < SIZE; i++) {
             if (i != DELETE_SLOT && i != CANCEL_SLOT && i != SAVE_SLOT && i != ICON_SLOT) {
                 inv.setItem(i, filler);
@@ -104,6 +104,15 @@ public final class KitEditorGUI {
         inv.setItem(BLOCK_BREAK_SLOT, controlItem(bb ? Material.LIME_DYE : Material.RED_DYE,
                 "<color:" + MessageUtil.PRIMARY + ">Block Breaking",
                 "<color:" + MessageUtil.MUTED + ">Currently: " + (bb
+                        ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
+                        : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
+                "",
+                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
+
+        boolean nr = kit.isNaturalRegen();
+        inv.setItem(NATURAL_REGEN_SLOT, controlItem(nr ? Material.LIME_DYE : Material.RED_DYE,
+                "<color:" + MessageUtil.PRIMARY + ">Natural Regeneration",
+                "<color:" + MessageUtil.MUTED + ">Currently: " + (nr
                         ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
                 "",

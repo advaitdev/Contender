@@ -2,6 +2,7 @@ name: Contender
 version: '1.0-SNAPSHOT'
 main: me.advait.contender.Contender
 api-version: '1.21'
+softdepend: [FastAsyncWorldEdit]
 commands:
   duel:
     description: Open the duel setup menu
@@ -11,6 +12,10 @@ commands:
     description: Contender admin commands
     permission: contender.master
     usage: /contender <reload>
+  endduel:
+    description: End the duel you are currently in
+    permission: contender.master
+    usage: /endduel
 permissions:
   contender.master:
     description: Allows access to duel management

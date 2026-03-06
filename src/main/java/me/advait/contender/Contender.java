@@ -5,7 +5,9 @@ import me.advait.contender.duel.DuelManager;
 import me.advait.contender.kit.KitManager;
 import me.advait.contender.listener.*;
 import me.advait.contender.map.MapManager;
+import me.advait.contender.runnable.ImmediateRespawnRunnable;
 import me.advait.contender.vote.VoteManager;
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
@@ -32,6 +34,7 @@ public final class Contender extends JavaPlugin {
 
         registerListeners();
         registerCommands();
+        registerRunnables();
 
         getLogger().info("Contender enabled.");
     }
@@ -80,6 +83,10 @@ public final class Contender extends JavaPlugin {
 
         var voteCmd = getCommand("vote");
         if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager));
+    }
+
+    private void registerRunnables() {
+        Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new ImmediateRespawnRunnable(), 0, 20);
     }
 
     public void awaitChatInput(UUID uuid, Consumer<String> handler) {

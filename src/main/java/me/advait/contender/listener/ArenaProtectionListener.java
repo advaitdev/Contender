@@ -156,12 +156,10 @@ public class ArenaProtectionListener implements Listener {
 
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM
-                || event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.COMMAND) {
-            return;
-        }
-        if (hasDuelInWorld(event.getEntity().getWorld())) {
-            event.setCancelled(true);
+        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.NATURAL) {
+            if (hasDuelInWorld(event.getEntity().getWorld())) {
+                event.setCancelled(true);
+            }
         }
     }
 

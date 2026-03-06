@@ -105,9 +105,9 @@ public class Duel {
         configureWorldRules();
         copyRegionAsync();
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.isDead()) player.spigot().respawn();
-        }
+//        for (Player player : Bukkit.getOnlinePlayers()) {
+//            if (player.isDead()) player.spigot().respawn();
+//        }
 
         if (map.getTeam1Spawn() == null || map.getTeam2Spawn() == null) {
             for (UUID uuid : team1.getPlayers()) {

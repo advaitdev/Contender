@@ -50,11 +50,11 @@ public class DuelListener implements Listener {
 
         duel.handleDeath(player);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isDead()) {
-                player.spigot().respawn();
-            }
-        }, 30L);
+//        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+//            if (player.isDead()) {
+//                player.spigot().respawn();
+//            }
+//        }, 30L);
     }
 
     @EventHandler

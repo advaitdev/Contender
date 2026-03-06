@@ -9,7 +9,6 @@ import me.advait.contender.util.StringUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -115,7 +114,7 @@ public class VoteSession {
         for (Player player : Bukkit.getOnlinePlayers()) {
             var topInv = player.getOpenInventory().getTopInventory();
             if (topInv.getHolder() instanceof GUIHolder holder && holder.getType() == GUIType.VOTE_GUI) {
-                VoteGUI.populate(topInv, this, player);
+                VoteGUI.populate(topInv, this, player, plugin.getSpectatorManager());
             }
         }
     }
@@ -153,7 +152,7 @@ public class VoteSession {
         Map<UUID, Integer> counts = new LinkedHashMap<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             UUID uuid = player.getUniqueId();
-            if (player.getGameMode() != GameMode.SPECTATOR && !removedCandidates.contains(uuid)) {
+            if (!plugin.getSpectatorManager().isEventSpectator(uuid) && !removedCandidates.contains(uuid)) {
                 counts.put(uuid, getVoteCount(uuid));
             }
         }

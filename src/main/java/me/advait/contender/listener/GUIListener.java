@@ -2,6 +2,7 @@ package me.advait.contender.listener;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 import me.advait.contender.Contender;
+import me.advait.contender.SpectatorManager;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelSetup;
 import me.advait.contender.duel.DuelTeam;
@@ -36,14 +37,17 @@ public class GUIListener implements Listener {
     private final KitManager kitManager;
     private final MapManager mapManager;
     private final VoteManager voteManager;
+    private final SpectatorManager spectatorManager;
 
     public GUIListener(Contender plugin, DuelManager duelManager,
-                       KitManager kitManager, MapManager mapManager, VoteManager voteManager) {
+                       KitManager kitManager, MapManager mapManager, VoteManager voteManager,
+                       SpectatorManager spectatorManager) {
         this.plugin = plugin;
         this.duelManager = duelManager;
         this.kitManager = kitManager;
         this.mapManager = mapManager;
         this.voteManager = voteManager;
+        this.spectatorManager = spectatorManager;
     }
 
     @EventHandler
@@ -68,7 +72,8 @@ public class GUIListener implements Listener {
 
         if (holder.getType() == GUIType.KIT_EDITOR) {
             for (int slot : event.getRawSlots()) {
-                if (slot >= 41 && slot < 54) {
+                // Block drags onto control slots and armor/offhand slots
+                if ((slot >= 36 && slot < 54)) {
                     event.setCancelled(true);
                     return;
                 }
@@ -119,11 +124,11 @@ public class GUIListener implements Listener {
             }
             case DuelSetupGUI.TEAM1_SLOT -> {
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, 1);
+                TeamSelectGUI.open(player, setup, 1, spectatorManager);
             }
             case DuelSetupGUI.TEAM2_SLOT -> {
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, 2);
+                TeamSelectGUI.open(player, setup, 2, spectatorManager);
             }
             case DuelSetupGUI.CANCEL_SLOT -> {
                 duelManager.removeSetup(player.getUniqueId());
@@ -211,12 +216,32 @@ public class GUIListener implements Listener {
         boolean isNew = holder.getData("isNew");
         if (kit == null) return;
 
-        if (rawSlot >= 0 && rawSlot <= 40) {
-            return; // allow item placement
+        // Main inventory item slots — allow vanilla behavior
+        if (rawSlot >= 0 && rawSlot < 36) {
+            return;
         }
 
+        // Armor and offhand slots — custom handling
+        if (rawSlot >= 36 && rawSlot <= 40) {
+            event.setCancelled(true);
+            if (event.isRightClick()) {
+                // Reset to placeholder
+                event.setCurrentItem(KitEditorGUI.getSlotPlaceholder(rawSlot));
+            } else if (event.isLeftClick()) {
+                ItemStack cursor = event.getCursor();
+                if (cursor != null && cursor.getType() != Material.AIR) {
+                    // Place the cursor item into the slot
+                    event.setCurrentItem(cursor.clone());
+                    event.getView().setCursor(new ItemStack(Material.AIR));
+                }
+                // Left-click with empty cursor — do nothing (don't let placeholder be picked up)
+            }
+            return;
+        }
+
+        // Player's own inventory
         if (rawSlot >= 54) {
-            return; // player inventory interactions allowed
+            return;
         }
 
         event.setCancelled(true);
@@ -301,7 +326,7 @@ public class GUIListener implements Listener {
         kit.setArmor(armor);
 
         ItemStack offhand = inv.getItem(KitEditorGUI.OFFHAND_SLOT);
-        if (offhand != null && offhand.getType() != Material.AIR && offhand.getType() != Material.SHIELD) {
+        if (offhand != null && offhand.getType() != Material.AIR && offhand.getType() != Material.RED_STAINED_GLASS_PANE) {
             kit.setOffhand(offhand.clone());
         } else {
             kit.setOffhand(null);
@@ -351,6 +376,12 @@ public class GUIListener implements Listener {
                 Player target = onlinePlayers.get(slot);
                 UUID targetUuid = target.getUniqueId();
 
+                if (spectatorManager.isEventSpectator(targetUuid)) {
+                    MessageUtil.sendActionBar(player,
+                            "<color:" + MessageUtil.ERROR + ">That player is an event spectator and cannot participate!</color>");
+                    return;
+                }
+
                 DuelTeam currentTeam = teamNumber == 1 ? setup.getTeam1() : setup.getTeam2();
                 DuelTeam otherTeam = teamNumber == 1 ? setup.getTeam2() : setup.getTeam1();
 
@@ -367,7 +398,7 @@ public class GUIListener implements Listener {
                 }
 
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, teamNumber);
+                TeamSelectGUI.open(player, setup, teamNumber, spectatorManager);
             }
         }
     }

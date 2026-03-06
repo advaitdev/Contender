@@ -1,5 +1,6 @@
 me\advait\contender\listener\VoteListener.class
 me\advait\contender\gui\TeamSelectGUI.class
+me\advait\contender\SpectatorManager.class
 me\advait\contender\util\StringUtil.class
 me\advait\contender\listener\GUIListener.class
 me\advait\contender\duel\DuelManager.class

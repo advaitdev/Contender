@@ -56,21 +56,12 @@ public final class KitEditorGUI {
             }
         }
 
-        // Armor slot labels
-        inv.setItem(HELMET_SLOT, labelItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Helmet Slot",
-                kit.getArmor() != null && kit.getArmor().length > 3 && kit.getArmor()[3] != null
-                        ? kit.getArmor()[3] : null));
-        inv.setItem(CHESTPLATE_SLOT, labelItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Chestplate Slot",
-                kit.getArmor() != null && kit.getArmor().length > 2 && kit.getArmor()[2] != null
-                        ? kit.getArmor()[2] : null));
-        inv.setItem(LEGGINGS_SLOT, labelItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Leggings Slot",
-                kit.getArmor() != null && kit.getArmor().length > 1 && kit.getArmor()[1] != null
-                        ? kit.getArmor()[1] : null));
-        inv.setItem(BOOTS_SLOT, labelItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Boots Slot",
-                kit.getArmor() != null && kit.getArmor().length > 0 && kit.getArmor()[0] != null
-                        ? kit.getArmor()[0] : null));
-        inv.setItem(OFFHAND_SLOT, labelItem(Material.SHIELD, "<color:" + MessageUtil.MUTED + ">Offhand Slot",
-                kit.getOffhand()));
+        // Armor slot placeholders
+        inv.setItem(HELMET_SLOT, getSlotPlaceholder(HELMET_SLOT));
+        inv.setItem(CHESTPLATE_SLOT, getSlotPlaceholder(CHESTPLATE_SLOT));
+        inv.setItem(LEGGINGS_SLOT, getSlotPlaceholder(LEGGINGS_SLOT));
+        inv.setItem(BOOTS_SLOT, getSlotPlaceholder(BOOTS_SLOT));
+        inv.setItem(OFFHAND_SLOT, getSlotPlaceholder(OFFHAND_SLOT));
 
         if (!isNew) {
             ItemStack[] contents = kit.getContents();
@@ -141,9 +132,26 @@ public final class KitEditorGUI {
         return slot >= 0 && slot <= 40;
     }
 
-    private static ItemStack labelItem(Material fallback, String name, ItemStack existing) {
-        if (existing != null) return existing.clone();
-        return controlItem(fallback, name, "<color:" + MessageUtil.ACCENT + ">Place item here</color>");
+    /** Returns the empty-state placeholder for armor/offhand slots. */
+    public static ItemStack getSlotPlaceholder(int slot) {
+        return switch (slot) {
+            case HELMET_SLOT     -> controlItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Helmet Slot",
+                    "<color:" + MessageUtil.ACCENT + ">Left-click to place</color>",
+                    "<color:" + MessageUtil.MUTED + ">Right-click to clear</color>");
+            case CHESTPLATE_SLOT -> controlItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Chestplate Slot",
+                    "<color:" + MessageUtil.ACCENT + ">Left-click to place</color>",
+                    "<color:" + MessageUtil.MUTED + ">Right-click to clear</color>");
+            case LEGGINGS_SLOT   -> controlItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Leggings Slot",
+                    "<color:" + MessageUtil.ACCENT + ">Left-click to place</color>",
+                    "<color:" + MessageUtil.MUTED + ">Right-click to clear</color>");
+            case BOOTS_SLOT      -> controlItem(Material.ARMOR_STAND, "<color:" + MessageUtil.MUTED + ">Boots Slot",
+                    "<color:" + MessageUtil.ACCENT + ">Left-click to place</color>",
+                    "<color:" + MessageUtil.MUTED + ">Right-click to clear</color>");
+            case OFFHAND_SLOT    -> controlItem(Material.RED_STAINED_GLASS_PANE, "<color:" + MessageUtil.MUTED + ">Offhand Slot",
+                    "<color:" + MessageUtil.ACCENT + ">Left-click to place</color>",
+                    "<color:" + MessageUtil.MUTED + ">Right-click to clear</color>");
+            default -> new ItemStack(Material.AIR);
+        };
     }
 
     private static ItemStack controlItem(Material material, String name, String... lore) {

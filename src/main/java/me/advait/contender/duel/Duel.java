@@ -129,8 +129,8 @@ public class Duel {
         for (UUID uuid : team1.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                player.teleport(map.getTeam1Spawn());
                 player.setGameMode(GameMode.SURVIVAL);
+                player.teleport(map.getTeam1Spawn());
                 kit.apply(player);
             }
         }
@@ -138,8 +138,8 @@ public class Duel {
         for (UUID uuid : team2.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                player.teleport(map.getTeam2Spawn());
                 player.setGameMode(GameMode.SURVIVAL);
+                player.teleport(map.getTeam2Spawn());
                 kit.apply(player);
             }
         }
@@ -266,15 +266,15 @@ public class Duel {
         for (UUID uuid : team1.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                player.teleport(map.getTeam1Spawn());
                 player.setGameMode(GameMode.SURVIVAL);
+                player.teleport(map.getTeam1Spawn());
             }
         }
         for (UUID uuid : team2.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                player.teleport(map.getTeam2Spawn());
                 player.setGameMode(GameMode.SURVIVAL);
+                player.teleport(map.getTeam2Spawn());
             }
         }
 
@@ -414,6 +414,8 @@ public class Duel {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) plugin.getLobbyManager().sendToLobby(p);
         }
+
+        cleanupEntitiesInRegion();
 
         // Async arena rollback — fire and forget after duel cleanup
         pasteRegionAsync(null);

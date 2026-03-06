@@ -1,6 +1,7 @@
 package me.advait.contender;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -9,9 +10,11 @@ import org.bukkit.entity.Player;
 public class LobbyManager {
 
     private final Contender plugin;
+    private final SpectatorManager spectatorManager;
 
-    public LobbyManager(Contender plugin) {
+    public LobbyManager(Contender plugin, SpectatorManager spectatorManager) {
         this.plugin = plugin;
+        this.spectatorManager = spectatorManager;
         plugin.saveDefaultConfig();
     }
 
@@ -57,6 +60,9 @@ public class LobbyManager {
         player.setHealth(Math.min(player.getMaxHealth(), 20.0));
         player.setFoodLevel(20);
         player.setSaturation(20f);
+        if (!spectatorManager.isEventSpectator(player)) {
+            player.setGameMode(GameMode.SURVIVAL);
+        }
         player.teleport(lobby);
     }
 }

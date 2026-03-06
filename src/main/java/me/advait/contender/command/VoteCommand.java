@@ -1,5 +1,6 @@
 package me.advait.contender.command;
 
+import me.advait.contender.SpectatorManager;
 import me.advait.contender.gui.VoteGUI;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.vote.VoteManager;
@@ -13,9 +14,11 @@ import org.jetbrains.annotations.NotNull;
 public class VoteCommand implements CommandExecutor {
 
     private final VoteManager voteManager;
+    private final SpectatorManager spectatorManager;
 
-    public VoteCommand(VoteManager voteManager) {
+    public VoteCommand(VoteManager voteManager, SpectatorManager spectatorManager) {
         this.voteManager = voteManager;
+        this.spectatorManager = spectatorManager;
     }
 
     @Override
@@ -33,7 +36,7 @@ public class VoteCommand implements CommandExecutor {
             return true;
         }
 
-        VoteGUI.open(player, session);
+        VoteGUI.open(player, session, spectatorManager);
         return true;
     }
 }

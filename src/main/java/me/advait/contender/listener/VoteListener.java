@@ -1,12 +1,12 @@
 package me.advait.contender.listener;
 
+import me.advait.contender.SpectatorManager;
 import me.advait.contender.gui.GUIHolder;
 import me.advait.contender.gui.GUIType;
 import me.advait.contender.gui.VoteGUI;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.vote.VoteManager;
 import me.advait.contender.vote.VoteSession;
-import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -20,9 +20,11 @@ import java.util.UUID;
 public class VoteListener implements Listener {
 
     private final VoteManager voteManager;
+    private final SpectatorManager spectatorManager;
 
-    public VoteListener(VoteManager voteManager) {
+    public VoteListener(VoteManager voteManager, SpectatorManager spectatorManager) {
         this.voteManager = voteManager;
+        this.spectatorManager = spectatorManager;
     }
 
     @EventHandler
@@ -42,7 +44,7 @@ public class VoteListener implements Listener {
         int rawSlot = event.getRawSlot();
         if (rawSlot < 0 || rawSlot >= 45) return; // ignore filler row and player inventory
 
-        List<Player> candidates = VoteGUI.getCandidates(session);
+        List<Player> candidates = VoteGUI.getCandidates(session, spectatorManager);
         if (rawSlot >= candidates.size()) return;
 
         Player candidate = candidates.get(rawSlot);
@@ -57,7 +59,7 @@ public class VoteListener implements Listener {
         }
 
         if (event.isLeftClick()) {
-            if (player.getGameMode() == GameMode.SPECTATOR) {
+            if (spectatorManager.isEventSpectator(player.getUniqueId())) {
                 MessageUtil.sendActionBar(player,
                         "<color:" + MessageUtil.ERROR + ">Spectators cannot vote!</color>");
                 return;

@@ -1,5 +1,6 @@
 package me.advait.contender.gui;
 
+import me.advait.contender.SpectatorManager;
 import me.advait.contender.duel.DuelSetup;
 import me.advait.contender.duel.DuelTeam;
 import me.advait.contender.util.MessageUtil;
@@ -28,7 +29,7 @@ public final class TeamSelectGUI {
     private TeamSelectGUI() {
     }
 
-    public static void open(Player player, DuelSetup setup, int teamNumber) {
+    public static void open(Player player, DuelSetup setup, int teamNumber, SpectatorManager spectatorManager) {
         GUIHolder holder = new GUIHolder(GUIType.TEAM_SELECT);
         holder.setData("setup", setup);
         holder.setData("teamNumber", teamNumber);
@@ -49,6 +50,7 @@ public final class TeamSelectGUI {
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (slot >= 45) break;
 
+            boolean isEventSpectator = spectatorManager.isEventSpectator(online.getUniqueId());
             boolean onThisTeam = currentTeam.hasPlayer(online.getUniqueId());
             boolean onOtherTeam = otherTeam.hasPlayer(online.getUniqueId());
 
@@ -58,7 +60,16 @@ public final class TeamSelectGUI {
 
             Component playerHead = StringUtil.getPlayerHead(online);
             String statusLine;
-            if (onThisTeam) {
+
+            if (isEventSpectator) {
+                statusLine = "<color:" + MessageUtil.MUTED + ">Event Spectator</color>";
+                skullMeta.displayName(Component.empty().append(playerHead).appendSpace()
+                        .append(MM.deserialize(MessageUtil.FONT_OPEN +
+                                "<color:" + MessageUtil.MUTED + "><strikethrough>" +
+                                online.getName() + "</strikethrough></color>" +
+                                MessageUtil.FONT_CLOSE))
+                        .decoration(TextDecoration.ITALIC, false));
+            } else if (onThisTeam) {
                 statusLine = "<color:" + MessageUtil.PRIMARY + ">On this team</color>";
                 skullMeta.displayName(Component.empty().append(playerHead).appendSpace()
                         .append(MM.deserialize(MessageUtil.FONT_OPEN +
@@ -84,7 +95,7 @@ public final class TeamSelectGUI {
 
             List<Component> lore = new ArrayList<>();
             lore.add(MM.deserialize(statusLine).decoration(TextDecoration.ITALIC, false));
-            if (!onOtherTeam) {
+            if (!isEventSpectator && !onOtherTeam) {
                 lore.add(Component.empty());
                 String action = onThisTeam ? "remove" : "add";
                 lore.add(MM.deserialize("<color:" + MessageUtil.ACCENT + ">Click to " + action + "</color>")

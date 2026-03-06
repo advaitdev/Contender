@@ -22,14 +22,16 @@ public final class Contender extends JavaPlugin {
     private MapManager mapManager;
     private VoteManager voteManager;
     private LobbyManager lobbyManager;
+    private SpectatorManager spectatorManager;
     private final Map<UUID, Consumer<String>> chatInputHandlers = new HashMap<>();
 
     @Override
     public void onEnable() {
-        lobbyManager = new LobbyManager(this);
+        spectatorManager = new SpectatorManager(this);
+        lobbyManager = new LobbyManager(this, spectatorManager);
         kitManager = new KitManager(this);
         mapManager = new MapManager(this);
-        duelManager = new DuelManager(this);
+        duelManager = new DuelManager(this, spectatorManager);
         voteManager = new VoteManager(this, duelManager);
 
         registerListeners();
@@ -58,9 +60,9 @@ public final class Contender extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new ArenaProtectionListener(duelManager), this);
         getServer().getPluginManager().registerEvents(
-                new GUIListener(this, duelManager, kitManager, mapManager, voteManager), this);
+                new GUIListener(this, duelManager, kitManager, mapManager, voteManager, spectatorManager), this);
         getServer().getPluginManager().registerEvents(
-                new VoteListener(voteManager), this);
+                new VoteListener(voteManager, spectatorManager), this);
         getServer().getPluginManager().registerEvents(
                 new LobbyListener(this, lobbyManager), this);
     }
@@ -70,7 +72,7 @@ public final class Contender extends JavaPlugin {
         if (duelCmd != null) duelCmd.setExecutor(new DuelCommand(this, duelManager));
 
         var contenderCmd = getCommand("contender");
-        if (contenderCmd != null) contenderCmd.setExecutor(new ContenderCommand(this));
+        if (contenderCmd != null) contenderCmd.setExecutor(new ContenderCommand(this, spectatorManager));
 
         var endDuelCmd = getCommand("endduel");
         if (endDuelCmd != null) endDuelCmd.setExecutor(new EndDuelCommand(duelManager));
@@ -82,7 +84,7 @@ public final class Contender extends JavaPlugin {
         if (endVoteCmd != null) endVoteCmd.setExecutor(new EndVoteCommand(voteManager));
 
         var voteCmd = getCommand("vote");
-        if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager));
+        if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager, spectatorManager));
     }
 
     private void registerRunnables() {
@@ -102,4 +104,5 @@ public final class Contender extends JavaPlugin {
     public MapManager getMapManager() { return mapManager; }
     public VoteManager getVoteManager() { return voteManager; }
     public LobbyManager getLobbyManager() { return lobbyManager; }
+    public SpectatorManager getSpectatorManager() { return spectatorManager; }
 }

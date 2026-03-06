@@ -1,5 +1,6 @@
 package me.advait.contender.gui;
 
+import me.advait.contender.SpectatorManager;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
 import me.advait.contender.vote.VoteSession;
@@ -7,7 +8,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -28,15 +28,15 @@ public final class VoteGUI {
 
     private VoteGUI() {}
 
-    public static void open(Player player, VoteSession session) {
+    public static void open(Player player, VoteSession session, SpectatorManager spectatorManager) {
         GUIHolder holder = new GUIHolder(GUIType.VOTE_GUI);
         Inventory inv = Bukkit.createInventory(holder, SIZE,
                 MessageUtil.guiTitle("<color:" + MessageUtil.PRIMARY + ">Vote</color>"));
-        populate(inv, session, player);
+        populate(inv, session, player, spectatorManager);
         player.openInventory(inv);
     }
 
-    public static void populate(Inventory inv, VoteSession session, Player viewer) {
+    public static void populate(Inventory inv, VoteSession session, Player viewer, SpectatorManager spectatorManager) {
         inv.clear();
 
         ItemStack filler = buildFiller();
@@ -44,7 +44,7 @@ public final class VoteGUI {
             inv.setItem(i, filler);
         }
 
-        List<Player> candidates = getCandidates(session);
+        List<Player> candidates = getCandidates(session, spectatorManager);
         UUID viewerVote = session.getVoteFor(viewer.getUniqueId());
         boolean isAdmin = viewer.hasPermission("contender.master");
 
@@ -60,9 +60,9 @@ public final class VoteGUI {
      * Returns the ordered list of candidates shown in the GUI.
      * Must be called consistently between populate() and the click handler.
      */
-    public static List<Player> getCandidates(VoteSession session) {
+    public static List<Player> getCandidates(VoteSession session, SpectatorManager spectatorManager) {
         return Bukkit.getOnlinePlayers().stream()
-                .filter(p -> p.getGameMode() != GameMode.SPECTATOR && !session.isRemoved(p.getUniqueId()))
+                .filter(p -> !spectatorManager.isEventSpectator(p.getUniqueId()) && !session.isRemoved(p.getUniqueId()))
                 .sorted(Comparator.comparing(Player::getName))
                 .collect(Collectors.toList());
     }

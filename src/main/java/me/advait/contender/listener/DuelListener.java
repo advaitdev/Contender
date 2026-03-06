@@ -10,16 +10,20 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.util.UUID;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.EquipmentSlot;
 
 public class DuelListener implements Listener {
 
@@ -148,11 +152,18 @@ public class DuelListener implements Listener {
     }
 
     @EventHandler
-    public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
+    public void onUseMobSpawnEgg(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (!(event.getItem() != null && event.getItem().getType().toString().contains("SPAWN_EGG"))) return;
+
         Duel duel = duelManager.getDuel(player);
         if (duel == null) return;
-        if (duel.getState() != DuelState.ACTIVE) event.setCancelled(true);
+
+        if (duel.getState() != DuelState.ACTIVE) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler

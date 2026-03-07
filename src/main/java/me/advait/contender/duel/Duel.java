@@ -316,16 +316,16 @@ public class Duel {
         broadcastSound(SoundType.COUNTDOWN_GO);
     }
 
-    public void handleDeath(Player deadPlayer) {
+    public void handleDeath(Player deadPlayer, Player killer) {
         if (state != DuelState.ACTIVE) return;
 
         UUID deadUuid = deadPlayer.getUniqueId();
         DuelTeam deadTeam = getTeam(deadUuid);
         if (deadTeam == null) return;
 
+        // Guard against double-firing (e.g. EntityDamageEvent interception + PlayerDeathEvent fallback)
+        if (!deadTeam.getAlivePlayers().contains(deadUuid)) return;
         deadTeam.markDead(deadUuid);
-
-        Player killer = deadPlayer.getKiller();
         Component killMsg;
         if (killer != null) {
             Component killerHead = StringUtil.getPlayerHead(killer);

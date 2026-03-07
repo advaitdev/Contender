@@ -12,6 +12,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 
 import java.util.UUID;
 import org.bukkit.event.EventHandler;
@@ -46,15 +47,8 @@ public class DuelListener implements Listener {
         event.setKeepLevel(true);
         event.deathMessage(null);
         event.setDroppedExp(0);
-        event.getPlayer().setGameMode(GameMode.SPECTATOR);
-
-        duel.handleDeath(player);
-
-//        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-//            if (player.isDead()) {
-//                player.spigot().respawn();
-//            }
-//        }, 30L);
+        player.setGameMode(GameMode.SPECTATOR);
+        duel.handleDeath(player, player.getKiller());
     }
 
     @EventHandler
@@ -107,7 +101,7 @@ public class DuelListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         Duel duel = duelManager.getDuel(player);
@@ -120,6 +114,27 @@ public class DuelListener implements Listener {
 
         if (duel.getState() != DuelState.ACTIVE) {
             event.setCancelled(true);
+            return;
+        }
+
+        // Intercept lethal damage — prevent actual death and handle it ourselves
+        if (player.getHealth() + player.getAbsorptionAmount() - event.getFinalDamage() <= 0) {
+            event.setCancelled(true);
+
+            Player killer = null;
+            if (event instanceof EntityDamageByEntityEvent byEntity) {
+                Entity damager = byEntity.getDamager();
+                if (damager instanceof Player p) {
+                    killer = p;
+                } else if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player p) {
+                    killer = p;
+                }
+            }
+
+            player.setHealth(player.getMaxHealth());
+            player.setAbsorptionAmount(0);
+            player.setGameMode(GameMode.SPECTATOR);
+            duel.handleDeath(player, killer);
         }
     }
 

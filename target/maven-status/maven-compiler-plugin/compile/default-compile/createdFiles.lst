@@ -38,5 +38,6 @@ me\advait\contender\gui\KitSelectGUI.class
 me\advait\contender\command\DuelCommand.class
 me\advait\contender\duel\Duel$SoundType.class
 me\advait\contender\vote\VoteManager.class
+me\advait\contender\listener\DuelListener$1.class
 me\advait\contender\duel\Duel.class
 me\advait\contender\runnable\ImmediateRespawnRunnable.class

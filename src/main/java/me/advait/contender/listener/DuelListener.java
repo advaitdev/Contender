@@ -53,9 +53,7 @@ public class DuelListener implements Listener {
 
         // optional: make it not interact / move
         mannequin.setImmovable(true);
-        mannequin.setInvulnerable(true);
         mannequin.setGravity(false);
-
         mannequin.setInvisible(false);
 
         // show all normal player model parts if you want
@@ -64,7 +62,7 @@ public class DuelListener implements Listener {
         // etc.
 
         // play fake death animation
-        mannequin.playEffect(EntityEffect.ENTITY_DEATH);
+        mannequin.damage(100);
 
         // remove it shortly after
         new BukkitRunnable() {
@@ -72,7 +70,7 @@ public class DuelListener implements Listener {
             public void run() {
                 if (mannequin.isValid()) mannequin.remove();
             }
-        }.runTaskLater(plugin, 40L);
+        }.runTaskLater(plugin, 60L);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -88,6 +86,7 @@ public class DuelListener implements Listener {
         event.setDroppedExp(0);
         player.setGameMode(GameMode.SPECTATOR);
         duel.handleDeath(player, player.getKiller());
+        spawnDeathMannequin(player);
     }
 
     @EventHandler
@@ -174,6 +173,7 @@ public class DuelListener implements Listener {
             player.setAbsorptionAmount(0);
             player.setGameMode(GameMode.SPECTATOR);
             duel.handleDeath(player, killer);
+            spawnDeathMannequin(player);
         }
     }
 

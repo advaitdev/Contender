@@ -431,7 +431,7 @@ public class Duel {
             for (UUID uuid : winner.getPlayers()) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null) {
-                    MessageUtil.playDuelEnd(p);
+                    //MessageUtil.playDuelEnd(p);
                 }
             }
         }

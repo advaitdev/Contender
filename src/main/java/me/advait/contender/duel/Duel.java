@@ -271,6 +271,7 @@ public class Duel {
                 if (snapshot.offhand() != null) {
                     player.getInventory().setItemInOffHand(snapshot.offhand().clone());
                 }
+                player.updateInventory();
             } else {
                 kit.apply(player);
             }

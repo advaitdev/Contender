@@ -111,6 +111,8 @@ public class Duel {
 //            if (player.isDead()) player.spigot().respawn();
 //        }
 
+
+
         if (map.getTeam1Spawn() == null || map.getTeam2Spawn() == null) {
             for (UUID uuid : team1.getPlayers()) {
                 Player player = Bukkit.getPlayer(uuid);

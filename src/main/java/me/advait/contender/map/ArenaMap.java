@@ -3,6 +3,7 @@ package me.advait.contender.map;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.WorldCreator;
 
 public class ArenaMap {
 
@@ -47,7 +48,13 @@ public class ArenaMap {
 
     public Location getTeam1Spawn() {
         World world = Bukkit.getWorld(worldName);
-        if (world == null) return null;
+        if (world == null) {
+            world = new WorldCreator(worldName).createWorld();
+        }
+        if (world == null) {
+            Bukkit.getLogger().warning("Could not load team 1 world '" + worldName + "'!");
+            return null;
+        }
         return new Location(world, team1X, team1Y, team1Z, team1Yaw, team1Pitch);
     }
 
@@ -61,7 +68,13 @@ public class ArenaMap {
 
     public Location getTeam2Spawn() {
         World world = Bukkit.getWorld(worldName);
-        if (world == null) return null;
+        if (world == null) {
+            world = new WorldCreator(worldName).createWorld();
+        }
+        if (world == null) {
+            Bukkit.getLogger().warning("Could not load team 1 world '" + worldName + "'!");
+            return null;
+        }
         return new Location(world, team2X, team2Y, team2Z, team2Yaw, team2Pitch);
     }
 

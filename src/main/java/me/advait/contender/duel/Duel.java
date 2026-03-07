@@ -16,6 +16,7 @@ import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -52,6 +53,7 @@ public class Duel {
     private boolean firstRound;
     private Boolean originalDoDaylightCycle;
     private Boolean originalDoMobSpawning;
+    private BossBar bossBar;
 
     private volatile BlockArrayClipboard clipboard;
     private volatile boolean clipboardReady = false;
@@ -165,10 +167,13 @@ public class Duel {
                         "<color:" + MessageUtil.SECONDARY + ">" + team2Names + "</color>" +
                         MessageUtil.FONT_CLOSE
         );
+        bossBar = BossBar.bossBar(buildBossBarTitle(), 1.0f, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS);
+
         for (UUID uuid : getAllParticipants()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 p.sendMessage(vsMessage);
+                p.showBossBar(bossBar);
             }
         }
 
@@ -186,6 +191,29 @@ public class Duel {
             }
         }
         return sb.toString();
+    }
+
+    private Component buildBossBarTitle() {
+        MiniMessage mm = MiniMessage.miniMessage();
+        String team1Names = buildTeamNames(team1);
+        String team2Names = buildTeamNames(team2);
+
+        List<UUID> t1Players = team1.getPlayers();
+        List<UUID> t2Players = team2.getPlayers();
+
+        Component head1 = t1Players.isEmpty() ? Component.empty() : StringUtil.getPlayerHead(t1Players.get(0));
+        Component head2 = t2Players.isEmpty() ? Component.empty() : StringUtil.getPlayerHead(t2Players.get(0));
+
+        Component part1 = mm.deserialize(
+                "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>" + team1Names + " vs </shadow></color></font>");
+        Component part2 = mm.deserialize(
+                "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>" + team2Names + "</shadow></color></font>");
+
+        return Component.empty()
+                .append(head1).appendSpace()
+                .append(part1)
+                .append(head2).appendSpace()
+                .append(part2);
     }
 
     private void startSortingPhase() {
@@ -412,8 +440,12 @@ public class Duel {
 
         for (UUID uuid : getAllParticipants()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null) plugin.getLobbyManager().sendToLobby(p);
+            if (p != null) {
+                if (bossBar != null) p.hideBossBar(bossBar);
+                plugin.getLobbyManager().sendToLobby(p);
+            }
         }
+        bossBar = null;
 
         cleanupEntitiesInRegion();
 
@@ -542,8 +574,13 @@ public class Duel {
     public void addSpectator(UUID uuid) {
         spectators.add(uuid);
         Player player = Bukkit.getPlayer(uuid);
-        if (player != null && map.getSpectatorSpawn() != null) {
-            player.teleport(map.getSpectatorSpawn());
+        if (player != null) {
+            if (map.getSpectatorSpawn() != null) {
+                player.teleport(map.getSpectatorSpawn());
+            }
+            if (bossBar != null) {
+                player.showBossBar(bossBar);
+            }
         }
     }
 
@@ -690,7 +727,11 @@ public class Duel {
 
         for (UUID uuid : getAllParticipants()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null) plugin.getLobbyManager().sendToLobby(p);
+            if (p != null) {
+                if (bossBar != null) p.hideBossBar(bossBar);
+                plugin.getLobbyManager().sendToLobby(p);
+            }
         }
+        bossBar = null;
     }
 }

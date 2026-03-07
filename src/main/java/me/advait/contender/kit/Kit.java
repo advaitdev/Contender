@@ -30,16 +30,17 @@ public class Kit {
 
     public void apply(Player player) {
         player.getInventory().clear();
-        player.getInventory().setStorageContents(cloneArray(contents));
+        player.getInventory().setContents(cloneArray(contents));
         player.getInventory().setArmorContents(cloneArray(armor));
-        if (offhand != null) {
-            player.getInventory().setItemInOffHand(offhand.clone());
-        }
+        player.getInventory().setItemInOffHand(offhand == null ? null : offhand.clone());
+
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
         player.setFireTicks(0);
         player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
+
+        player.updateInventory();
     }
 
     private ItemStack[] cloneArray(ItemStack[] original) {

@@ -60,6 +60,8 @@ public class LobbyManager {
         player.setHealth(Math.min(player.getMaxHealth(), 20.0));
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
+        player.setLevel(0);
+        player.setExp(0);
         if (!spectatorManager.isEventSpectator(player)) {
             player.setGameMode(GameMode.SURVIVAL);
         }

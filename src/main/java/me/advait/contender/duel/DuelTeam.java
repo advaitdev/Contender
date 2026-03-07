@@ -1,5 +1,7 @@
 package me.advait.contender.duel;
 
+import org.bukkit.Bukkit;
+
 import java.util.*;
 
 public class DuelTeam {
@@ -45,6 +47,7 @@ public class DuelTeam {
     }
 
     public String getName() {
+        if (players.size() == 1) return Bukkit.getOfflinePlayer(players.getFirst()).getName();
         return name;
     }
 

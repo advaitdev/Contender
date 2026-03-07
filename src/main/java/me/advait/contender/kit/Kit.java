@@ -38,6 +38,8 @@ public class Kit {
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
         player.setFireTicks(0);
+        player.setLevel(0);
+        player.setExp(0);
         player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
 
         player.updateInventory();

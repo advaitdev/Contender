@@ -281,6 +281,8 @@ public class Duel {
             player.setHealth(20.0);
             player.setFoodLevel(20);
             player.setSaturation(5.0f);
+            player.setLevel(0);
+            player.setExp(0);
             player.setFireTicks(0);
             player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
         }

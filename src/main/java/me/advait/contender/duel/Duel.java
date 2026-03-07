@@ -439,19 +439,22 @@ public class Duel {
         restoreWorldRules();
         manager.endDuel(this);
 
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                if (bossBar != null) p.hideBossBar(bossBar);
-                plugin.getLobbyManager().sendToLobby(p);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            for (UUID uuid : getAllParticipants()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    if (bossBar != null) p.hideBossBar(bossBar);
+                    plugin.getLobbyManager().sendToLobby(p);
+                }
             }
-        }
-        bossBar = null;
+            bossBar = null;
 
-        cleanupEntitiesInRegion();
+            cleanupEntitiesInRegion();
 
-        // Async arena rollback — fire and forget after duel cleanup
-        pasteRegionAsync(null);
+            // Async arena rollback — fire and forget after duel cleanup
+            pasteRegionAsync(null);
+        }, 60);
+
     }
 
     // -------------------------------------------------------------------------

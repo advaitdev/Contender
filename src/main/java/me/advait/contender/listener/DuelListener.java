@@ -1,5 +1,7 @@
 package me.advait.contender.listener;
 
+import com.destroystokyo.paper.profile.PlayerProfile;
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import me.advait.contender.Contender;
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
@@ -8,11 +10,8 @@ import me.advait.contender.duel.DuelTeam;
 import me.advait.contender.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
+import org.bukkit.*;
+import org.bukkit.entity.*;
 
 import java.util.UUID;
 import org.bukkit.event.EventHandler;
@@ -25,6 +24,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.scheduler.BukkitRunnable;
 
 public class DuelListener implements Listener {
 
@@ -34,6 +34,45 @@ public class DuelListener implements Listener {
     public DuelListener(Contender plugin, DuelManager duelManager) {
         this.plugin = plugin;
         this.duelManager = duelManager;
+    }
+
+    private void spawnDeathMannequin(Player player) {
+        Location loc = player.getLocation();
+        World world = loc.getWorld();
+        if (world == null) return;
+
+        Mannequin mannequin = (Mannequin) world.spawnEntity(loc, EntityType.MANNEQUIN);
+        mannequin.setInvisible(true);
+
+        // copy skin
+        mannequin.setProfile(ResolvableProfile.resolvableProfile(player.getPlayerProfile()));
+
+        // copy facing
+        mannequin.teleport(loc);
+        mannequin.setRotation(loc.getYaw(), loc.getPitch());
+
+        // optional: make it not interact / move
+        mannequin.setImmovable(true);
+        mannequin.setInvulnerable(true);
+        mannequin.setGravity(false);
+
+        mannequin.setInvisible(false);
+
+        // show all normal player model parts if you want
+        // mannequin.setModelPartShown(PlayerModelPart.CAPE, true);
+        // mannequin.setModelPartShown(PlayerModelPart.HAT, true);
+        // etc.
+
+        // play fake death animation
+        mannequin.playEffect(EntityEffect.ENTITY_DEATH);
+
+        // remove it shortly after
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (mannequin.isValid()) mannequin.remove();
+            }
+        }.runTaskLater(plugin, 40L);
     }
 
     @EventHandler(priority = EventPriority.HIGH)

@@ -74,4 +74,9 @@ public class DuelTeam {
     public boolean isEmpty() {
         return players.isEmpty();
     }
+
+    public void clearPlayers() {
+        players.clear();
+        alivePlayers.clear();
+    }
 }

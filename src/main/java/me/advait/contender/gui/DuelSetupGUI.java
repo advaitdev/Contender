@@ -29,7 +29,6 @@ public final class DuelSetupGUI {
     public static final int MAP_SLOT = 12;
     public static final int ROUNDS_SLOT = 14;
     public static final int DELAY_SLOT = 16;
-    public static final int MODE_SLOT = 22;
     public static final int TEAM1_SLOT = 29;
     public static final int VS_SLOT = 31;
     public static final int TEAM2_SLOT = 33;
@@ -82,57 +81,56 @@ public final class DuelSetupGUI {
                 "<color:" + MessageUtil.ACCENT + ">Left-click +5s | Right-click -5s</color>"));
 
         boolean isFfa = setup.getMode() == DuelMode.FFA;
-        inv.setItem(MODE_SLOT, item(
-                isFfa ? Material.TOTEM_OF_UNDYING : Material.SHIELD,
-                isFfa ? "<color:" + MessageUtil.WARNING + ">Mode: Free For All" : "<color:" + MessageUtil.PRIMARY + ">Mode: Standard",
-                isFfa
-                        ? "<color:" + MessageUtil.MUTED + ">All players fight everyone</color>"
-                        : "<color:" + MessageUtil.MUTED + ">Team 1 vs Team 2</color>",
-                "",
-                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
-
-        MiniMessage mm = MiniMessage.miniMessage();
-
-        List<String> t1Lore = new ArrayList<>();
-        t1Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam1().size() + "</color>");
-        for (UUID uuid : setup.getTeam1().getPlayers()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                String head = mm.serialize(StringUtil.getPlayerHead(p));
-                t1Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
-            }
-        }
-        t1Lore.add("");
-        t1Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
-
-        inv.setItem(TEAM1_SLOT, item(
-                Material.RED_BANNER,
-                "<color:" + MessageUtil.ERROR + ">Team 1",
-                t1Lore.toArray(new String[0])
-        ));
 
         inv.setItem(VS_SLOT, item(
-                Material.IRON_SWORD,
-                "<color:" + MessageUtil.WARNING + ">VS"
-        ));
+                isFfa ? Material.TOTEM_OF_UNDYING : Material.IRON_SWORD,
+                isFfa ? "<color:" + MessageUtil.WARNING + ">Free For All" : "<color:" + MessageUtil.WARNING + ">VS",
+                isFfa
+                        ? "<color:" + MessageUtil.MUTED + ">All online players auto-assigned</color>"
+                        : "<color:" + MessageUtil.MUTED + ">Standard team vs team</color>",
+                "",
+                "<color:" + MessageUtil.ACCENT + ">Click to toggle mode</color>"));
 
-        List<String> t2Lore = new ArrayList<>();
-        t2Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam2().size() + "</color>");
-        for (UUID uuid : setup.getTeam2().getPlayers()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                String head = mm.serialize(StringUtil.getPlayerHead(p));
-                t2Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
+        if (isFfa) {
+            inv.setItem(TEAM1_SLOT, item(Material.LIME_STAINED_GLASS_PANE,
+                    "<color:" + MessageUtil.MUTED + ">Team 1",
+                    "<color:" + MessageUtil.MUTED + ">Auto-assigned at start</color>"));
+            inv.setItem(TEAM2_SLOT, item(Material.LIME_STAINED_GLASS_PANE,
+                    "<color:" + MessageUtil.MUTED + ">Team 2",
+                    "<color:" + MessageUtil.MUTED + ">Auto-assigned at start</color>"));
+        } else {
+            MiniMessage mm = MiniMessage.miniMessage();
+
+            List<String> t1Lore = new ArrayList<>();
+            t1Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam1().size() + "</color>");
+            for (UUID uuid : setup.getTeam1().getPlayers()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    String head = mm.serialize(StringUtil.getPlayerHead(p));
+                    t1Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
+                }
             }
-        }
-        t2Lore.add("");
-        t2Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
+            t1Lore.add("");
+            t1Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
+            inv.setItem(TEAM1_SLOT, item(Material.RED_BANNER,
+                    "<color:" + MessageUtil.ERROR + ">Team 1",
+                    t1Lore.toArray(new String[0])));
 
-        inv.setItem(TEAM2_SLOT, item(
-                Material.BLUE_BANNER,
-                "<color:" + MessageUtil.SECONDARY + ">Team 2",
-                t2Lore.toArray(new String[0])
-        ));
+            List<String> t2Lore = new ArrayList<>();
+            t2Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam2().size() + "</color>");
+            for (UUID uuid : setup.getTeam2().getPlayers()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    String head = mm.serialize(StringUtil.getPlayerHead(p));
+                    t2Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
+                }
+            }
+            t2Lore.add("");
+            t2Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
+            inv.setItem(TEAM2_SLOT, item(Material.BLUE_BANNER,
+                    "<color:" + MessageUtil.SECONDARY + ">Team 2",
+                    t2Lore.toArray(new String[0])));
+        }
 
         inv.setItem(CANCEL_SLOT, item(
                 Material.BARRIER,

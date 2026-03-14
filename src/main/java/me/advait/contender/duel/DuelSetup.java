@@ -29,7 +29,7 @@ public class DuelSetup {
 
     public boolean isValid() {
         if (selectedKit == null || selectedMap == null) return false;
-        if (mode == DuelMode.FFA) return getAllPlayers().size() >= 2;
+        if (mode == DuelMode.FFA) return true; // teams auto-populated from online players at start
         return !team1.isEmpty() && !team2.isEmpty();
     }
 

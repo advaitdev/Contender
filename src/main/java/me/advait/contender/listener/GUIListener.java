@@ -129,14 +129,16 @@ public class GUIListener implements Listener {
                 DuelSetupGUI.open(player, setup);
             }
             case DuelSetupGUI.TEAM1_SLOT -> {
+                if (setup.getMode() == DuelMode.FFA) return;
                 MessageUtil.playClick(player);
                 TeamSelectGUI.open(player, setup, 1, spectatorManager);
             }
             case DuelSetupGUI.TEAM2_SLOT -> {
+                if (setup.getMode() == DuelMode.FFA) return;
                 MessageUtil.playClick(player);
                 TeamSelectGUI.open(player, setup, 2, spectatorManager);
             }
-            case DuelSetupGUI.MODE_SLOT -> {
+            case DuelSetupGUI.VS_SLOT -> {
                 setup.setMode(setup.getMode() == DuelMode.STANDARD ? DuelMode.FFA : DuelMode.STANDARD);
                 MessageUtil.playClick(player);
                 DuelSetupGUI.open(player, setup);

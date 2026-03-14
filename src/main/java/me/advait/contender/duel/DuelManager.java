@@ -38,6 +38,23 @@ public class DuelManager {
     }
 
     public Duel startDuel(DuelSetup setup) {
+        if (setup.getMode() == DuelMode.FFA) {
+            setup.getTeam1().clearPlayers();
+            setup.getTeam2().clearPlayers();
+            List<Player> candidates = new ArrayList<>();
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                UUID uuid = online.getUniqueId();
+                if (!spectatorManager.isEventSpectator(uuid) && !isInDuel(uuid)) {
+                    candidates.add(online);
+                }
+            }
+            Collections.shuffle(candidates);
+            for (int i = 0; i < candidates.size(); i++) {
+                if (i % 2 == 0) setup.getTeam1().addPlayer(candidates.get(i).getUniqueId());
+                else setup.getTeam2().addPlayer(candidates.get(i).getUniqueId());
+            }
+        }
+
         Duel duel = new Duel(plugin, this, setup);
         activeDuels.add(duel);
 

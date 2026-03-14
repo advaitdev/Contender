@@ -1,7 +1,7 @@
 package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
-import me.advait.contender.SpectatorManager;
+import me.advait.contender.spectator.SpectatorManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -44,7 +44,7 @@ public class DuelManager {
             List<Player> candidates = new ArrayList<>();
             for (Player online : Bukkit.getOnlinePlayers()) {
                 UUID uuid = online.getUniqueId();
-                if (!spectatorManager.isEventSpectator(uuid) && !isInDuel(uuid)) {
+                if (!spectatorManager.isDeceased(uuid) && !isInDuel(uuid)) {
                     candidates.add(online);
                 }
             }
@@ -65,7 +65,7 @@ public class DuelManager {
         for (Player online : Bukkit.getOnlinePlayers()) {
             UUID uuid = online.getUniqueId();
             if (!isInDuel(uuid) && !duel.getAllDuelPlayers().contains(uuid)) {
-                if (!spectatorManager.isEventSpectator(uuid)) {
+                if (!spectatorManager.isDeceased(uuid)) {
                     online.getInventory().clear();
                 }
                 duel.addSpectator(uuid);

@@ -1,7 +1,7 @@
 package me.advait.contender.command;
 
 import me.advait.contender.Contender;
-import me.advait.contender.SpectatorManager;
+import me.advait.contender.spectator.SpectatorManager;
 import me.advait.contender.util.MessageUtil;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
@@ -78,13 +78,13 @@ public class ContenderCommand implements CommandExecutor {
         String sub = args[1];
 
         if (sub.equalsIgnoreCase("list")) {
-            var specs = spectatorManager.getEventSpectators();
+            var specs = spectatorManager.getDeceased();
             if (specs.isEmpty()) {
                 sender.sendMessage(MessageUtil.parse(
-                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.MUTED + ">No event spectators registered.</color>" + MessageUtil.FONT_CLOSE));
+                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.MUTED + ">No deceaseds registered.</color>" + MessageUtil.FONT_CLOSE));
             } else {
                 sender.sendMessage(MessageUtil.parse(
-                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Event spectators (" + specs.size() + "):</color>" + MessageUtil.FONT_CLOSE));
+                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Deceased (" + specs.size() + "):</color>" + MessageUtil.FONT_CLOSE));
                 for (UUID uuid : specs) {
                     Player p = Bukkit.getPlayer(uuid);
                     String name = p != null ? p.getName() : uuid.toString();
@@ -110,28 +110,28 @@ public class ContenderCommand implements CommandExecutor {
         }
 
         if (sub.equalsIgnoreCase("add")) {
-            if (spectatorManager.isEventSpectator(target)) {
+            if (spectatorManager.isDeceased(target)) {
                 sender.sendMessage(MessageUtil.parse(
-                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">" + target.getName() + " is already an event spectator.</color>" + MessageUtil.FONT_CLOSE));
+                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">" + target.getName() + " is already an deceased.</color>" + MessageUtil.FONT_CLOSE));
                 return;
             }
-            spectatorManager.addEventSpectator(target.getUniqueId());
+            spectatorManager.addDeceased(target.getUniqueId());
             target.setGameMode(org.bukkit.GameMode.SPECTATOR);
             sender.sendMessage(MessageUtil.parse(
-                    MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Added " + target.getName() + " as an event spectator.</color>" + MessageUtil.FONT_CLOSE));
-            MessageUtil.sendActionBar(target, "<color:" + MessageUtil.SECONDARY + ">You are now an event spectator.</color>");
+                    MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Added " + target.getName() + " as an deceased.</color>" + MessageUtil.FONT_CLOSE));
+            MessageUtil.sendActionBar(target, "<color:" + MessageUtil.SECONDARY + ">You are now an deceased.</color>");
 
         } else if (sub.equalsIgnoreCase("remove")) {
-            if (!spectatorManager.isEventSpectator(target)) {
+            if (!spectatorManager.isDeceased(target)) {
                 sender.sendMessage(MessageUtil.parse(
-                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">" + target.getName() + " is not an event spectator.</color>" + MessageUtil.FONT_CLOSE));
+                        MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">" + target.getName() + " is not an deceased.</color>" + MessageUtil.FONT_CLOSE));
                 return;
             }
-            spectatorManager.removeEventSpectator(target.getUniqueId());
+            spectatorManager.removeDeceased(target.getUniqueId());
             target.setGameMode(org.bukkit.GameMode.SURVIVAL);
             sender.sendMessage(MessageUtil.parse(
-                    MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Removed " + target.getName() + " as an event spectator.</color>" + MessageUtil.FONT_CLOSE));
-            MessageUtil.sendActionBar(target, "<color:" + MessageUtil.SECONDARY + ">You are no longer an event spectator.</color>");
+                    MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">Removed " + target.getName() + " as an deceased.</color>" + MessageUtil.FONT_CLOSE));
+            MessageUtil.sendActionBar(target, "<color:" + MessageUtil.SECONDARY + ">You are no longer an deceased.</color>");
 
         } else {
             sender.sendMessage(MessageUtil.parse(

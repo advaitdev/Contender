@@ -3,7 +3,7 @@ package me.advait.contender.vote;
 import me.advait.contender.Contender;
 import me.advait.contender.gui.GUIHolder;
 import me.advait.contender.gui.GUIType;
-import me.advait.contender.gui.VoteGUI;
+import me.advait.contender.gui.vote.VoteGUI;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
 import net.kyori.adventure.text.Component;
@@ -152,7 +152,7 @@ public class VoteSession {
         Map<UUID, Integer> counts = new LinkedHashMap<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             UUID uuid = player.getUniqueId();
-            if (!plugin.getSpectatorManager().isEventSpectator(uuid) && !removedCandidates.contains(uuid)) {
+            if (!plugin.getSpectatorManager().isDeceased(uuid) && !removedCandidates.contains(uuid)) {
                 counts.put(uuid, getVoteCount(uuid));
             }
         }

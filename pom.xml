@@ -76,6 +76,10 @@
             <id>intellectualsites-releases</id>
             <url>https://mvn.intellectualsites.com/content/repositories/releases/</url>
         </repository>
+        <repository>
+            <id>maxhenkel-repo</id>
+            <url>https://maven.maxhenkel.de/repository/public</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -114,6 +118,12 @@
                     <artifactId>*</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>de.maxhenkel.voicechat</groupId>
+            <artifactId>voicechat-api</artifactId>
+            <version>2.5.27</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>

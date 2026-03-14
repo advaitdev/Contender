@@ -3,7 +3,7 @@ package me.advait.contender.command;
 import me.advait.contender.Contender;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelSetup;
-import me.advait.contender.gui.DuelSetupGUI;
+import me.advait.contender.gui.duel.DuelSetupGUI;
 import me.advait.contender.util.MessageUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

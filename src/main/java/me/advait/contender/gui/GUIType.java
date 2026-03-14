@@ -7,5 +7,8 @@ public enum GUIType {
     MAP_SELECT,
     TEAM_SELECT,
     VOTE_GUI,
-    SETTINGS_GUI
+    SETTINGS_GUI,
+    DISGUISE_GUI,
+    CHAT_SETTINGS_GUI,
+    PVP_SETTINGS_GUI
 }

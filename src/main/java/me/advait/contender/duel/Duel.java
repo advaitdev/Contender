@@ -12,7 +12,7 @@ import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import me.advait.contender.Contender;
-import me.advait.contender.PlayerSettingsManager;
+import me.advait.contender.player.PlayerSettingsManager;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.util.MessageUtil;
@@ -33,6 +33,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
@@ -350,6 +351,22 @@ public class Duel {
                 player.teleport(i % 2 == 0 ? map.getTeam1Spawn() : map.getTeam2Spawn());
             }
             invincibilityEndTime = System.currentTimeMillis() + 5000L;
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (state == DuelState.ENDED) { cancel(); return; }
+                    long remaining = invincibilityEndTime - System.currentTimeMillis();
+                    if (remaining <= 0) {
+                        cancel();
+                        broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">Round " + currentRound + "/" + totalRounds +
+                                " <color:" + MessageUtil.SECONDARY + ">(" + team1.getScore() + " - " + team2.getScore() + ")</color></color>");
+                        return;
+                    }
+                    int secs = (int) Math.ceil(remaining / 1000.0);
+                    broadcastActionBar("<color:" + MessageUtil.WARNING + ">Invincibility: <color:" + MessageUtil.PRIMARY + ">"
+                            + secs + "s</color></color>");
+                }
+            }.runTaskTimer(plugin, 0L, 10L);
         } else {
             for (UUID uuid : team1.getPlayers()) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -372,8 +389,10 @@ public class Duel {
         }
         firstRound = false;
 
-        broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">Round " + currentRound + "/" + totalRounds +
-                " <color:" + MessageUtil.SECONDARY + ">(" + team1.getScore() + " - " + team2.getScore() + ")</color></color>");
+        if (mode != DuelMode.FFA) {
+            broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">Round " + currentRound + "/" + totalRounds +
+                    " <color:" + MessageUtil.SECONDARY + ">(" + team1.getScore() + " - " + team2.getScore() + ")</color></color>");
+        }
         broadcastSound(SoundType.COUNTDOWN_GO);
     }
 

@@ -1,12 +1,27 @@
 package me.advait.contender;
 
+import me.advait.contender.chat.ChatListener;
+import me.advait.contender.chat.ChatManager;
+import me.advait.contender.chat.ChatSettings;
 import me.advait.contender.command.*;
+import me.advait.contender.duel.DuelListener;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.gui.GUIListener;
 import me.advait.contender.kit.KitManager;
-import me.advait.contender.listener.*;
+import me.advait.contender.lobby.LobbyListener;
+import me.advait.contender.lobby.LobbyManager;
 import me.advait.contender.map.MapManager;
+import me.advait.contender.player.PlayerSettingsManager;
+import me.advait.contender.pvp.PvPListener;
+import me.advait.contender.pvp.PvPSettings;
 import me.advait.contender.runnable.ImmediateRespawnRunnable;
+import me.advait.contender.spectator.ArenaProtectionListener;
+import me.advait.contender.spectator.SpectatorManager;
+import me.advait.contender.voice.VoiceChatManager;
+import me.advait.contender.vote.VoteListener;
 import me.advait.contender.vote.VoteManager;
+import me.advait.contender.world.LeafDecayListener;
+import me.advait.contender.world.PlayerNoxesiumListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -24,6 +39,8 @@ public final class Contender extends JavaPlugin {
     private LobbyManager lobbyManager;
     private SpectatorManager spectatorManager;
     private PlayerSettingsManager playerSettingsManager;
+    private ChatSettings chatSettings;
+    private PvPSettings pvpSettings;
     private final Map<UUID, Consumer<String>> chatInputHandlers = new HashMap<>();
 
     @Override
@@ -35,10 +52,14 @@ public final class Contender extends JavaPlugin {
         mapManager = new MapManager(this);
         duelManager = new DuelManager(this, spectatorManager);
         voteManager = new VoteManager(this, duelManager);
+        chatSettings = new ChatSettings(this);
+        pvpSettings = new PvPSettings(this);
 
         registerListeners();
         registerCommands();
         registerRunnables();
+
+        VoiceChatManager.setup(this, chatSettings, duelManager);
 
         getLogger().info("Contender enabled.");
     }
@@ -60,9 +81,13 @@ public final class Contender extends JavaPlugin {
                 new DuelListener(this, duelManager), this);
         getServer().getPluginManager().registerEvents(new ChatListener(), this);
         getServer().getPluginManager().registerEvents(
+                new ChatManager(chatSettings, duelManager, spectatorManager), this);
+        getServer().getPluginManager().registerEvents(
+                new PvPListener(pvpSettings, duelManager, spectatorManager), this);
+        getServer().getPluginManager().registerEvents(
                 new ArenaProtectionListener(duelManager), this);
         getServer().getPluginManager().registerEvents(
-                new GUIListener(this, duelManager, kitManager, mapManager, voteManager, spectatorManager, playerSettingsManager), this);
+                new GUIListener(this, duelManager, kitManager, mapManager, voteManager, spectatorManager, playerSettingsManager, chatSettings, pvpSettings), this);
         getServer().getPluginManager().registerEvents(
                 new VoteListener(voteManager, spectatorManager), this);
         getServer().getPluginManager().registerEvents(
@@ -88,15 +113,15 @@ public final class Contender extends JavaPlugin {
         var voteCmd = getCommand("vote");
         if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager, spectatorManager));
 
-        var spectatorCmd = getCommand("spectator");
-        if (spectatorCmd != null) {
-            SpectatorCommand spectatorCommand = new SpectatorCommand(spectatorManager);
-            spectatorCmd.setExecutor(spectatorCommand);
-            spectatorCmd.setTabCompleter(spectatorCommand);
+        var deceasedCmd = getCommand("deceased");
+        if (deceasedCmd != null) {
+            DeceasedCommand deceasedCommand = new DeceasedCommand(spectatorManager);
+            deceasedCmd.setExecutor(deceasedCommand);
+            deceasedCmd.setTabCompleter(deceasedCommand);
         }
 
         var settingsCmd = getCommand("settings");
-        if (settingsCmd != null) settingsCmd.setExecutor(new SettingsCommand(playerSettingsManager));
+        if (settingsCmd != null) settingsCmd.setExecutor(new SettingsCommand());
     }
 
     private void registerRunnables() {
@@ -118,4 +143,6 @@ public final class Contender extends JavaPlugin {
     public LobbyManager getLobbyManager() { return lobbyManager; }
     public SpectatorManager getSpectatorManager() { return spectatorManager; }
     public PlayerSettingsManager getPlayerSettingsManager() { return playerSettingsManager; }
+    public ChatSettings getChatSettings() { return chatSettings; }
+    public PvPSettings getPvpSettings() { return pvpSettings; }
 }

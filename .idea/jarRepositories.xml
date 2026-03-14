@@ -17,6 +17,11 @@
       <option name="url" value="https://maven.noxcrew.com/public" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="maxhenkel-repo" />
+      <option name="name" value="maxhenkel-repo" />
+      <option name="url" value="https://maven.maxhenkel.de/repository/public" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="central" />
       <option name="name" value="Central Repository" />
       <option name="url" value="https://repo.maven.apache.org/maven2" />

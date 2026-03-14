@@ -1,7 +1,7 @@
 package me.advait.contender.command;
 
-import me.advait.contender.SpectatorManager;
-import me.advait.contender.gui.VoteGUI;
+import me.advait.contender.gui.vote.VoteGUI;
+import me.advait.contender.spectator.SpectatorManager;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.vote.VoteManager;
 import me.advait.contender.vote.VoteSession;

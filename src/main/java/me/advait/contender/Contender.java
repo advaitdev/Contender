@@ -23,11 +23,13 @@ public final class Contender extends JavaPlugin {
     private VoteManager voteManager;
     private LobbyManager lobbyManager;
     private SpectatorManager spectatorManager;
+    private PlayerSettingsManager playerSettingsManager;
     private final Map<UUID, Consumer<String>> chatInputHandlers = new HashMap<>();
 
     @Override
     public void onEnable() {
         spectatorManager = new SpectatorManager(this);
+        playerSettingsManager = new PlayerSettingsManager(this);
         lobbyManager = new LobbyManager(this, spectatorManager);
         kitManager = new KitManager(this);
         mapManager = new MapManager(this);
@@ -60,7 +62,7 @@ public final class Contender extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new ArenaProtectionListener(duelManager), this);
         getServer().getPluginManager().registerEvents(
-                new GUIListener(this, duelManager, kitManager, mapManager, voteManager, spectatorManager), this);
+                new GUIListener(this, duelManager, kitManager, mapManager, voteManager, spectatorManager, playerSettingsManager), this);
         getServer().getPluginManager().registerEvents(
                 new VoteListener(voteManager, spectatorManager), this);
         getServer().getPluginManager().registerEvents(
@@ -85,6 +87,16 @@ public final class Contender extends JavaPlugin {
 
         var voteCmd = getCommand("vote");
         if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(voteManager, spectatorManager));
+
+        var spectatorCmd = getCommand("spectator");
+        if (spectatorCmd != null) {
+            SpectatorCommand spectatorCommand = new SpectatorCommand(spectatorManager);
+            spectatorCmd.setExecutor(spectatorCommand);
+            spectatorCmd.setTabCompleter(spectatorCommand);
+        }
+
+        var settingsCmd = getCommand("settings");
+        if (settingsCmd != null) settingsCmd.setExecutor(new SettingsCommand(playerSettingsManager));
     }
 
     private void registerRunnables() {
@@ -105,4 +117,5 @@ public final class Contender extends JavaPlugin {
     public VoteManager getVoteManager() { return voteManager; }
     public LobbyManager getLobbyManager() { return lobbyManager; }
     public SpectatorManager getSpectatorManager() { return spectatorManager; }
+    public PlayerSettingsManager getPlayerSettingsManager() { return playerSettingsManager; }
 }

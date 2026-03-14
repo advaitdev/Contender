@@ -12,10 +12,14 @@ import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import me.advait.contender.Contender;
+import me.advait.contender.PlayerSettingsManager;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
+import me.libraryaddict.disguise.DisguiseAPI;
+import me.libraryaddict.disguise.disguisetypes.DisguiseType;
+import me.libraryaddict.disguise.disguisetypes.MobDisguise;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -30,6 +34,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
 import java.util.*;
 
@@ -44,12 +49,14 @@ public class Duel {
     private final int totalRounds;
     private final int preRoundDelay;
     private final Set<UUID> spectators;
+    private final Set<UUID> deadPlayerSpectators;
     private final Set<Location> placedBlocks;
     private final Map<UUID, InventorySnapshot> sortedInventories;
 
     private DuelState state;
     private int currentRound;
     private BukkitTask activeTask;
+    private BukkitTask spectatorPushTask;
     private boolean firstRound;
     private Boolean originalDoDaylightCycle;
     private Boolean originalDoMobSpawning;
@@ -94,6 +101,7 @@ public class Duel {
         this.totalRounds = setup.getRounds();
         this.preRoundDelay = setup.getPreRoundDelay();
         this.spectators = new HashSet<>();
+        this.deadPlayerSpectators = new HashSet<>();
         this.placedBlocks = new HashSet<>();
         this.sortedInventories = new HashMap<>();
         this.state = DuelState.STARTING;
@@ -149,14 +157,17 @@ public class Duel {
         }
 
         Location specSpawn = map.getSpectatorSpawn();
-        if (specSpawn != null) {
-            for (UUID uuid : spectators) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
+        for (UUID uuid : spectators) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                if (specSpawn != null) {
                     player.teleport(specSpawn);
                 }
+                applySpectatorDisguise(player);
             }
         }
+
+        startSpectatorPushTask();
 
         MiniMessage mm = MiniMessage.miniMessage();
         String team1Names = buildTeamNames(team1);
@@ -293,6 +304,13 @@ public class Duel {
         currentRound++;
         state = DuelState.ACTIVE;
 
+        // Remove disguises from any dead players spectating before resetting them
+        for (UUID deadSpec : new HashSet<>(deadPlayerSpectators)) {
+            Player p = Bukkit.getPlayer(deadSpec);
+            if (p != null) removeSpectatorDisguise(p);
+        }
+        deadPlayerSpectators.clear();
+
         team1.resetAlive();
         team2.resetAlive();
 
@@ -331,6 +349,13 @@ public class Duel {
         // Guard against double-firing (e.g. EntityDamageEvent interception + PlayerDeathEvent fallback)
         if (!deadTeam.getAlivePlayers().contains(deadUuid)) return;
         deadTeam.markDead(deadUuid);
+
+        // Put the dead player into flying-disguise spectator mode
+        deadPlayerSpectators.add(deadUuid);
+        deadPlayer.getInventory().clear();
+        deadPlayer.setGameMode(GameMode.ADVENTURE);
+        applySpectatorDisguise(deadPlayer);
+
         Component killMsg;
         if (killer != null) {
             Component killerHead = StringUtil.getPlayerHead(killer);
@@ -443,11 +468,14 @@ public class Duel {
         restoreWorldRules();
         manager.endDuel(this);
 
+        if (spectatorPushTask != null) spectatorPushTask.cancel();
+
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             for (UUID uuid : getAllParticipants()) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null) {
                     if (bossBar != null) p.hideBossBar(bossBar);
+                    if (isSpectator(uuid)) removeSpectatorDisguise(p);
                     plugin.getLobbyManager().sendToLobby(p);
                 }
             }
@@ -583,13 +611,108 @@ public class Duel {
         spectators.add(uuid);
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) {
-            if (map.getSpectatorSpawn() != null) {
-                player.teleport(map.getSpectatorSpawn());
-            }
             if (bossBar != null) {
                 player.showBossBar(bossBar);
             }
+            // Disguise and fly are applied in start() once the duel begins;
+            // if added mid-duel (future-proof), apply immediately.
+            if (state == DuelState.ACTIVE || state == DuelState.ROUND_END || state == DuelState.SORTING) {
+                if (map.getSpectatorSpawn() != null) {
+                    player.teleport(map.getSpectatorSpawn());
+                }
+                applySpectatorDisguise(player);
+            }
         }
+    }
+
+    /** Called after a real respawn (vanilla death path) to re-apply the disguise-spectator state. */
+    public void applyDeadSpectatorMode(Player player) {
+        applySpectatorDisguise(player);
+    }
+
+    private void applySpectatorDisguise(Player player) {
+        player.setAllowFlight(true);
+        player.setFlying(true);
+
+        if (kit.isSpectatorInvisible()) {
+            player.setCollidable(false);
+            for (UUID duelPlayerUuid : getAllDuelPlayers()) {
+                if (duelPlayerUuid.equals(player.getUniqueId())) continue;
+                Player duelPlayer = Bukkit.getPlayer(duelPlayerUuid);
+                if (duelPlayer != null) duelPlayer.hidePlayer(plugin, player);
+            }
+        } else {
+            player.setCollidable(true);
+            for (UUID duelPlayerUuid : getAllDuelPlayers()) {
+                if (duelPlayerUuid.equals(player.getUniqueId())) continue;
+                Player duelPlayer = Bukkit.getPlayer(duelPlayerUuid);
+                if (duelPlayer != null) duelPlayer.showPlayer(plugin, player);
+            }
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("LibsDisguises")) {
+            PlayerSettingsManager.SpectatorDisguise pref =
+                    plugin.getPlayerSettingsManager().getDisguise(player.getUniqueId());
+            DisguiseType libsType = switch (pref) {
+                case ALLAY -> DisguiseType.ALLAY;
+                case BEE -> DisguiseType.BEE;
+                case PARROT -> DisguiseType.PARROT;
+                case BAT -> DisguiseType.BAT;
+                case VEX -> DisguiseType.VEX;
+                case HAPPY_GHAST -> DisguiseType.HAPPY_GHAST;
+            };
+            // Baby happy ghast: pass false for isAdult
+            MobDisguise disguise = pref == PlayerSettingsManager.SpectatorDisguise.HAPPY_GHAST
+                    ? new MobDisguise(libsType, false)
+                    : new MobDisguise(libsType);
+            DisguiseAPI.disguiseToAll(player, disguise);
+        }
+    }
+
+    private void removeSpectatorDisguise(Player player) {
+        player.setFlying(false);
+        player.setAllowFlight(false);
+        player.setCollidable(true);
+
+        for (UUID duelPlayerUuid : getAllDuelPlayers()) {
+            if (duelPlayerUuid.equals(player.getUniqueId())) continue;
+            Player duelPlayer = Bukkit.getPlayer(duelPlayerUuid);
+            if (duelPlayer != null) duelPlayer.showPlayer(plugin, player);
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("LibsDisguises")) {
+            DisguiseAPI.undisguiseToAll(player);
+        }
+    }
+
+    private void startSpectatorPushTask() {
+        spectatorPushTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (state == DuelState.ENDED) {
+                spectatorPushTask.cancel();
+                return;
+            }
+            Set<UUID> duelPlayers = getAllDuelPlayers();
+            for (UUID specUuid : new HashSet<>(spectators)) {
+                Player spec = Bukkit.getPlayer(specUuid);
+                if (spec == null) continue;
+                for (UUID playerUuid : duelPlayers) {
+                    Player duelPlayer = Bukkit.getPlayer(playerUuid);
+                    if (duelPlayer == null) continue;
+                    if (!spec.getWorld().equals(duelPlayer.getWorld())) continue;
+                    if (spec.getLocation().distanceSquared(duelPlayer.getLocation()) < 400.0) {
+                        Vector push = spec.getLocation().toVector()
+                                .subtract(duelPlayer.getLocation().toVector());
+                        if (push.lengthSquared() > 0.001) {
+                            push.normalize().multiply(1.8).setY(0.3);
+                        } else {
+                            push = new Vector(1, 0.3, 0);
+                        }
+                        spec.setVelocity(push);
+                        break;
+                    }
+                }
+            }
+        }, 0L, 5L);
     }
 
     public DuelTeam getTeam(UUID uuid) {
@@ -619,7 +742,7 @@ public class Duel {
     }
 
     public boolean isSpectator(UUID uuid) {
-        return spectators.contains(uuid);
+        return spectators.contains(uuid) || deadPlayerSpectators.contains(uuid);
     }
 
     private void broadcastActionBar(String message) {
@@ -729,6 +852,7 @@ public class Duel {
         if (activeTask != null) {
             activeTask.cancel();
         }
+        if (spectatorPushTask != null) spectatorPushTask.cancel();
         clearPlacedBlocks();
         restoreWorldRules();
         manager.endDuel(this);
@@ -737,6 +861,7 @@ public class Duel {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 if (bossBar != null) p.hideBossBar(bossBar);
+                if (isSpectator(uuid)) removeSpectatorDisguise(p);
                 plugin.getLobbyManager().sendToLobby(p);
             }
         }

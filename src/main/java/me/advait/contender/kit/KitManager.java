@@ -53,6 +53,7 @@ public class KitManager {
             kit.setAllowBlockPlace(section.getBoolean("allow-block-place", false));
             kit.setAllowBlockBreak(section.getBoolean("allow-block-break", false));
             kit.setNaturalRegen(section.getBoolean("natural-regen", true));
+            kit.setSpectatorInvisible(section.getBoolean("spectator-invisible", false));
 
             if (section.contains("contents")) {
                 @SuppressWarnings("unchecked")
@@ -96,6 +97,7 @@ public class KitManager {
             config.set(path + ".allow-block-place", kit.isAllowBlockPlace());
             config.set(path + ".allow-block-break", kit.isAllowBlockBreak());
             config.set(path + ".natural-regen", kit.isNaturalRegen());
+            config.set(path + ".spectator-invisible", kit.isSpectatorInvisible());
             config.set(path + ".contents", Arrays.asList(kit.getContents()));
             config.set(path + ".armor", Arrays.asList(kit.getArmor()));
             if (kit.getOffhand() != null) {

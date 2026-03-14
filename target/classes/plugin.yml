@@ -2,7 +2,7 @@ name: Contender
 version: '1.0-SNAPSHOT'
 main: me.advait.contender.Contender
 api-version: '1.21'
-softdepend: [FastAsyncWorldEdit]
+softdepend: [FastAsyncWorldEdit, LibsDisguises]
 commands:
   duel:
     description: Open the duel setup menu
@@ -27,6 +27,13 @@ commands:
   vote:
     description: Open the voting GUI
     usage: /vote
+  spectator:
+    description: Manage event spectators
+    permission: contender.master
+    usage: /spectator <add|remove|list> [player]
+  settings:
+    description: Open personal settings
+    usage: /settings
 permissions:
   contender.master:
     description: Allows access to duel management

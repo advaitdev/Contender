@@ -15,6 +15,7 @@ public class Kit {
     private boolean allowBlockPlace;
     private boolean allowBlockBreak;
     private boolean naturalRegen;
+    private boolean spectatorInvisible;
 
     public Kit(String id) {
         this.id = id;
@@ -26,6 +27,7 @@ public class Kit {
         this.allowBlockPlace = false;
         this.allowBlockBreak = false;
         this.naturalRegen = true;
+        this.spectatorInvisible = false;
     }
 
     public void apply(Player player) {
@@ -122,5 +124,13 @@ public class Kit {
 
     public void setNaturalRegen(boolean naturalRegen) {
         this.naturalRegen = naturalRegen;
+    }
+
+    public boolean isSpectatorInvisible() {
+        return spectatorInvisible;
+    }
+
+    public void setSpectatorInvisible(boolean spectatorInvisible) {
+        this.spectatorInvisible = spectatorInvisible;
     }
 }

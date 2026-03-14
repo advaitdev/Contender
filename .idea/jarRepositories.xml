@@ -7,6 +7,11 @@
       <option name="url" value="https://maven.enginehub.org/repo/" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="libsdisguises-public" />
+      <option name="name" value="libsdisguises-public" />
+      <option name="url" value="https://mvn.lib.co.nz/public/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="noxcrew-maven" />
       <option name="name" value="Noxcrew Public Maven Repository" />
       <option name="url" value="https://maven.noxcrew.com/public" />

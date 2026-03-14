@@ -2,6 +2,8 @@ package me.advait.contender.listener;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 import me.advait.contender.Contender;
+import me.advait.contender.PlayerSettingsManager;
+import me.advait.contender.PlayerSettingsManager.SpectatorDisguise;
 import me.advait.contender.SpectatorManager;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelSetup;
@@ -38,16 +40,18 @@ public class GUIListener implements Listener {
     private final MapManager mapManager;
     private final VoteManager voteManager;
     private final SpectatorManager spectatorManager;
+    private final PlayerSettingsManager playerSettingsManager;
 
     public GUIListener(Contender plugin, DuelManager duelManager,
                        KitManager kitManager, MapManager mapManager, VoteManager voteManager,
-                       SpectatorManager spectatorManager) {
+                       SpectatorManager spectatorManager, PlayerSettingsManager playerSettingsManager) {
         this.plugin = plugin;
         this.duelManager = duelManager;
         this.kitManager = kitManager;
         this.mapManager = mapManager;
         this.voteManager = voteManager;
         this.spectatorManager = spectatorManager;
+        this.playerSettingsManager = playerSettingsManager;
     }
 
     @EventHandler
@@ -62,6 +66,7 @@ public class GUIListener implements Listener {
             case MAP_SELECT -> handleMapSelect(event, player, holder);
             case TEAM_SELECT -> handleTeamSelect(event, player, holder);
             case VOTE_GUI -> {} // handled by VoteListener
+            case SETTINGS_GUI -> handleSettings(event, player, holder);
         }
     }
 
@@ -265,6 +270,12 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }
+            case KitEditorGUI.SPECTATOR_INVISIBLE_SLOT -> {
+                saveKitFromInventory(event.getInventory(), kit);
+                kit.setSpectatorInvisible(!kit.isSpectatorInvisible());
+                MessageUtil.playClick(player);
+                KitEditorGUI.open(player, kit, isNew);
+            }
             case KitEditorGUI.SAVE_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kitManager.saveKit(kit);
@@ -353,6 +364,30 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 DuelSetupGUI.open(player, setup);
             }
+        }
+    }
+
+    // ── Settings ─────────────────────────────────────────────────────────
+
+    private void handleSettings(InventoryClickEvent event, Player player, GUIHolder holder) {
+        event.setCancelled(true);
+        PlayerSettingsManager settingsManager = holder.getData("settingsManager");
+        int slot = event.getSlot();
+
+        SpectatorDisguise disguise = switch (slot) {
+            case SettingsGUI.ALLAY_SLOT -> SpectatorDisguise.ALLAY;
+            case SettingsGUI.BEE_SLOT -> SpectatorDisguise.BEE;
+            case SettingsGUI.PARROT_SLOT -> SpectatorDisguise.PARROT;
+            case SettingsGUI.BAT_SLOT -> SpectatorDisguise.BAT;
+            case SettingsGUI.VEX_SLOT -> SpectatorDisguise.VEX;
+            case SettingsGUI.HAPPY_GHAST_SLOT -> SpectatorDisguise.HAPPY_GHAST;
+            default -> null;
+        };
+
+        if (disguise != null) {
+            settingsManager.setDisguise(player.getUniqueId(), disguise);
+            MessageUtil.playClick(player);
+            SettingsGUI.open(player, settingsManager);
         }
     }
 

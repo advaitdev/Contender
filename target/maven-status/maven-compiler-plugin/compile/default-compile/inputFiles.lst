@@ -2,6 +2,8 @@ C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\DuelCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\EndDuelCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\EndVoteCommand.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\SettingsCommand.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\SpectatorCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\StartVoteCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\command\VoteCommand.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\Contender.java
@@ -16,6 +18,7 @@ C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\GUI
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\KitEditorGUI.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\KitSelectGUI.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\MapSelectGUI.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\SettingsGUI.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\TeamSelectGUI.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\gui\VoteGUI.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\kit\Kit.java
@@ -31,6 +34,7 @@ C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\listene
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\LobbyManager.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\map\ArenaMap.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\map\MapManager.java
+C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\PlayerSettingsManager.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\runnable\ImmediateRespawnRunnable.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\SpectatorManager.java
 C:\Users\Advait\IdeaProjects\Contender\src\main\java\me\advait\contender\util\MessageUtil.java

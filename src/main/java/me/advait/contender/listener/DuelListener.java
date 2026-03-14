@@ -23,6 +23,7 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -84,7 +85,7 @@ public class DuelListener implements Listener {
         event.setKeepLevel(true);
         event.deathMessage(null);
         event.setDroppedExp(0);
-        player.setGameMode(GameMode.SPECTATOR);
+        // handleDeath applies the disguise-spectator mode; also mark as dead-spectator before respawn
         duel.handleDeath(player, player.getKiller());
         spawnDeathMannequin(player);
     }
@@ -94,6 +95,15 @@ public class DuelListener implements Listener {
         Player player = event.getPlayer();
         Duel duel = duelManager.getDuel(player);
         if (duel == null) return;
+
+        // Dead-player-spectator (real death path): respawn at spectator spawn and re-apply disguise
+        if (duel.isSpectator(player.getUniqueId())) {
+            if (duel.getMap().getSpectatorSpawn() != null) {
+                event.setRespawnLocation(duel.getMap().getSpectatorSpawn());
+            }
+            Bukkit.getScheduler().runTaskLater(plugin, () -> duel.applyDeadSpectatorMode(player), 1L);
+            return;
+        }
 
         DuelTeam team = duel.getTeam(player.getUniqueId());
         if (team == null) return;
@@ -171,7 +181,6 @@ public class DuelListener implements Listener {
 
             player.setHealth(player.getMaxHealth());
             player.setAbsorptionAmount(0);
-            player.setGameMode(GameMode.SPECTATOR);
             duel.handleDeath(player, killer);
             spawnDeathMannequin(player);
         }
@@ -216,6 +225,17 @@ public class DuelListener implements Listener {
         if (duel == null) return;
 
         if (duel.getState() != DuelState.ACTIVE) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerToggleFlight(PlayerToggleFlightEvent event) {
+        Player player = event.getPlayer();
+        Duel duel = duelManager.getDuel(player);
+        if (duel == null || !duel.isSpectator(player.getUniqueId())) return;
+        // Prevent spectators from landing/disabling fly
+        if (!event.isFlying()) {
             event.setCancelled(true);
         }
     }

@@ -6,5 +6,6 @@ public enum GUIType {
     KIT_EDITOR,
     MAP_SELECT,
     TEAM_SELECT,
-    VOTE_GUI
+    VOTE_GUI,
+    SETTINGS_GUI
 }

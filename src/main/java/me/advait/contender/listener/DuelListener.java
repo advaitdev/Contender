@@ -5,6 +5,7 @@ import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import me.advait.contender.Contender;
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.duel.DuelMode;
 import me.advait.contender.duel.DuelState;
 import me.advait.contender.duel.DuelTeam;
 import me.advait.contender.util.MessageUtil;
@@ -165,6 +166,11 @@ public class DuelListener implements Listener {
             return;
         }
 
+        if (duel.isInvincibilityActive()) {
+            event.setCancelled(true);
+            return;
+        }
+
         // Intercept lethal damage — prevent actual death and handle it ourselves
         if (player.getHealth() + player.getAbsorptionAmount() - event.getFinalDamage() <= 0) {
             event.setCancelled(true);
@@ -204,7 +210,7 @@ public class DuelListener implements Listener {
                 return;
             }
 
-            if (duel.getState() == DuelState.ACTIVE) {
+            if (duel.getState() == DuelState.ACTIVE && duel.getMode() != DuelMode.FFA) {
                 DuelTeam attackerTeam = duel.getTeam(attacker.getUniqueId());
                 DuelTeam victimTeam = duel.getTeam(victim.getUniqueId());
                 if (attackerTeam != null && attackerTeam == victimTeam) {

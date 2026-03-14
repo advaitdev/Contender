@@ -19,6 +19,7 @@ me\advait\contender\command\SettingsCommand.class
 me\advait\contender\gui\MapSelectGUI.class
 me\advait\contender\duel\DuelTeam.class
 me\advait\contender\gui\GUIType.class
+me\advait\contender\duel\DuelMode.class
 me\advait\contender\command\DuelCommand.class
 me\advait\contender\duel\Duel$1.class
 me\advait\contender\runnable\ImmediateRespawnRunnable.class

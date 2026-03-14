@@ -6,6 +6,7 @@ import me.advait.contender.PlayerSettingsManager;
 import me.advait.contender.PlayerSettingsManager.SpectatorDisguise;
 import me.advait.contender.SpectatorManager;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.duel.DuelMode;
 import me.advait.contender.duel.DuelSetup;
 import me.advait.contender.duel.DuelTeam;
 import me.advait.contender.gui.*;
@@ -134,6 +135,11 @@ public class GUIListener implements Listener {
             case DuelSetupGUI.TEAM2_SLOT -> {
                 MessageUtil.playClick(player);
                 TeamSelectGUI.open(player, setup, 2, spectatorManager);
+            }
+            case DuelSetupGUI.MODE_SLOT -> {
+                setup.setMode(setup.getMode() == DuelMode.STANDARD ? DuelMode.FFA : DuelMode.STANDARD);
+                MessageUtil.playClick(player);
+                DuelSetupGUI.open(player, setup);
             }
             case DuelSetupGUI.CANCEL_SLOT -> {
                 duelManager.removeSetup(player.getUniqueId());
@@ -273,6 +279,12 @@ public class GUIListener implements Listener {
             case KitEditorGUI.SPECTATOR_INVISIBLE_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kit.setSpectatorInvisible(!kit.isSpectatorInvisible());
+                MessageUtil.playClick(player);
+                KitEditorGUI.open(player, kit, isNew);
+            }
+            case KitEditorGUI.NO_CLEAR_SLOT -> {
+                saveKitFromInventory(event.getInventory(), kit);
+                kit.setNoClear(!kit.isNoClear());
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }

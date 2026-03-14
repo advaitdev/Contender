@@ -29,6 +29,7 @@ public final class KitEditorGUI {
     public static final int BOOTS_SLOT = 39;
     public static final int OFFHAND_SLOT = 40;
 
+    public static final int NO_CLEAR_SLOT = 41;
     public static final int BLOCK_PLACE_SLOT = 42;
     public static final int BLOCK_BREAK_SLOT = 43;
     public static final int NATURAL_REGEN_SLOT = 44;
@@ -50,7 +51,6 @@ public final class KitEditorGUI {
                 MessageUtil.guiTitle("Kit Editor: " + kit.getDisplayName()));
 
         ItemStack filler = controlItem(Material.GRAY_STAINED_GLASS_PANE, " ");
-        inv.setItem(41, filler);
         for (int i = 45; i < SIZE; i++) {
             if (i != SPECTATOR_INVISIBLE_SLOT && i != DELETE_SLOT && i != CANCEL_SLOT && i != SAVE_SLOT && i != ICON_SLOT) {
                 inv.setItem(i, filler);
@@ -82,6 +82,16 @@ public final class KitEditorGUI {
 
             if (kit.getOffhand() != null) inv.setItem(OFFHAND_SLOT, kit.getOffhand().clone());
         }
+
+        boolean nc = kit.isNoClear();
+        inv.setItem(NO_CLEAR_SLOT, controlItem(nc ? Material.LIME_DYE : Material.RED_DYE,
+                "<color:" + MessageUtil.PRIMARY + ">No Clear",
+                "<color:" + MessageUtil.MUTED + ">Currently: " + (nc
+                        ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
+                        : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
+                "<color:" + MessageUtil.MUTED + ">Each player keeps their own inventory</color>",
+                "",
+                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 
         boolean bp = kit.isAllowBlockPlace();
         inv.setItem(BLOCK_PLACE_SLOT, controlItem(bp ? Material.LIME_DYE : Material.RED_DYE,

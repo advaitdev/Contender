@@ -16,6 +16,7 @@ public class DuelSetup {
     private final DuelTeam team2;
     private int rounds;
     private int preRoundDelay;
+    private DuelMode mode;
 
     public DuelSetup(UUID creator) {
         this.creator = creator;
@@ -23,14 +24,17 @@ public class DuelSetup {
         this.team2 = new DuelTeam("Team 2");
         this.rounds = 3;
         this.preRoundDelay = 10;
+        this.mode = DuelMode.STANDARD;
     }
 
     public boolean isValid() {
-        return selectedKit != null
-                && selectedMap != null
-                && !team1.isEmpty()
-                && !team2.isEmpty();
+        if (selectedKit == null || selectedMap == null) return false;
+        if (mode == DuelMode.FFA) return getAllPlayers().size() >= 2;
+        return !team1.isEmpty() && !team2.isEmpty();
     }
+
+    public DuelMode getMode() { return mode; }
+    public void setMode(DuelMode mode) { this.mode = mode; }
 
     public UUID getCreator() {
         return creator;

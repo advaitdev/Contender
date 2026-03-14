@@ -48,10 +48,12 @@ public class Duel {
     private final DuelTeam team2;
     private final int totalRounds;
     private final int preRoundDelay;
+    private final DuelMode mode;
     private final Set<UUID> spectators;
     private final Set<UUID> deadPlayerSpectators;
     private final Set<Location> placedBlocks;
     private final Map<UUID, InventorySnapshot> sortedInventories;
+    private final Map<UUID, InventorySnapshot> preDuelInventories;
 
     private DuelState state;
     private int currentRound;
@@ -61,6 +63,7 @@ public class Duel {
     private Boolean originalDoDaylightCycle;
     private Boolean originalDoMobSpawning;
     private BossBar bossBar;
+    private long invincibilityEndTime = 0L;
 
     private volatile BlockArrayClipboard clipboard;
     private volatile boolean clipboardReady = false;
@@ -98,12 +101,14 @@ public class Duel {
             this.team2.addPlayer(uuid);
         }
 
+        this.mode = setup.getMode();
         this.totalRounds = setup.getRounds();
         this.preRoundDelay = setup.getPreRoundDelay();
         this.spectators = new HashSet<>();
         this.deadPlayerSpectators = new HashSet<>();
         this.placedBlocks = new HashSet<>();
         this.sortedInventories = new HashMap<>();
+        this.preDuelInventories = new HashMap<>();
         this.state = DuelState.STARTING;
         this.currentRound = 0;
         this.firstRound = true;
@@ -138,12 +143,27 @@ public class Duel {
             return;
         }
 
+        // Capture pre-duel inventories for No Clear kit before any changes
+        if (kit.isNoClear()) {
+            for (UUID uuid : getAllDuelPlayers()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    preDuelInventories.put(uuid, new InventorySnapshot(
+                            player.getInventory().getStorageContents(),
+                            player.getInventory().getArmorContents(),
+                            player.getInventory().getItemInOffHand()
+                    ));
+                }
+            }
+        }
+
         for (UUID uuid : team1.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 player.setGameMode(GameMode.SURVIVAL);
                 player.teleport(map.getTeam1Spawn());
-                kit.apply(player);
+                if (kit.isNoClear()) kit.applyEffectsOnly(player);
+                else kit.apply(player);
             }
         }
 
@@ -152,7 +172,8 @@ public class Duel {
             if (player != null) {
                 player.setGameMode(GameMode.SURVIVAL);
                 player.teleport(map.getTeam2Spawn());
-                kit.apply(player);
+                if (kit.isNoClear()) kit.applyEffectsOnly(player);
+                else kit.apply(player);
             }
         }
 
@@ -207,6 +228,10 @@ public class Duel {
     }
 
     private Component buildBossBarTitle() {
+        if (mode == DuelMode.FFA) {
+            return MiniMessage.miniMessage().deserialize(
+                    "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>Free For All</shadow></color></font>");
+        }
         MiniMessage mm = MiniMessage.miniMessage();
         String team1Names = buildTeamNames(team1);
         String team2Names = buildTeamNames(team2);
@@ -314,18 +339,31 @@ public class Duel {
         team1.resetAlive();
         team2.resetAlive();
 
-        for (UUID uuid : team1.getPlayers()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
+        if (mode == DuelMode.FFA) {
+            // Randomly distribute all players between the two spawn points
+            List<UUID> allPlayers = new ArrayList<>(getAllDuelPlayers());
+            Collections.shuffle(allPlayers);
+            for (int i = 0; i < allPlayers.size(); i++) {
+                Player player = Bukkit.getPlayer(allPlayers.get(i));
+                if (player == null) continue;
                 player.setGameMode(GameMode.SURVIVAL);
-                player.teleport(map.getTeam1Spawn());
+                player.teleport(i % 2 == 0 ? map.getTeam1Spawn() : map.getTeam2Spawn());
             }
-        }
-        for (UUID uuid : team2.getPlayers()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                player.setGameMode(GameMode.SURVIVAL);
-                player.teleport(map.getTeam2Spawn());
+            invincibilityEndTime = System.currentTimeMillis() + 5000L;
+        } else {
+            for (UUID uuid : team1.getPlayers()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    player.setGameMode(GameMode.SURVIVAL);
+                    player.teleport(map.getTeam1Spawn());
+                }
+            }
+            for (UUID uuid : team2.getPlayers()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    player.setGameMode(GameMode.SURVIVAL);
+                    player.teleport(map.getTeam2Spawn());
+                }
             }
         }
 
@@ -386,30 +424,41 @@ public class Duel {
             }
         }
 
-        if (deadTeam.isEliminated()) {
-            DuelTeam winner = getOpponent(deadTeam);
-            endRound(winner);
+        if (mode == DuelMode.FFA) {
+            int alive = team1.getAlivePlayers().size() + team2.getAlivePlayers().size();
+            if (alive <= 1) {
+                DuelTeam winner = !team1.getAlivePlayers().isEmpty() ? team1
+                        : !team2.getAlivePlayers().isEmpty() ? team2
+                        : null;
+                endRound(winner);
+            }
+        } else {
+            if (deadTeam.isEliminated()) {
+                endRound(getOpponent(deadTeam));
+            }
         }
     }
 
     private void endRound(DuelTeam winner) {
         state = DuelState.ROUND_END;
-        winner.incrementScore();
+        if (winner != null) winner.incrementScore();
 
+        int winnerScore = winner != null ? winner.getScore() : 0;
         int roundsToWin = (totalRounds / 2) + 1;
-        if (winner.getScore() >= roundsToWin || currentRound >= totalRounds) {
+        if (winnerScore >= roundsToWin || currentRound >= totalRounds) {
             Bukkit.getScheduler().runTaskLater(plugin, this::endDuel, 1L);
             return;
         }
 
-        broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">" + winner.getName() + " wins the round! " +
-                "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
-
-        for (UUID uuid : winner.getPlayers()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                MessageUtil.playRoundWin(p);
+        if (winner != null) {
+            broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">" + winner.getName() + " wins the round! " +
+                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
+            for (UUID uuid : winner.getPlayers()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) MessageUtil.playRoundWin(p);
             }
+        } else {
+            broadcastActionBar("<color:" + MessageUtil.WARNING + ">Round ended in a tie!</color>");
         }
 
         pasteRegionAsync(() -> {
@@ -477,6 +526,7 @@ public class Duel {
                     if (bossBar != null) p.hideBossBar(bossBar);
                     if (isSpectator(uuid)) removeSpectatorDisguise(p);
                     plugin.getLobbyManager().sendToLobby(p);
+                    restorePreDuelInventory(uuid, p);
                 }
             }
             bossBar = null;
@@ -623,6 +673,22 @@ public class Duel {
                 applySpectatorDisguise(player);
             }
         }
+    }
+
+    public DuelMode getMode() { return mode; }
+
+    public boolean isInvincibilityActive() {
+        return System.currentTimeMillis() < invincibilityEndTime;
+    }
+
+    private void restorePreDuelInventory(UUID uuid, Player player) {
+        InventorySnapshot snap = preDuelInventories.get(uuid);
+        if (snap == null) return;
+        // sendToLobby already cleared inventory; restore original contents on top
+        player.getInventory().setStorageContents(cloneArray(snap.storage()));
+        player.getInventory().setArmorContents(cloneArray(snap.armor()));
+        if (snap.offhand() != null) player.getInventory().setItemInOffHand(snap.offhand().clone());
+        player.updateInventory();
     }
 
     /** Called after a real respawn (vanilla death path) to re-apply the disguise-spectator state. */
@@ -863,6 +929,7 @@ public class Duel {
                 if (bossBar != null) p.hideBossBar(bossBar);
                 if (isSpectator(uuid)) removeSpectatorDisguise(p);
                 plugin.getLobbyManager().sendToLobby(p);
+                restorePreDuelInventory(uuid, p);
             }
         }
         bossBar = null;

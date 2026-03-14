@@ -16,6 +16,7 @@ public class Kit {
     private boolean allowBlockBreak;
     private boolean naturalRegen;
     private boolean spectatorInvisible;
+    private boolean noClear;
 
     public Kit(String id) {
         this.id = id;
@@ -28,6 +29,7 @@ public class Kit {
         this.allowBlockBreak = false;
         this.naturalRegen = true;
         this.spectatorInvisible = false;
+        this.noClear = false;
     }
 
     public void apply(Player player) {
@@ -35,7 +37,11 @@ public class Kit {
         player.getInventory().setContents(cloneArray(contents));
         player.getInventory().setArmorContents(cloneArray(armor));
         player.getInventory().setItemInOffHand(offhand == null ? null : offhand.clone());
+        applyEffectsOnly(player);
+    }
 
+    /** Resets health/food/effects without touching the inventory. Used for No Clear kit. */
+    public void applyEffectsOnly(Player player) {
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
@@ -43,7 +49,6 @@ public class Kit {
         player.setLevel(0);
         player.setExp(0);
         player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
-
         player.updateInventory();
     }
 
@@ -132,5 +137,13 @@ public class Kit {
 
     public void setSpectatorInvisible(boolean spectatorInvisible) {
         this.spectatorInvisible = spectatorInvisible;
+    }
+
+    public boolean isNoClear() {
+        return noClear;
+    }
+
+    public void setNoClear(boolean noClear) {
+        this.noClear = noClear;
     }
 }

@@ -1,5 +1,6 @@
 package me.advait.contender.gui;
 
+import me.advait.contender.duel.DuelMode;
 import me.advait.contender.duel.DuelSetup;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
@@ -28,6 +29,7 @@ public final class DuelSetupGUI {
     public static final int MAP_SLOT = 12;
     public static final int ROUNDS_SLOT = 14;
     public static final int DELAY_SLOT = 16;
+    public static final int MODE_SLOT = 22;
     public static final int TEAM1_SLOT = 29;
     public static final int VS_SLOT = 31;
     public static final int TEAM2_SLOT = 33;
@@ -78,6 +80,16 @@ public final class DuelSetupGUI {
                 "<color:" + MessageUtil.MUTED + ">" + setup.getPreRoundDelay() + " seconds</color>",
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Left-click +5s | Right-click -5s</color>"));
+
+        boolean isFfa = setup.getMode() == DuelMode.FFA;
+        inv.setItem(MODE_SLOT, item(
+                isFfa ? Material.TOTEM_OF_UNDYING : Material.SHIELD,
+                isFfa ? "<color:" + MessageUtil.WARNING + ">Mode: Free For All" : "<color:" + MessageUtil.PRIMARY + ">Mode: Standard",
+                isFfa
+                        ? "<color:" + MessageUtil.MUTED + ">All players fight everyone</color>"
+                        : "<color:" + MessageUtil.MUTED + ">Team 1 vs Team 2</color>",
+                "",
+                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 
         MiniMessage mm = MiniMessage.miniMessage();
 

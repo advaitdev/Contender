@@ -31,7 +31,8 @@ public final class TeamSelectGUI {
     private TeamSelectGUI() {
     }
 
-    public static void open(Player player, DuelSetup setup, int teamNumber, SpectatorManager spectatorManager) {
+    public static void open(Player player, DuelSetup setup, int teamNumber, SpectatorManager spectatorManager,
+                            me.advait.contender.role.RoleManager roles) {
         GUIHolder holder = new GUIHolder(GUIType.TEAM_SELECT);
         holder.setData("setup", setup);
         holder.setData("teamNumber", teamNumber);
@@ -53,6 +54,8 @@ public final class TeamSelectGUI {
             if (slot >= 45) break;
 
             boolean isDeceased = spectatorManager.isDeceased(online.getUniqueId());
+            var role = roles.getRole(online.getUniqueId());
+            boolean canPlay = role == me.advait.contender.role.PlayerRole.CONTESTANT && !isDeceased;
             boolean onThisTeam = currentTeam.hasPlayer(online.getUniqueId());
             boolean onOtherTeam = otherTeam.hasPlayer(online.getUniqueId());
 
@@ -63,8 +66,8 @@ public final class TeamSelectGUI {
             Component playerHead = StringUtil.getPlayerHead(online);
             String statusLine;
 
-            if (isDeceased) {
-                statusLine = "<color:" + MessageUtil.MUTED + ">Deceased</color>";
+            if (!canPlay) {
+                statusLine = "<color:" + MessageUtil.MUTED + ">" + (isDeceased ? "Deceased" : role.label()) + "</color>";
                 skullMeta.displayName(Component.empty().append(playerHead).appendSpace()
                         .append(MM.deserialize(MessageUtil.FONT_OPEN +
                                 "<color:" + MessageUtil.MUTED + "><strikethrough>" +
@@ -97,7 +100,7 @@ public final class TeamSelectGUI {
 
             List<Component> lore = new ArrayList<>();
             lore.add(MM.deserialize(statusLine).decoration(TextDecoration.ITALIC, false));
-            if (!isDeceased && !onOtherTeam) {
+            if (canPlay && !onOtherTeam) {
                 lore.add(Component.empty());
                 String action = onThisTeam ? "remove" : "add";
                 lore.add(MM.deserialize("<color:" + MessageUtil.ACCENT + ">Click to " + action + "</color>")

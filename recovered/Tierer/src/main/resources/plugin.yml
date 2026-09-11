@@ -1,0 +1,10 @@
+name: Tierer
+version: '1.0-SNAPSHOT'
+main: me.advait.tierer.Tierer
+api-version: '1.21'
+softdepend:
+  - PlaceholderAPI
+commands:
+  tier:
+    description: Get a player's MCTiers rankings
+    usage: /tier <player>

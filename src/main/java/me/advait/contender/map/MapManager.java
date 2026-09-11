@@ -39,6 +39,9 @@ public class MapManager {
             ArenaMap map = new ArenaMap(id);
             map.setDisplayName(section.getString("display-name", id));
             map.setWorldName(section.getString("world", "world"));
+            map.setSchematic(section.getString("schematic"));
+            map.setCopies(Math.clamp(section.getInt("copies", plugin.getConfig().getInt("arenas.copies-per-map", 20)), 1, 100));
+            map.setFirstSlot(section.getInt("first-slot", -1));
 
             ConfigurationSection t1 = section.getConfigurationSection("team1-spawn");
             if (t1 != null) {
@@ -90,5 +93,50 @@ public class MapManager {
 
     public boolean mapExists(String id) {
         return maps.containsKey(id);
+    }
+
+    public void save(ArenaMap map) {
+        maps.put(map.getId(), map);
+        YamlConfiguration config = new YamlConfiguration();
+        for (ArenaMap entry : maps.values()) {
+            String path = "maps." + entry.getId();
+            config.set(path + ".display-name", entry.getDisplayName());
+            config.set(path + ".world", entry.getWorldName());
+            config.set(path + ".schematic", entry.getSchematic());
+            config.set(path + ".copies", entry.getCopies());
+            config.set(path + ".first-slot", entry.getFirstSlot());
+            writeSpawn(config, path + ".team1-spawn", entry.getTeam1Point());
+            writeSpawn(config, path + ".team2-spawn", entry.getTeam2Point());
+            writeSpawn(config, path + ".spectator-spawn", entry.getSpectatorPoint());
+            BlockBounds b = entry.getBounds();
+            if (b != null) {
+                config.set(path + ".rollback-region.corner1.x", b.minX());
+                config.set(path + ".rollback-region.corner1.y", b.minY());
+                config.set(path + ".rollback-region.corner1.z", b.minZ());
+                config.set(path + ".rollback-region.corner2.x", b.maxX());
+                config.set(path + ".rollback-region.corner2.y", b.maxY());
+                config.set(path + ".rollback-region.corner2.z", b.maxZ());
+            }
+        }
+        me.advait.contender.util.YamlStorage.save(config, mapFile);
+    }
+
+    private void writeSpawn(YamlConfiguration config, String path, SpawnPoint spawn) {
+        if (spawn == null) return;
+        config.set(path + ".x", spawn.x());
+        config.set(path + ".y", spawn.y());
+        config.set(path + ".z", spawn.z());
+        config.set(path + ".yaw", spawn.yaw());
+        config.set(path + ".pitch", spawn.pitch());
+    }
+
+    public int allocateSlots(ArenaMap map) {
+        if (map.getFirstSlot() >= 0) return map.getFirstSlot();
+        // Reserve 100 slots per map so its copy count can grow without overlap.
+        int slot = maps.values().stream().filter(m -> m.getFirstSlot() >= 0)
+                .mapToInt(m -> m.getFirstSlot() + 100).max().orElse(0);
+        map.setFirstSlot(slot);
+        save(map);
+        return slot;
     }
 }

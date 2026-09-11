@@ -6,13 +6,15 @@ import java.util.*;
 
 public class DuelTeam {
 
-    private final String name;
+    private String name;
+    private boolean customName;
     private final List<UUID> players;
     private final Set<UUID> alivePlayers;
     private int score;
 
     public DuelTeam(String name) {
         this.name = name;
+        this.customName = !name.equals("Team 1") && !name.equals("Team 2");
         this.players = new ArrayList<>();
         this.alivePlayers = new HashSet<>();
         this.score = 0;
@@ -47,9 +49,15 @@ public class DuelTeam {
     }
 
     public String getName() {
-        if (players.size() == 1) return Bukkit.getOfflinePlayer(players.getFirst()).getName();
+        if (players.size() == 1 && !customName) {
+            String playerName = Bukkit.getOfflinePlayer(players.getFirst()).getName();
+            if (playerName != null) return playerName;
+        }
         return name;
     }
+
+    public void setName(String name) { this.name = name; this.customName = true; }
+    public boolean hasCustomName() { return customName; }
 
     public List<UUID> getPlayers() {
         return Collections.unmodifiableList(players);

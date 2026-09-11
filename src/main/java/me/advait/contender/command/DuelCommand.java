@@ -3,7 +3,7 @@ package me.advait.contender.command;
 import me.advait.contender.Contender;
 import me.advait.contender.duel.DuelManager;
 import me.advait.contender.duel.DuelSetup;
-import me.advait.contender.gui.duel.DuelSetupGUI;
+import me.advait.contender.dialog.DuelDialogs;
 import me.advait.contender.util.MessageUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -41,14 +41,7 @@ public class DuelCommand implements CommandExecutor {
             return true;
         }
 
-        if (duelManager.isInDuel(player)) {
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">You are already in a duel!</color>");
-            return true;
-        }
-
-        DuelSetup setup = duelManager.createSetup(player.getUniqueId());
-        DuelSetupGUI.open(player, setup);
+        new DuelDialogs(plugin).open(player);
         return true;
     }
 }

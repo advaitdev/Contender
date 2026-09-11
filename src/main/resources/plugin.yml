@@ -1,9 +1,28 @@
 name: Contender
 version: '${project.version}'
 main: me.advait.contender.Contender
-api-version: '1.21'
-softdepend: [FastAsyncWorldEdit, LibsDisguises, voicechat]
+api-version: '26.2'
+depend: [FastAsyncWorldEdit]
+softdepend: [LibsDisguises, voicechat]
 commands:
+  role:
+    description: Assign director, spectator, or contestant roles
+    permission: contender.master
+    usage: /role [player] [director|spectator|contestant]
+  tier:
+    description: Look up a player's MCTiers rankings
+    usage: /tier [player]
+  arena:
+    description: Create maps and prepare arena copies
+    permission: contender.master
+    usage: /arena
+  tournament:
+    description: Set up a round-robin tournament
+    permission: contender.master
+    usage: /tournament
+  spectate:
+    description: Choose a match to watch
+    usage: /spectate
   duel:
     description: Open the duel setup menu
     permission: contender.master
@@ -32,7 +51,7 @@ commands:
     permission: contender.master
     usage: /deceased <add|remove|list> [player]
   settings:
-    description: Open personal settings
+    description: Open settings and configure role nametags
     usage: /settings
 permissions:
   contender.master:

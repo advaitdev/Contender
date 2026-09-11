@@ -149,12 +149,12 @@ public class GUIListener implements Listener {
             case DuelSetupGUI.TEAM1_SLOT -> {
                 if (setup.getMode() == DuelMode.FFA) return;
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, 1, spectatorManager);
+                TeamSelectGUI.open(player, setup, 1, spectatorManager, plugin.getRoleManager());
             }
             case DuelSetupGUI.TEAM2_SLOT -> {
                 if (setup.getMode() == DuelMode.FFA) return;
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, 2, spectatorManager);
+                TeamSelectGUI.open(player, setup, 2, spectatorManager, plugin.getRoleManager());
             }
             case DuelSetupGUI.VS_SLOT -> {
                 setup.setMode(setup.getMode() == DuelMode.STANDARD ? DuelMode.FFA : DuelMode.STANDARD);
@@ -179,12 +179,17 @@ public class GUIListener implements Listener {
                 }
                 if (duelManager.isMapInUse(setup.getSelectedMap().getId())) {
                     MessageUtil.sendActionBar(player,
-                            "<color:" + MessageUtil.ERROR + ">That arena is already in use!</color>");
+                            "<color:" + MessageUtil.ERROR + ">No arena copies are ready for this map.</color>");
                     MessageUtil.playClick(player);
                     return;
                 }
                 player.closeInventory();
-                duelManager.startDuel(setup);
+                try {
+                    duelManager.startDuel(setup);
+                } catch (IllegalArgumentException | IllegalStateException failure) {
+                    me.advait.contender.dialog.Dialogs.error(player, failure.getMessage());
+                    return;
+                }
                 MessageUtil.sendActionBar(player, "<color:" + MessageUtil.PRIMARY + ">Duel started!</color>");
                 MessageUtil.playSuccess(player);
             }
@@ -581,6 +586,11 @@ public class GUIListener implements Listener {
                 Player target = onlinePlayers.get(slot);
                 UUID targetUuid = target.getUniqueId();
 
+                if (!plugin.getRoleManager().isContestant(targetUuid)) {
+                    MessageUtil.sendActionBar(player, "<color:" + MessageUtil.ERROR + ">Only contestants can join a team.</color>");
+                    return;
+                }
+
                 if (spectatorManager.isDeceased(targetUuid)) {
                     MessageUtil.sendActionBar(player,
                             "<color:" + MessageUtil.ERROR + ">That player is deceased and cannot participate!</color>");
@@ -603,7 +613,7 @@ public class GUIListener implements Listener {
                 }
 
                 MessageUtil.playClick(player);
-                TeamSelectGUI.open(player, setup, teamNumber, spectatorManager);
+                TeamSelectGUI.open(player, setup, teamNumber, spectatorManager, plugin.getRoleManager());
             }
         }
     }

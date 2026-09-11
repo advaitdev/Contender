@@ -1,52 +1,47 @@
 package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
+import me.advait.contender.arena.ArenaLease;
 import me.advait.contender.spectator.SpectatorManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class DuelManager {
-
     private final Contender plugin;
     private final SpectatorManager spectatorManager;
-    private final Map<UUID, DuelSetup> activeSetups;
-    private final Map<UUID, Duel> playerDuelMap;
-    private final List<Duel> activeDuels;
+    private final Map<UUID, DuelSetup> activeSetups = new HashMap<>();
+    private final Map<UUID, Duel> playerDuelMap = new ConcurrentHashMap<>();
+    private final List<Duel> activeDuels = new ArrayList<>();
+    private final Map<Duel, Consumer<DuelResult>> completions = new HashMap<>();
+    private boolean stopping;
 
     public DuelManager(Contender plugin, SpectatorManager spectatorManager) {
         this.plugin = plugin;
         this.spectatorManager = spectatorManager;
-        this.activeSetups = new HashMap<>();
-        this.playerDuelMap = new HashMap<>();
-        this.activeDuels = new ArrayList<>();
     }
-
     public DuelSetup createSetup(UUID creator) {
         DuelSetup setup = new DuelSetup(creator);
         activeSetups.put(creator, setup);
         return setup;
     }
+    public DuelSetup getSetup(UUID creator) { return activeSetups.get(creator); }
+    public void removeSetup(UUID creator) { activeSetups.remove(creator); }
+    public Duel startDuel(DuelSetup setup) { return startDuel(setup, null); }
 
-    public DuelSetup getSetup(UUID creator) {
-        return activeSetups.get(creator);
-    }
-
-    public void removeSetup(UUID creator) {
-        activeSetups.remove(creator);
-    }
-
-    public Duel startDuel(DuelSetup setup) {
+    public Duel startDuel(DuelSetup setup, Consumer<DuelResult> completion) {
+        if (stopping) throw new IllegalStateException("Duels are stopping.");
+        if (plugin.getVoteManager().isVoteActive()) throw new IllegalStateException("Wait for the vote to finish.");
         if (setup.getMode() == DuelMode.FFA) {
             setup.getTeam1().clearPlayers();
             setup.getTeam2().clearPlayers();
             List<Player> candidates = new ArrayList<>();
             for (Player online : Bukkit.getOnlinePlayers()) {
                 UUID uuid = online.getUniqueId();
-                if (!spectatorManager.isDeceased(uuid) && !isInDuel(uuid)) {
-                    candidates.add(online);
-                }
+                if (isEligible(uuid) && !isInDuel(uuid) && !reservedForTournament(uuid)) candidates.add(online);
             }
             Collections.shuffle(candidates);
             for (int i = 0; i < candidates.size(); i++) {
@@ -54,71 +49,101 @@ public class DuelManager {
                 else setup.getTeam2().addPlayer(candidates.get(i).getUniqueId());
             }
         }
-
-        Duel duel = new Duel(plugin, this, setup);
-        activeDuels.add(duel);
-
-        for (UUID uuid : duel.getAllDuelPlayers()) {
-            playerDuelMap.put(uuid, duel);
+        if (!setup.isValid() || setup.getTeam1().isEmpty() || setup.getTeam2().isEmpty()) {
+            throw new IllegalArgumentException("Choose a kit, map, and players for both sides.");
         }
-
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            UUID uuid = online.getUniqueId();
-            if (!isInDuel(uuid) && !duel.getAllDuelPlayers().contains(uuid)) {
-                if (!spectatorManager.isDeceased(uuid)) {
-                    online.getInventory().clear();
-                }
-                duel.addSpectator(uuid);
+        for (UUID uuid : setup.getAllPlayers()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) throw new IllegalStateException("All selected players must be online.");
+            requireEligible(uuid);
+            if (setup.getTeam1().hasPlayer(uuid) && setup.getTeam2().hasPlayer(uuid)) {
+                throw new IllegalArgumentException("A player cannot be on both teams.");
+            }
+            Duel current = getDuel(uuid);
+            if (current != null && current.isInDuel(uuid)) throw new IllegalStateException(player.getName() + " is already playing.");
+            if (completion == null && reservedForTournament(uuid)) throw new IllegalStateException(player.getName() + " is entered in the tournament.");
+        }
+        ArenaLease arena = plugin.getArenaManager().acquire(setup.getSelectedMap().getId());
+        if (arena == null) throw new IllegalStateException("No copies of this map are ready. Prepare them with /arena or wait for a free copy.");
+        Duel duel;
+        try {
+            duel = new Duel(plugin, this, setup, arena, completion != null);
+        } catch (RuntimeException | Error failure) {
+            plugin.getArenaManager().release(arena);
+            throw failure;
+        }
+        activeDuels.add(duel);
+        if (completion != null) completions.put(duel, completion);
+        try {
+            for (UUID uuid : duel.getAllDuelPlayers()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (getDuel(uuid) != null) leaveSpectating(player);
                 playerDuelMap.put(uuid, duel);
             }
+            activeSetups.remove(setup.getCreator());
+            duel.start();
+            return duel;
+        } catch (RuntimeException | Error failure) {
+            duel.shutdown();
+            throw failure;
         }
-
-        activeSetups.remove(setup.getCreator());
-
-        duel.start();
-        return duel;
     }
 
+    private boolean reservedForTournament(UUID uuid) {
+        return plugin.getTournamentManager() != null && plugin.getTournamentManager().isReserved(uuid);
+    }
+    public boolean isEligible(UUID uuid) {
+        return plugin.getRoleManager().isContestant(uuid) && !spectatorManager.isDeceased(uuid);
+    }
+    public void requireEligible(UUID uuid) {
+        Player player = Bukkit.getPlayer(uuid);
+        String name = player == null ? uuid.toString() : player.getName();
+        if (!plugin.getRoleManager().isContestant(uuid)) throw new IllegalArgumentException(name + " must be a contestant to play.");
+        if (spectatorManager.isDeceased(uuid)) throw new IllegalArgumentException(name + " is marked as deceased.");
+    }
     public void endDuel(Duel duel) {
-        activeDuels.remove(duel);
-        for (UUID uuid : duel.getAllParticipants()) {
-            playerDuelMap.remove(uuid);
-        }
+        if (!activeDuels.remove(duel)) return;
+        for (UUID uuid : duel.getAllParticipants()) playerDuelMap.remove(uuid, duel);
+        if (duel.getArena() != null) plugin.getArenaManager().release(duel.getArena());
+        Consumer<DuelResult> completion = completions.remove(duel);
+        if (completion != null && !stopping) completion.accept(duel.getResult());
     }
-
-    public Duel getDuel(UUID playerUuid) {
-        return playerDuelMap.get(playerUuid);
+    public void spectate(Player player, Duel duel) {
+        UUID uuid = player.getUniqueId();
+        if (!activeDuels.contains(duel) || !duel.getState().canAddSpectator()) throw new IllegalStateException("That match has ended.");
+        Duel current = getDuel(uuid);
+        if (current == duel) return;
+        if (current != null && current.isInDuel(uuid)) throw new IllegalStateException("Finish your match before spectating.");
+        if (current != null) leaveSpectating(player);
+        player.getInventory().clear();
+        playerDuelMap.put(uuid, duel);
+        duel.addSpectator(uuid);
     }
-
-    public Duel getDuel(Player player) {
-        return getDuel(player.getUniqueId());
+    public void leaveSpectating(Player player) {
+        Duel duel = getDuel(player);
+        if (duel == null) return;
+        if (duel.isInDuel(player.getUniqueId())) throw new IllegalStateException("You are still in a match.");
+        playerDuelMap.remove(player.getUniqueId(), duel);
+        duel.removeSpectator(player);
     }
-
-    public boolean isInDuel(UUID uuid) {
-        return playerDuelMap.containsKey(uuid);
+    public Duel getDuel(UUID playerUuid) { return playerDuelMap.get(playerUuid); }
+    public Duel getDuel(Player player) { return getDuel(player.getUniqueId()); }
+    public boolean isInDuel(UUID uuid) { return playerDuelMap.containsKey(uuid); }
+    public boolean isInDuel(Player player) { return isInDuel(player.getUniqueId()); }
+    public boolean isPlaying(UUID uuid) {
+        Duel duel = getDuel(uuid);
+        return duel != null && duel.isInDuel(uuid);
     }
-
-    public boolean isInDuel(Player player) {
-        return isInDuel(player.getUniqueId());
+    public boolean isMapInUse(String mapId) { return plugin.getArenaManager().available(mapId) == 0; }
+    public List<Duel> getActiveDuels() { return Collections.unmodifiableList(activeDuels); }
+    public void shutdown() {
+        stopping = true;
+        for (Duel duel : new ArrayList<>(activeDuels)) duel.shutdown();
+        activeSetups.clear();
+        completions.clear();
     }
-
-    public boolean isMapInUse(String mapId) {
-        for (Duel duel : activeDuels) {
-            if (duel.getState() != DuelState.ENDED && duel.getMap().getId().equals(mapId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public List<Duel> getActiveDuels() {
-        return Collections.unmodifiableList(activeDuels);
-    }
-
     public void cleanup() {
-        for (Duel duel : new ArrayList<>(activeDuels)) {
-            duel.forceEnd();
-        }
+        for (Duel duel : new ArrayList<>(activeDuels)) duel.forceEnd();
         activeSetups.clear();
     }
 }

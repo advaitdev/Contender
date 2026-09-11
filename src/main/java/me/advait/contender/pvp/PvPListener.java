@@ -41,15 +41,20 @@ public class PvPListener implements Listener {
         UUID attackerUuid = attacker.getUniqueId();
         UUID victimUuid = victim.getUniqueId();
 
+        Duel attackerDuel = duelManager.getDuel(attackerUuid);
+        Duel victimDuel = duelManager.getDuel(victimUuid);
+        if (attackerDuel != victimDuel && (attackerDuel != null || victimDuel != null)) {
+            event.setCancelled(true);
+            return;
+        }
+
         // Admins bypass all PvP restrictions when the override is enabled
         if (pvpSettings.isAdminPvpOverride() && attacker.hasPermission("contender.admin")) return;
 
-        // If the attacker is an active duel contestant, DuelListener handles it
-        Duel attackerDuel = duelManager.getDuel(attackerUuid);
+        // If the attacker is an active duel contestant, the duel state handles it
         if (attackerDuel != null && !attackerDuel.isSpectator(attackerUuid)) return;
 
-        // If the victim is an active duel contestant, DuelListener handles it
-        Duel victimDuel = duelManager.getDuel(victimUuid);
+        // If the victim is an active duel contestant, the duel state handles it
         if (victimDuel != null && !victimDuel.isSpectator(victimUuid)) return;
 
         // Determine if both players are lobby players (not in any duel role)

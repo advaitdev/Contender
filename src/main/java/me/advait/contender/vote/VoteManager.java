@@ -19,6 +19,7 @@ public class VoteManager {
      */
     public boolean startVote(int seconds) {
         if (activeSession != null) return false;
+        plugin.getTournamentManager().pause();
         duelManager.cleanup();
         activeSession = new VoteSession(plugin, this, seconds);
         activeSession.start();

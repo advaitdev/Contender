@@ -6,3 +6,19 @@ lobby:
   yaw: 0.0
   pitch: 0.0
   allow-block-break: false
+
+arenas:
+  world: "contender_arenas"
+  copies-per-map: 20
+  # Distance between arena slots, in blocks. Leave this unchanged after preparing maps.
+  spacing: 1024
+  max-template-blocks: 5000000
+
+nametags:
+  roles:
+    director:
+      prefix: "[Director]"
+      color: gold
+    spectator:
+      prefix: "[Spectator]"
+      color: gray

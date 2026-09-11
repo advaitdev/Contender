@@ -128,7 +128,8 @@ public final class KitEditorGUI {
                 "<color:" + MessageUtil.MUTED + ">Currently: " + (si
                         ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
-                "<color:" + MessageUtil.MUTED + ">Hides spectators from duel players</color>",
+                "<color:" + MessageUtil.MUTED + ">Enabled: always hidden from contestants</color>",
+                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within 20 blocks</color>",
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 

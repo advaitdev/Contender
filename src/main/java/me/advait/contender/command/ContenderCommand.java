@@ -40,19 +40,25 @@ public class ContenderCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("reload")) {
+            if (!plugin.getDuelManager().getActiveDuels().isEmpty() || plugin.getArenaManager().hasPendingWork()) {
+                sender.sendMessage("Wait for active matches and arena preparation to finish before reloading.");
+                return true;
+            }
+            plugin.getTournamentManager().pause();
             plugin.reloadConfig();
-            plugin.getDuelManager().cleanup();
+            plugin.getNameTagManager().refresh();
             plugin.getMapManager().loadMaps();
             plugin.getKitManager().loadKits();
+            plugin.getArenaManager().reloadTemplates();
 
             if (sender instanceof Player player) {
                 MessageUtil.sendActionBar(player,
-                        "<color:" + MessageUtil.PRIMARY + ">Contender reloaded! All active duels cancelled.</color>");
+                        "<color:" + MessageUtil.PRIMARY + ">Reloaded. Arena copies are preparing.</color>");
                 MessageUtil.playSuccess(player);
             } else {
                 sender.sendMessage(MessageUtil.parse(
                         MessageUtil.FONT_OPEN +
-                                "<color:" + MessageUtil.PRIMARY + ">Contender reloaded! All active duels cancelled.</color>" +
+                                "<color:" + MessageUtil.PRIMARY + ">Reloaded. Arena copies are preparing.</color>" +
                                 MessageUtil.FONT_CLOSE));
             }
             return true;

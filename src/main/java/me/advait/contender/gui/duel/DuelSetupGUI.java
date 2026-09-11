@@ -2,6 +2,7 @@ package me.advait.contender.gui.duel;
 
 import me.advait.contender.duel.DuelMode;
 import me.advait.contender.duel.DuelSetup;
+import me.advait.contender.duel.DuelTeam;
 import me.advait.contender.gui.GUIHolder;
 import me.advait.contender.gui.GUIType;
 import me.advait.contender.kit.Kit;
@@ -101,37 +102,8 @@ public final class DuelSetupGUI {
                     "<color:" + MessageUtil.MUTED + ">Team 2",
                     "<color:" + MessageUtil.MUTED + ">Auto-assigned at start</color>"));
         } else {
-            MiniMessage mm = MiniMessage.miniMessage();
-
-            List<String> t1Lore = new ArrayList<>();
-            t1Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam1().size() + "</color>");
-            for (UUID uuid : setup.getTeam1().getPlayers()) {
-                Player p = Bukkit.getPlayer(uuid);
-                if (p != null) {
-                    String head = mm.serialize(StringUtil.getPlayerHead(p));
-                    t1Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
-                }
-            }
-            t1Lore.add("");
-            t1Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
-            inv.setItem(TEAM1_SLOT, item(Material.RED_BANNER,
-                    "<color:" + MessageUtil.ERROR + ">Team 1",
-                    t1Lore.toArray(new String[0])));
-
-            List<String> t2Lore = new ArrayList<>();
-            t2Lore.add("<color:" + MessageUtil.MUTED + ">Players: " + setup.getTeam2().size() + "</color>");
-            for (UUID uuid : setup.getTeam2().getPlayers()) {
-                Player p = Bukkit.getPlayer(uuid);
-                if (p != null) {
-                    String head = mm.serialize(StringUtil.getPlayerHead(p));
-                    t2Lore.add(head + " <color:" + MessageUtil.SECONDARY + "> - " + p.getName() + "</color>");
-                }
-            }
-            t2Lore.add("");
-            t2Lore.add("<color:" + MessageUtil.ACCENT + ">Click to edit</color>");
-            inv.setItem(TEAM2_SLOT, item(Material.BLUE_BANNER,
-                    "<color:" + MessageUtil.SECONDARY + ">Team 2",
-                    t2Lore.toArray(new String[0])));
+            inv.setItem(TEAM1_SLOT, teamItem(Material.RED_BANNER, "Team 1", setup.getTeam1(), MessageUtil.ERROR));
+            inv.setItem(TEAM2_SLOT, teamItem(Material.BLUE_BANNER, "Team 2", setup.getTeam2(), MessageUtil.SECONDARY));
         }
 
         inv.setItem(CANCEL_SLOT, item(
@@ -147,6 +119,28 @@ public final class DuelSetupGUI {
         inv.setItem(START_SLOT, item(startMat, startText));
 
         player.openInventory(inv);
+    }
+
+    private static ItemStack teamItem(Material material, String label, DuelTeam team, String color) {
+        ItemStack item = item(material, "<color:" + color + ">" + label);
+        ItemMeta meta = item.getItemMeta();
+        List<Component> lore = new ArrayList<>();
+        lore.add(MM.deserialize("<color:" + MessageUtil.MUTED + ">Players: " + team.size() + "</color>")
+                .decoration(TextDecoration.ITALIC, false));
+        for (UUID uuid : team.getPlayers()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                Component name = MM.deserialize(" <color:" + MessageUtil.SECONDARY + "> - " + player.getName() + "</color>");
+                lore.add(Component.textOfChildren(StringUtil.getPlayerHead(player), name)
+                        .decoration(TextDecoration.ITALIC, false));
+            }
+        }
+        lore.add(Component.empty());
+        lore.add(MM.deserialize("<color:" + MessageUtil.ACCENT + ">Click to edit</color>")
+                .decoration(TextDecoration.ITALIC, false));
+        meta.lore(lore);
+        item.setItemMeta(meta);
+        return item;
     }
 
     private static ItemStack item(Material material, String name, String... lore) {

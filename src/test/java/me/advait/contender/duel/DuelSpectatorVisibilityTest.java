@@ -1,0 +1,92 @@
+package me.advait.contender.duel;
+
+import com.destroystokyo.paper.profile.PlayerProfile;
+import me.advait.contender.kit.Kit;
+import me.advait.contender.lobby.LobbyManager;
+import me.advait.contender.map.ArenaMap;
+import me.advait.contender.testutil.StateTestServer;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.PlayerInventory;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+class DuelSpectatorVisibilityTest {
+    private Player player(World world, String name) {
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(player.getName()).thenReturn(name);
+        when(player.getLocation()).thenReturn(new Location(world, 0, 64, 0));
+        when(player.getInventory()).thenReturn(mock(PlayerInventory.class));
+        PlayerProfile profile = mock(PlayerProfile.class);
+        when(profile.getProperties()).thenReturn(Set.of());
+        when(player.getPlayerProfile()).thenReturn(profile);
+        return player;
+    }
+
+    @Test
+    void updatesOnEliminationAndRoundResetAndClearsOnForcedEnd() {
+        try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            World world = mock(World.class);
+            Player first = player(world, "First");
+            Player teammate = player(world, "Teammate");
+            Player opponent = player(world, "Opponent");
+            Player spectator = player(world, "Spectator");
+            List<Player> players = List.of(first, teammate, opponent, spectator);
+            Map<UUID, Player> online = players.stream().collect(Collectors.toMap(Player::getUniqueId, p -> p));
+            bukkit.when(() -> Bukkit.getPlayer(any(UUID.class))).thenAnswer(call -> online.get(call.getArgument(0)));
+            bukkit.when(() -> Bukkit.getOfflinePlayer(any(UUID.class))).thenAnswer(call -> online.get(call.getArgument(0)));
+            bukkit.when(Bukkit::getPluginManager).thenReturn(server.plugins);
+            bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+            when(server.plugin.getLobbyManager()).thenReturn(mock(LobbyManager.class));
+
+            DuelSetup setup = new DuelSetup(first.getUniqueId());
+            ArenaMap map = mock(ArenaMap.class);
+            when(map.getWorldName()).thenReturn("test");
+            when(map.getTeam1Spawn()).thenReturn(new Location(world, 0, 64, 0));
+            when(map.getTeam2Spawn()).thenReturn(new Location(world, 0, 64, 0));
+            setup.setSelectedMap(map);
+            setup.setSelectedKit(mock(Kit.class));
+            setup.getTeam1().addPlayer(first.getUniqueId());
+            setup.getTeam1().addPlayer(teammate.getUniqueId());
+            setup.getTeam2().addPlayer(opponent.getUniqueId());
+            Duel duel = new Duel(server.plugin, mock(DuelManager.class), setup);
+            duel.addSpectator(spectator.getUniqueId());
+            duel.start();
+            var visibilityTimer = server.scheduled.getFirst();
+            verify(first).hidePlayer(server.plugin, spectator);
+            verify(spectator, never()).hidePlayer(any(), any());
+
+            duel.setState(new ActiveState(duel));
+            duel.handleDeath(first, opponent);
+            verify(first).showPlayer(server.plugin, spectator);
+            verify(teammate).hidePlayer(server.plugin, first);
+            verify(spectator, never()).hidePlayer(any(), any());
+
+            duel.prepareRound();
+            verify(teammate).showPlayer(server.plugin, first);
+            verify(first, times(2)).hidePlayer(server.plugin, spectator);
+
+            duel.forceEnd();
+            assertTrue(duel.isFinished());
+            verify(visibilityTimer.task()).cancel();
+            verify(first, times(2)).showPlayer(server.plugin, spectator);
+            verify(teammate).showPlayer(server.plugin, spectator);
+            verify(opponent).showPlayer(server.plugin, spectator);
+            visibilityTimer.run();
+            verify(first, times(2)).hidePlayer(server.plugin, spectator);
+            for (Player player : players) verify(player, never()).setVelocity(any());
+        }
+    }
+}

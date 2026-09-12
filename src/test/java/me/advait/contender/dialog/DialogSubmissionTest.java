@@ -359,7 +359,8 @@ class DialogSubmissionTest {
         }
         assertEquals("%s: %s%%", ((NumberRangeDialogInput) shownInputs.get(3)).labelFormat());
         assertTrue(messages.stream().anyMatch(text -> text.contains("may look blatant")));
-        assertTrue(messages.stream().anyMatch(text -> text.contains("when you close")));
+        assertTrue(messages.stream().anyMatch(text -> text.contains("press Escape")));
+        assertTrue(messages.stream().anyMatch(text -> text.contains("Inactive now") && text.contains("in the lobby")));
         assertFalse(actions.keySet().stream().anyMatch(label -> label.contains("Save") || label.contains("Review") || label.contains("Next")));
         verify(manager, never()).update(any(), any(), any());
 
@@ -376,8 +377,24 @@ class DialogSubmissionTest {
                 && settings.get(me.advait.contender.hacker.HackSetting.ANTI_KNOCKBACK) == 100
                 && settings.get(me.advait.contender.hacker.HackSetting.STEP_HEIGHT) == .6));
         verify(player).closeDialog();
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Hacks saved. They activate when you start playing.")));
         close.accept(response, player);
         verify(manager, times(1)).update(any(), any(), any());
+    }
+
+    @Test void activeHackerMenuConfirmsWhenItsSlidersHaveApplied() {
+        var manager = hackerManager();
+        when(manager.hasActiveHacks(player)).thenReturn(true);
+        new HackerDialogs(server.plugin, manager).open(player);
+        assertTrue(messages.stream().anyMatch(text -> text.equals("Active now")));
+        assertFalse(messages.stream().anyMatch(text -> text.contains("Inactive now")));
+
+        actions.get("Close").accept(hackerSliders(), player);
+
+        verify(manager).update(eq(player), any(), any());
+        verify(player).sendMessage(argThat((Component message) -> plain(message).equals("Hacks applied.")));
+        verify(player).closeDialog();
     }
 
     @Test void nonHackersCannotOpenOrUseAnOldHackerFormEvenWithAdminPermissions() {

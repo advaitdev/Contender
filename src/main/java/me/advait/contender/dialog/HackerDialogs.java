@@ -49,9 +49,14 @@ public final class HackerDialogs {
                     hackers.update(p, session.selection(), settings);
                     forget(p);
                     p.closeDialog();
+                    Dialogs.tell(p, hackers.hasActiveHacks(p) ? "Hacks applied."
+                            : "Hacks saved. They activate when you start playing.");
                 });
         dialogs.show(player, "Hacks", List.of(
-                DialogBody.plainMessage(DialogPalette.text("Changes apply when you close this menu.\nAbilities are active during your games.", DialogPalette.MUTED), 300),
+                DialogBody.plainMessage(DialogPalette.text("Close this menu or press Escape to apply your changes.", DialogPalette.MUTED), 300),
+                DialogBody.plainMessage(hackers.hasActiveHacks(player)
+                        ? DialogPalette.text("Active now", DialogPalette.SUCCESS)
+                        : DialogPalette.text("Inactive now\nHacks turn on when you start playing. They stay off in the lobby, during countdowns and while spectating.", DialogPalette.MUTED), 300),
                 DialogBody.plainMessage(DialogIcon.INFO.label("Values above the limits in brackets may look blatant.", DialogPalette.ACCENT), 300)),
                 inputs, List.of(), 1, 150, close);
     }

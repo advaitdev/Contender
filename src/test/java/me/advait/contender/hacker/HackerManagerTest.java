@@ -2,6 +2,7 @@ package me.advait.contender.hacker;
 
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.minigame.MinigameManager;
 import me.advait.contender.role.RoleManager;
 import me.advait.contender.testutil.StateTestServer;
 import net.kyori.adventure.title.Title;
@@ -104,6 +105,72 @@ class HackerManagerTest {
             when(duel.isCombatActive()).thenReturn(false); manager.refresh(); assertFalse(manager.hasActiveHacks(alice));
             assertEquals(settings, manager.profile(alice.getUniqueId()).settings());
             manager.disable(); attributes.verify(() -> HackerAttributes.apply(alice, null), atLeastOnce());
+        }
+    }
+    @Test void changingSettingsDuringAnActiveDuelAppliesWithoutWaitingForAScheduledRefresh() {
+        try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
+            var manager = manager(server); Player alice = player("Alice");
+            doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
+            manager.pick(List.of(alice)); manager.enable();
+            var duel = mock(Duel.class);
+            when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(duel);
+            when(duel.isInDuel(alice.getUniqueId())).thenReturn(true);
+            when(duel.isCombatActive()).thenReturn(true);
+            attributes.clearInvocations();
+
+            var changed = HackSettings.defaults().with(Map.of(HackSetting.REACH, 4.0, HackSetting.ATTACK_SPEED, 2.0));
+            manager.update(alice, manager.profile(alice.getUniqueId()).selection(), changed);
+
+            attributes.verify(() -> HackerAttributes.apply(alice, changed));
+            attributes.verifyNoMoreInteractions();
+            assertEquals(changed, new HackerManager(server.plugin).profile(alice.getUniqueId()).settings());
+            manager.disable();
+        }
+    }
+    @Test void changingSettingsDuringAnActiveMinigameAppliesWithoutADuel() {
+        try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
+            var manager = manager(server); Player alice = player("Alice");
+            doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
+            manager.pick(List.of(alice)); manager.enable();
+            var minigames = mock(MinigameManager.class);
+            when(server.plugin.getMinigameManager()).thenReturn(minigames);
+            when(minigames.isPlaying(alice.getUniqueId())).thenReturn(true);
+            attributes.clearInvocations();
+
+            var changed = HackSettings.defaults().with(Map.of(HackSetting.MOVEMENT_SPEED, 1.5, HackSetting.JUMP_STRENGTH, 2.0));
+            manager.update(alice, manager.profile(alice.getUniqueId()).selection(), changed);
+
+            attributes.verify(() -> HackerAttributes.apply(alice, changed));
+            attributes.verifyNoMoreInteractions();
+            assertEquals(changed, new HackerManager(server.plugin).profile(alice.getUniqueId()).settings());
+            manager.disable();
+        }
+    }
+    @Test void lobbyChangesStaySavedAndActivateWhenCombatStartsWithoutReopeningTheMenu() {
+        try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
+            var manager = manager(server); Player alice = player("Alice");
+            doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
+            manager.pick(List.of(alice)); manager.enable();
+            attributes.clearInvocations();
+
+            var changed = HackSettings.defaults().with(Map.of(HackSetting.REACH, 5.0, HackSetting.ANTI_KNOCKBACK, 50.0));
+            manager.update(alice, manager.profile(alice.getUniqueId()).selection(), changed);
+
+            assertFalse(manager.hasActiveHacks(alice));
+            attributes.verify(() -> HackerAttributes.apply(alice, null));
+            attributes.verifyNoMoreInteractions();
+            assertEquals(changed, new HackerManager(server.plugin).profile(alice.getUniqueId()).settings());
+            attributes.clearInvocations();
+
+            var duel = mock(Duel.class);
+            when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(duel);
+            when(duel.isInDuel(alice.getUniqueId())).thenReturn(true);
+            when(duel.isCombatActive()).thenReturn(true);
+            server.scheduled.getLast().run();
+
+            attributes.verify(() -> HackerAttributes.apply(alice, changed));
+            attributes.verifyNoMoreInteractions();
+            manager.disable();
         }
     }
     @Test void resistanceCannotSuppressVoidDamageOrProtectSpectatorsAndOrdinaryPlayers() {

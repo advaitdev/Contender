@@ -22,6 +22,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -40,6 +41,14 @@ public final class ArenaManager {
     private final Map<String, Clipboard> clipboards = new HashMap<>();
     private final Set<String> editing = new HashSet<>();
     private final Set<CompletableFuture<?>> pending = new HashSet<>();
+    private final Map<String, CompletableFuture<Void>> preparing = new HashMap<>();
+    private final Map<ArenaInstance, CompletableFuture<Void>> restoring = new IdentityHashMap<>();
+    private final Map<Object, Retry> retries = new HashMap<>();
+    private final Map<String, String> failures = new HashMap<>();
+    private final Set<String> scheduledPreparation = new HashSet<>();
+    private record Retry(int attempts, long afterTick) { }
+    private long maintenanceTick;
+    private BukkitTask maintenance;
     private CompletableFuture<Void> work = CompletableFuture.completedFuture(null);
     private World world;
     private boolean closed;
@@ -73,13 +82,9 @@ public final class ArenaManager {
         world.setGameRule(org.bukkit.GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
         world.setStorm(false);
         world.setThundering(false);
-        for (ArenaMap map : maps.getMaps()) {
-            if (!map.isComplete()) continue;
-            prepare(map).exceptionally(failure -> {
-                if (!closed) plugin.getLogger().log(Level.SEVERE, "Could not prepare map " + map.getId(), failure);
-                return null;
-            });
-        }
+        if (maintenance != null) maintenance.cancel();
+        maintenance = plugin.getServer().getScheduler().runTaskTimer(plugin, this::maintain, 100L, 100L);
+        maintain();
     }
 
     public World getWorld() { return world; }
@@ -89,6 +94,8 @@ public final class ArenaManager {
     public void reloadTemplates() {
         if (hasPendingWork()) throw new IllegalStateException("Wait for matches and arena preparation to finish.");
         pools.clear();
+        retries.clear();
+        failures.clear();
         clipboards.values().forEach(Clipboard::close);
         clipboards.clear();
         initialize();
@@ -98,7 +105,8 @@ public final class ArenaManager {
         return (int) instances(mapId).stream().filter(a -> a.status() == ArenaInstance.Status.READY).count();
     }
     public boolean isBusy(String mapId) {
-        return isEditing(mapId) || instances(mapId).stream().anyMatch(a -> a.isReserved()
+        return isEditing(mapId) || preparing.containsKey(mapId) || restoring.keySet().stream().anyMatch(a -> a.map().getId().equals(mapId))
+                || instances(mapId).stream().anyMatch(a -> a.isReserved()
                 || a.status() == ArenaInstance.Status.PREPARING || a.status() == ArenaInstance.Status.RESETTING);
     }
     public ArenaLease acquire(String mapId) {
@@ -117,12 +125,27 @@ public final class ArenaManager {
     public void discard(ArenaLease lease) {
         if (lease != null && lease.instance().owns(lease)) lease.instance().failed();
     }
-    /** Releases a cancelled game's copy without waiting for a reset. Rebuild it before reuse. */
+    /** Releases a cancelled game's copy immediately; maintenance resets it before reuse. */
     public void abandon(ArenaLease lease) {
         if (lease == null || !lease.instance().owns(lease)) return;
         lease.instance().failed();
         lease.instance().release(lease);
     }
+    /** Prevents new arrivals while the slot is queued or being pasted; occupants can still leave. */
+    public boolean isPreparingEntry(Location from, Location to) {
+        if (to == null || !isArenaWorld(to.getWorld())) return false;
+        for (List<ArenaInstance> pool : pools.values()) {
+            for (ArenaInstance instance : pool) {
+                if (instance.status() != ArenaInstance.Status.PREPARING && instance.status() != ArenaInstance.Status.RESETTING
+                        && !restoring.containsKey(instance)) continue;
+                if (!instance.cell().containsColumn(to.getX(), to.getZ())) continue;
+                return from == null || !isArenaWorld(from.getWorld())
+                        || !instance.cell().containsColumn(from.getX(), from.getZ());
+            }
+        }
+        return false;
+    }
+
     public ArenaInstance at(Location location) {
         if (!isArenaWorld(location.getWorld())) return null;
         for (List<ArenaInstance> pool : pools.values()) {
@@ -179,6 +202,7 @@ public final class ArenaManager {
         }
         pools.remove(map.getId());
         maps.save(map);
+        prepareSoon(map);
     }
 
     public void configure(ArenaMap map, String name, int copies) {
@@ -188,6 +212,7 @@ public final class ArenaManager {
         map.setDisplayName(name.strip());
         pools.remove(map.getId());
         maps.save(map);
+        prepareSoon(map);
     }
 
     public CompletableFuture<Void> saveBlocks(ArenaMap map) {
@@ -198,11 +223,19 @@ public final class ArenaManager {
             Clipboard old = clipboards.put(map.getId(), clipboard);
             if (old != null) old.close();
             maps.save(map);
-        }).whenComplete((ignored, failure) -> editing.remove(map.getId()));
+        }).whenComplete((ignored, failure) -> {
+            editing.remove(map.getId());
+            if (failure == null) prepareSoon(map);
+        });
     }
 
     private void requireEditable(ArenaMap map) {
-        if (isBusy(map.getId())) throw new IllegalStateException("Wait for this map's matches and arena preparation to finish.");
+        if (isBusy(map.getId())) {
+            if (instances(map.getId()).stream().anyMatch(ArenaInstance::isReserved)) {
+                throw new IllegalStateException("Finish this map's matches before editing it.");
+            }
+            throw new IllegalStateException("This map is still preparing. You can edit it once preparation finishes.");
+        }
         for (ArenaInstance instance : instances(map.getId())) requireEmpty(instance);
     }
 
@@ -216,56 +249,181 @@ public final class ArenaManager {
         }
     }
 
-    public CompletableFuture<Void> prepare(ArenaMap map) {
+    /** Ensures all usable slots are prepared, without disturbing copies already in use. */
+    public CompletableFuture<Void> prepare(ArenaMap map) { return prepare(map, false); }
+
+    private CompletableFuture<Void> prepare(ArenaMap map, boolean automatic) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
+        CompletableFuture<Void> running = preparing.get(map.getId());
+        if (running != null) return running;
         try {
-            requireEditable(map);
+            if (isEditing(map.getId())) throw new IllegalStateException("This map is being saved. Its copies will prepare automatically.");
             validateBounds(map);
             if (!map.isComplete()) throw new IllegalArgumentException("Set both team spawns first.");
             validateSpawn(map, map.getTeam1Point());
             validateSpawn(map, map.getTeam2Point());
             if (map.getSpectatorPoint() != null) validateSpawn(map, map.getSpectatorPoint());
-            int first = maps.allocateSlots(map);
-            List<ArenaInstance> pool = new ArrayList<>();
-            for (int i = 0; i < map.getCopies(); i++) {
-                pool.add(ArenaLayout.place(map, world.getName(), first + i, spacing, world.getMinHeight(), world.getMaxHeight()));
-            }
-            pools.put(map.getId(), pool);
-            editing.add(map.getId());
-            CompletableFuture<Clipboard> loaded;
-            if (clipboards.containsKey(map.getId())) loaded = CompletableFuture.completedFuture(clipboards.get(map.getId()));
-            else if (map.getSchematic() == null) loaded = capture(map).thenApply(clipboard -> { maps.save(map); return clipboard; });
-            else loaded = enqueue(() -> async(() -> {
-                try (var input = Files.newInputStream(schematicPath(map.getSchematic()));
-                     var reader = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getReader(input)) {
-                    return reader.read();
+            List<ArenaInstance> pool = pools.get(map.getId());
+            if (pool == null) {
+                int first = maps.allocateSlots(map);
+                pool = new ArrayList<>();
+                for (int i = 0; i < map.getCopies(); i++) {
+                    pool.add(ArenaLayout.place(map, world.getName(), first + i, spacing, world.getMinHeight(), world.getMaxHeight()));
                 }
-            }));
-            return loaded.thenCompose(clipboard -> {
+                pools.put(map.getId(), pool);
+            }
+            List<ArenaInstance> candidates = pool.stream().filter(instance -> !instance.isReserved())
+                    .filter(instance -> restoring.containsKey(instance)
+                            || needsRepair(instance) && empty(instance) && (!automatic || retryDue(instance))).toList();
+            if (candidates.isEmpty()) return CompletableFuture.completedFuture(null);
+            CompletableFuture<Void> result = new CompletableFuture<>();
+            preparing.put(map.getId(), result);
+            loadTemplate(map).thenCompose(clipboard -> {
+                if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
                 clipboards.put(map.getId(), clipboard);
-                List<CompletableFuture<Void>> prepared = new ArrayList<>();
-                for (ArenaInstance instance : pool) prepared.add(restore(instance, clipboard));
-                return CompletableFuture.allOf(prepared.toArray(CompletableFuture[]::new));
+                List<CompletableFuture<Void>> attempts = new ArrayList<>();
+                for (ArenaInstance instance : candidates) {
+                    CompletableFuture<Void> current = restoring.get(instance);
+                    if (current != null) attempts.add(current);
+                    else if (!instance.isReserved() && needsRepair(instance) && empty(instance)) {
+                        attempts.add(restore(instance, clipboard, true));
+                    }
+                }
+                return CompletableFuture.allOf(attempts.toArray(CompletableFuture[]::new));
             }).whenComplete((ignored, failure) -> {
-                editing.remove(map.getId());
-                if (failure != null) pool.forEach(ArenaInstance::failed);
+                preparing.remove(map.getId(), result);
+                if (failure == null) {
+                    retries.remove(map.getId());
+                    failures.remove(map.getId());
+                    result.complete(null);
+                } else {
+                    instances(map.getId()).stream().filter(this::needsRepair)
+                            .filter(instance -> !restoring.containsKey(instance)).forEach(ArenaInstance::failed);
+                    retryLater(map.getId());
+                    failures.put(map.getId(), failureMessage(failure));
+                    result.completeExceptionally(failure);
+                }
             });
+            return result;
         } catch (Exception failure) {
+            retryLater(map.getId());
+            failures.put(map.getId(), failureMessage(failure));
+            CompletableFuture<Void> interrupted = preparing.remove(map.getId());
+            if (interrupted != null) {
+                instances(map.getId()).stream().filter(this::needsRepair).forEach(ArenaInstance::failed);
+                interrupted.completeExceptionally(failure);
+                return interrupted;
+            }
             return CompletableFuture.failedFuture(failure);
         }
+    }
+
+    private CompletableFuture<Clipboard> loadTemplate(ArenaMap map) {
+        Clipboard cached = clipboards.get(map.getId());
+        if (cached != null) return CompletableFuture.completedFuture(cached);
+        if (map.getSchematic() == null) return capture(map).thenApply(clipboard -> { maps.save(map); return clipboard; });
+        return enqueue(() -> async(() -> {
+            try (var input = Files.newInputStream(schematicPath(map.getSchematic()));
+                 var reader = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getReader(input)) {
+                return reader.read();
+            }
+        }));
+    }
+
+    private boolean needsRepair(ArenaInstance instance) {
+        return instance.status() == ArenaInstance.Status.FAILED || instance.status() == ArenaInstance.Status.PREPARING;
+    }
+
+    private boolean empty(ArenaInstance instance) {
+        try { requireEmpty(instance); return true; }
+        catch (IllegalStateException occupied) { return false; }
+    }
+
+    /** Runs on the server thread; retries are bounded to once a minute after repeated failures. */
+    void maintain() {
+        if (closed) return;
+        maintenanceTick += 100;
+        for (ArenaMap map : maps.getMaps()) {
+            if (!map.isComplete() || isEditing(map.getId()) || preparing.containsKey(map.getId()) || !retryDue(map.getId())) continue;
+            List<ArenaInstance> pool = pools.get(map.getId());
+            if (pool != null && pool.stream().noneMatch(instance -> !instance.isReserved()
+                    && !restoring.containsKey(instance) && needsRepair(instance) && empty(instance) && retryDue(instance))) continue;
+            prepare(map, true).exceptionally(failure -> {
+                if (!closed) plugin.getLogger().log(Level.WARNING,
+                        "Arena preparation for " + map.getId() + " will retry automatically: " + failureMessage(failure));
+                return null;
+            });
+        }
+    }
+
+    private void prepareSoon(ArenaMap map) {
+        if (closed || !map.isComplete() || !scheduledPreparation.add(map.getId())) return;
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            scheduledPreparation.remove(map.getId());
+            if (!closed && maps.getMap(map.getId()) == map) {
+                retries.remove(map.getId());
+                prepare(map).exceptionally(failure -> {
+                    if (!closed) plugin.getLogger().log(Level.WARNING,
+                            "Arena preparation for " + map.getId() + " will retry automatically: " + failureMessage(failure));
+                    return null;
+                });
+            }
+        });
+    }
+
+    private boolean retryDue(Object key) {
+        Retry retry = retries.get(key);
+        return retry == null || retry.afterTick() <= maintenanceTick;
+    }
+
+    private void retryLater(Object key) {
+        Retry previous = retries.get(key);
+        int attempt = previous == null ? 1 : Math.min(previous.attempts() + 1, 5);
+        retries.put(key, new Retry(attempt, maintenanceTick + Math.min(1200L, 100L << (attempt - 1))));
+    }
+
+    private static String failureMessage(Throwable failure) {
+        while (failure.getCause() != null) failure = failure.getCause();
+        return failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
+    }
+
+    /** A short status suitable for dialogs and start errors. */
+    public String readiness(String mapId) {
+        ArenaMap map = maps.getMap(mapId);
+        if (map == null) return "This map is no longer saved.";
+        if (!map.isComplete()) return "Set both team spawns to prepare this map.";
+        int ready = available(mapId);
+        String count = ready + " of " + map.getCopies() + " arena copies ready.";
+        if (ready == map.getCopies()) return count;
+        if (isEditing(mapId)) return count + " Saving the map.";
+        if (preparing.containsKey(mapId) || instances(mapId).stream().anyMatch(restoring::containsKey)) {
+            return count + " Preparing the remaining copies automatically.";
+        }
+        if (instances(mapId).stream().anyMatch(instance -> instance.isReserved() || !empty(instance))) {
+            return count + " Other copies will reset when their players leave.";
+        }
+        String failure = failures.get(mapId);
+        if (failure != null) return count + " Retrying automatically: " + failure;
+        return count + " The remaining copies will prepare automatically.";
     }
 
     public CompletableFuture<Void> reset(ArenaLease lease) {
         if (closed || lease == null || !lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
         if (lease.instance().status() == ArenaInstance.Status.FAILED) return CompletableFuture.failedFuture(
-                new IllegalStateException("Rebuild this arena copy before using it again."));
+                new IllegalStateException("This arena copy is waiting for an automatic reset."));
         Clipboard clipboard = clipboards.get(lease.instance().map().getId());
         if (clipboard == null) return CompletableFuture.failedFuture(new IllegalStateException("Map template is not loaded."));
-        return restore(lease.instance(), clipboard);
+        return restore(lease.instance(), clipboard, false);
     }
 
-    private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard) {
+    private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard, boolean repair) {
+        CompletableFuture<Void> active = restoring.get(instance);
+        if (active != null) return active;
+        if (repair && instance.status() == ArenaInstance.Status.FAILED) instance.beginRepair();
         long revision = instance.beginReset();
-        return enqueue(() -> {
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        restoring.put(instance, result);
+        enqueue(() -> {
             requireReset(instance, revision);
             return chunks.run(world, instance.map().getBounds(), () -> {
                 requireReset(instance, revision);
@@ -293,7 +451,19 @@ public final class ArenaManager {
             requireReset(instance, revision);
             instance.restored(revision);
             return null;
-        }).whenComplete((ignored, failure) -> { if (failure != null) instance.failed(revision); });
+        }).whenComplete((ignored, failure) -> {
+            restoring.remove(instance, result);
+            if (failure != null) {
+                instance.failed(revision);
+                retryLater(instance);
+                failures.put(instance.map().getId(), failureMessage(failure));
+                result.completeExceptionally(failure);
+            } else {
+                retries.remove(instance);
+                result.complete(null);
+            }
+        });
+        return result;
     }
 
     private void requireReset(ArenaInstance instance, long revision) {
@@ -303,12 +473,17 @@ public final class ArenaManager {
     }
 
     private CompletableFuture<Clipboard> capture(ArenaMap map) {
-        World source = Bukkit.getWorld(map.getWorldName());
-        if (source == null) return CompletableFuture.failedFuture(new IllegalArgumentException("Load the source world before saving this map."));
+        World source;
+        try {
+            source = Bukkit.getWorld(map.getWorldName());
+            if (source == null) source = plugin.getManagedWorlds().loadExisting(map.getWorldName());
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+        if (source == null) return CompletableFuture.failedFuture(new IllegalArgumentException("Could not load the source world."));
+        final World loadedSource = source;
         var sourceWorld = BukkitAdapter.adapt(source);
         BlockBounds bounds = map.getBounds();
         String fileName = map.getId() + "-" + UUID.randomUUID() + ".schem";
-        return enqueue(() -> chunks.run(source, bounds, () -> async(() -> {
+        return enqueue(() -> chunks.run(loadedSource, bounds, () -> async(() -> {
             CuboidRegion region = new CuboidRegion(sourceWorld,
                     BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()),
                     BlockVector3.at(bounds.maxX(), bounds.maxY(), bounds.maxZ()));
@@ -359,25 +534,32 @@ public final class ArenaManager {
     }
 
     private <T> CompletableFuture<T> enqueue(Supplier<CompletableFuture<T>> operation) {
-        CompletableFuture<T> next = work.handle((ignored, failure) -> null).thenCompose(ignored -> {
+        CompletableFuture<Void> previous = work;
+        CompletableFuture<Void> tail = new CompletableFuture<>();
+        // Publish the new tail before running code that may complete inline and enqueue more work.
+        work = tail;
+        CompletableFuture<T> next = previous.handle((ignored, failure) -> null).thenCompose(ignored -> {
             if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
             return operation.get();
         });
-        work = next.handle((ignored, failure) -> null);
+        next.whenComplete((ignored, failure) -> tail.complete(null));
         return next;
     }
     @FunctionalInterface private interface Job<T> { T run() throws Exception; }
     private <T> CompletableFuture<T> async(Job<T> job) {
         CompletableFuture<T> future = new CompletableFuture<>();
         pending.add(future);
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+        try { plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 T value = job.run();
                 completeOnMain(future, value, null);
             } catch (Throwable failure) {
                 completeOnMain(future, null, failure);
             }
-        });
+        }); } catch (RuntimeException failure) {
+            pending.remove(future);
+            future.completeExceptionally(failure);
+        }
         return future;
     }
     private <T> void completeOnMain(CompletableFuture<T> future, T value, Throwable failure) {
@@ -391,6 +573,8 @@ public final class ArenaManager {
     }
     public void shutdown() {
         closed = true;
+        if (maintenance != null) maintenance.cancel();
+        scheduledPreparation.clear();
         chunks.close();
         pools.values().forEach(pool -> pool.forEach(ArenaInstance::failed));
         for (CompletableFuture<?> future : new ArrayList<>(pending)) future.cancel(false);

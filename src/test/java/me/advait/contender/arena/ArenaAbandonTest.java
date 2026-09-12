@@ -205,7 +205,7 @@ class ArenaAbandonTest {
     }
 
     private static final class Fixture {
-        final Contender plugin = mock(Contender.class);
+        final Contender plugin = mock(Contender.class, RETURNS_DEEP_STUBS);
         final World world = mock(World.class);
         final ArenaManager manager = new ArenaManager(plugin, mock(MapManager.class));
         final Map<String, List<ArenaInstance>> pools;

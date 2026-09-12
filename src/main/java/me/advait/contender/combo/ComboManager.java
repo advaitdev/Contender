@@ -110,7 +110,7 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
         requireSwordKit(current.kitId());
         if (current.allDone()) throw new IllegalStateException("There are no players left to start.");
         var lease = contender.getArenaManager().acquire(current.mapId());
-        if (lease == null) throw new IllegalStateException("No arena copies are ready. Rebuild the map copies first.");
+        if (lease == null) throw new IllegalStateException(contender.getArenaManager().readiness(current.mapId()));
         session = new ComboSession(contender, this, current, lease);
         try { session.enable(); } catch (RuntimeException | Error failure) { failed(failure); throw failure; }
     }

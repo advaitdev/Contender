@@ -21,6 +21,37 @@ import static org.mockito.Mockito.*;
 
 class TournamentCancellationTest {
     @TempDir Path directory;
+    @Test void tournamentWaitsForStartupPreparationAndStartsOnTheNextSchedulerTick() {
+        try (var env = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            when(env.plugin.getDataFolder()).thenReturn(directory.toFile());
+            when(env.plugin.getConfig()).thenReturn(new YamlConfiguration());
+            var maps = mock(MapManager.class); when(env.plugin.getMapManager()).thenReturn(maps);
+            when(maps.getMap("map")).thenReturn(mock(ArenaMap.class));
+            var kits = mock(KitManager.class); when(env.plugin.getKitManager()).thenReturn(kits);
+            when(kits.getKit("kit")).thenReturn(mock(Kit.class));
+            var arenas = mock(ArenaManager.class); when(env.plugin.getArenaManager()).thenReturn(arenas);
+            when(arenas.readiness("map")).thenReturn("0 / 20 copies ready. Preparing automatically.");
+            var duels = mock(DuelManager.class); when(env.plugin.getDuelManager()).thenReturn(duels);
+            when(duels.isEligible(any())).thenReturn(true);
+            when(env.plugin.getVoteManager()).thenReturn(mock(VoteManager.class));
+            var tournament = new Tournament(UUID.randomUUID(), "Sword", "map", "kit", List.of(
+                    new TournamentEntry("Alice", List.of(UUID.randomUUID())), new TournamentEntry("Bob", List.of(UUID.randomUUID()))), false, false, 3, 10, 2);
+            bukkit.when(() -> Bukkit.getPlayer(any(UUID.class))).thenReturn(mock(Player.class));
+            Duel duel = mock(Duel.class); when(duels.startDuel(any(DuelSetup.class), any())).thenReturn(duel);
+            TournamentManager manager = new TournamentManager(env.plugin);
+            manager.enable(); manager.create(tournament);
+            assertDoesNotThrow(manager::resume);
+            assertTrue(tournament.isRunning()); assertTrue(manager.playing().isEmpty());
+            assertEquals("0 / 20 copies ready. Preparing automatically.", manager.waitingReason());
+            verify(duels, never()).startDuel(any(DuelSetup.class), any());
+
+            when(arenas.available("map")).thenReturn(1, 1, 0);
+            env.scheduled.getLast().run();
+            assertSame(duel, manager.playing().get(1));
+            verify(duels).startDuel(any(DuelSetup.class), any());
+            manager.disable();
+        }
+    }
     @Test void cancellingAPairingPausesBeforeCleanupAndWholeCancellationRefreshesTabImmediately() {
         try (var env = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
             when(env.plugin.getDataFolder()).thenReturn(directory.toFile()); when(env.plugin.getConfig()).thenReturn(new YamlConfiguration());

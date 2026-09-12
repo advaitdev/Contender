@@ -11,8 +11,11 @@ import java.util.function.BooleanSupplier;
 public final class MinigameArenas {
     private MinigameArenas() { }
     public static CompletableFuture<Void> loadChunks(Contender plugin, ArenaMap map, Set<Chunk> tickets, BooleanSupplier active) {
-        World world = Bukkit.getWorld(map.getWorldName());
-        if (world == null) return CompletableFuture.failedFuture(new IllegalStateException("Load the map world first."));
+        World world;
+        try {
+            world = Bukkit.getWorld(map.getWorldName());
+            if (world == null) world = plugin.getManagedWorlds().loadExisting(map.getWorldName());
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
         List<CompletableFuture<?>> pending = new ArrayList<>(); var b = map.getBounds();
         for (int x = b.minX() >> 4; x <= b.maxX() >> 4; x++) for (int z = b.minZ() >> 4; z <= b.maxZ() >> 4; z++) {
             pending.add(world.getChunkAtAsync(x, z).thenAccept(chunk -> {

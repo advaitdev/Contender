@@ -20,11 +20,18 @@ public class LobbyManager {
 
     public Location getLobbyLocation() {
         World world = resolveLobbyWorld();
+        String loadFailure = "";
+        if (world == null && plugin.getManagedWorlds() != null) {
+            try {
+                World loaded = plugin.getManagedWorlds().loadExisting(getLobbyWorldName());
+                if (allowedLobbyWorld(loaded)) world = loaded;
+            } catch (RuntimeException failure) { loadFailure = " " + failure.getMessage(); }
+        }
         if (world == null) {
             String worldName = getLobbyWorldName();
             if (!worldName.equals(unavailableWorld)) {
-                plugin.getLogger().warning("Lobby world '" + worldName + "' is not loaded. Load it with Builder's /loadworld, "
-                        + "or use /setlobby in the intended world. Using the default world spawn until it is available.");
+                plugin.getLogger().warning("Lobby world '" + worldName + "' is not loaded." + loadFailure
+                        + " Using the default world spawn until it is available.");
                 unavailableWorld = worldName;
             }
             World fallback = fallbackWorld();

@@ -12,6 +12,42 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class LobbyManagerTest {
+    @Test void savedLobbyLoadsAutomaticallyBeforeChoosingAFallbackSpawn() {
+        Contender plugin = mock(Contender.class);
+        var config = new YamlConfiguration(); config.set("lobby.world", "studio");
+        config.set("lobby.x", 12.5); config.set("lobby.y", 87); config.set("lobby.z", -4.5);
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getArenaManager()).thenReturn(mock(ArenaManager.class));
+        var worlds = mock(me.advait.contender.world.ManagedWorlds.class);
+        when(plugin.getManagedWorlds()).thenReturn(worlds);
+        World studio = mock(World.class);
+        when(worlds.loadExisting("studio")).thenReturn(studio);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            var lobby = new LobbyManager(plugin);
+            assertEquals(new Location(studio, 12.5, 87, -4.5), lobby.getLobbyLocation());
+            verify(worlds).loadExisting("studio");
+            bukkit.verify(Bukkit::getWorlds, never());
+        }
+    }
+
+    @Test void failedAutomaticLobbyLoadKeepsTheFallbackAvailable() {
+        Contender plugin = mock(Contender.class);
+        var config = new YamlConfiguration(); config.set("lobby.world", "missing_studio");
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getArenaManager()).thenReturn(mock(ArenaManager.class));
+        when(plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
+        var worlds = mock(me.advait.contender.world.ManagedWorlds.class);
+        when(plugin.getManagedWorlds()).thenReturn(worlds);
+        when(worlds.loadExisting("missing_studio")).thenThrow(new IllegalArgumentException("Saved world files are missing."));
+        World fallback = mock(World.class);
+        var spawn = new Location(fallback, 0, 70, 0); when(fallback.getSpawnLocation()).thenReturn(spawn);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getWorlds).thenReturn(java.util.List.of(fallback));
+            assertEquals(spawn, new LobbyManager(plugin).getLobbyLocation());
+            verify(plugin.getLogger()).warning(contains("Saved world files are missing"));
+        }
+    }
+
     @Test void returningToTheLobbyAppliesTheSavedSpectatorRole() {
         Contender plugin = mock(Contender.class);
         when(plugin.getConfig()).thenReturn(new YamlConfiguration());

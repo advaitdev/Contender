@@ -96,7 +96,7 @@ public final class RaceManager extends AbstractGameState {
         if (tournament != null && !tournament.isComplete() && !tournament.isCancelled()) throw new IllegalStateException("Finish or cancel the round robin first.");
         if (!courses.containsKey(mapId)) throw new IllegalArgumentException("Save this map as a race course first.");
         ArenaMap map = requireMap(mapId);
-        if (!map.isComplete()) throw new IllegalStateException("Set the course start and prepare its arena copies first.");
+        if (!map.isComplete()) throw new IllegalStateException("Set the course start so its arena copies can prepare automatically.");
         List<RaceRun.Racer> roster = new ArrayList<>();
         for (var entry : entries) for (UUID id : entry.players()) {
             contender.getDuelManager().requireEligible(id);
@@ -125,7 +125,7 @@ public final class RaceManager extends AbstractGameState {
         if (current.allDone()) throw new IllegalStateException("There are no racers left to start.");
         for (var racer : current.racers()) if (!racer.done()) requireAvailable(racer);
         var lease = contender.getArenaManager().acquire(current.mapId());
-        if (lease == null) throw new IllegalStateException("No course copies are ready. Prepare them in Maps first.");
+        if (lease == null) throw new IllegalStateException(contender.getArenaManager().readiness(current.mapId()));
         session = new RaceSession(contender, this, current, course(current.mapId()), lease);
         try { session.enable(); } catch (RuntimeException | Error failure) { failed(failure); throw failure; }
     }

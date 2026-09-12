@@ -45,6 +45,7 @@ public final class Contender extends JavaPlugin {
     private DuelManager duelManager;
     private KitManager kitManager;
     private MapManager mapManager;
+    private me.advait.contender.world.ManagedWorlds managedWorlds;
     private ArenaManager arenaManager;
     private TournamentManager tournamentManager;
     private VoteManager voteManager;
@@ -68,6 +69,7 @@ public final class Contender extends JavaPlugin {
         lobbyManager = new LobbyManager(this);
         kitManager = new KitManager(this);
         mapManager = new MapManager(this);
+        managedWorlds = new me.advait.contender.world.ManagedWorlds(this);
         arenaManager = new ArenaManager(this, mapManager);
         duelManager = new DuelManager(this);
         voteManager = new VoteManager(this, duelManager);
@@ -83,6 +85,7 @@ public final class Contender extends JavaPlugin {
         minigameManager.register(comboManager);
         hackerManager = new me.advait.contender.hacker.HackerManager(this);
 
+        loadConfiguredWorlds();
         arenaManager.initialize();
 
         registerListeners();
@@ -130,6 +133,7 @@ public final class Contender extends JavaPlugin {
     }
 
     private void registerListeners() {
+        getServer().getPluginManager().registerEvents(managedWorlds, this);
         getServer().getPluginManager().registerEvents(new LeafDecayListener(), this);
         getServer().getPluginManager().registerEvents(new ChatListener(), this);
         getServer().getPluginManager().registerEvents(
@@ -216,6 +220,19 @@ public final class Contender extends JavaPlugin {
     public DuelManager getDuelManager() { return duelManager; }
     public KitManager getKitManager() { return kitManager; }
     public MapManager getMapManager() { return mapManager; }
+    public me.advait.contender.world.ManagedWorlds getManagedWorlds() { return managedWorlds; }
+    public void loadConfiguredWorlds() {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        getServer().getWorlds().forEach(world -> names.add(world.getName()));
+        names.add(lobbyManager.getLobbyWorldName());
+        mapManager.getMaps().forEach(map -> names.add(map.getWorldName()));
+        for (String name : names) {
+            try { managedWorlds.loadExisting(name); }
+            catch (RuntimeException failure) {
+                getLogger().warning("Could not load saved world '" + name + "': " + failure.getMessage());
+            }
+        }
+    }
     public ArenaManager getArenaManager() { return arenaManager; }
     public TournamentManager getTournamentManager() { return tournamentManager; }
     public VoteManager getVoteManager() { return voteManager; }

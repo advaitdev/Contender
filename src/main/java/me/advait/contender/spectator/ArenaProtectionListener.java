@@ -64,11 +64,15 @@ public final class ArenaProtectionListener implements Listener {
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (arenas.isArenaWorld(event.getRightClicked().getWorld()) && !ownBlock(event.getPlayer(), event.getRightClicked().getLocation())) event.setCancelled(true);
     }
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) { contain(event); }
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) { contain(event); }
     private void contain(PlayerMoveEvent event) {
+        if (arenas.isPreparingEntry(event.getFrom(), event.getTo())) {
+            event.setCancelled(true);
+            return;
+        }
         Duel duel = duels.getDuel(event.getPlayer());
         if (duel == null || duel.getArena() == null || !duel.getState().isEnabled() || duel.getState().isEnding()) return;
         Location to = event.getTo();

@@ -463,6 +463,76 @@ class DialogSubmissionTest {
         verify(player).closeDialog();
     }
 
+    @Test void arenaStatusCanBeCheckedDuringPreparationWithoutSavingTheSource() {
+        ArenaMap map = arenaMap();
+        var preparation = new CompletableFuture<Void>();
+        when(arenas.prepare(map)).thenReturn(preparation);
+        when(arenas.readiness("mines")).thenReturn("0 / 20 ready. Preparing 20 copies automatically.");
+        var menu = new ArenaDialogs(server.plugin);
+
+        menu.edit(player, "mines");
+
+        assertTrue(messages.getLast().contains("Preparing 20 copies automatically."));
+        assertTrue(messages.getLast().contains("Copies prepare automatically and reset after use."));
+        assertEquals(List.of("---", "Back", "Check Arena Copies"), shownButtons.subList(5, 8).stream()
+                .map(button -> plain(button.label())).toList());
+        assertTrue(shownButtons.size() % 2 == 0);
+        shownButtons.forEach(button -> assertRegular(button.label()));
+        actions.get("Check Arena Copies").accept(mock(DialogResponseView.class), player);
+
+        when(arenas.available("mines")).thenReturn(3);
+        when(arenas.readiness("mines")).thenReturn("3 / 20 ready. Preparing 17 copies automatically.");
+        actions.get("Check Arena Copies").accept(mock(DialogResponseView.class), player);
+
+        assertTrue(messages.getLast().contains("3 / 20 ready. Preparing 17 copies automatically."));
+        verify(arenas, times(2)).prepare(map);
+        verify(arenas, never()).saveBlocks(any());
+        verify(player, never()).closeDialog();
+        preparation.complete(null);
+        verify(player, never()).sendMessage(any(Component.class));
+    }
+
+    @Test void arenaCheckReportsThePreparationFailureWithoutClaimingCopiesAreReady() {
+        ArenaMap map = arenaMap();
+        var preparation = new CompletableFuture<Void>();
+        when(arenas.prepare(map)).thenReturn(preparation);
+        when(arenas.readiness("mines")).thenReturn("0 / 20 ready. Preparing 20 copies automatically.");
+        new ArenaDialogs(server.plugin).edit(player, "mines");
+
+        actions.get("Check Arena Copies").accept(mock(DialogResponseView.class), player);
+        preparation.completeExceptionally(new IllegalStateException("The saved template could not be read."));
+
+        verify(player).sendMessage(argThat((Component message) -> plain(message).equals("The saved template could not be read.")));
+        verify(player, times(1)).sendMessage(any(Component.class));
+    }
+
+    @Test void savingArenaBlocksIsExplicitAndExplainsAutomaticUpdating() {
+        ArenaMap map = arenaMap();
+        var saving = new CompletableFuture<Void>();
+        when(arenas.saveBlocks(map)).thenReturn(saving);
+        when(arenas.readiness("mines")).thenReturn("20 / 20 ready.");
+        when(arenas.available("mines")).thenReturn(20);
+        new ArenaDialogs(server.plugin).edit(player, "mines");
+        verify(arenas, never()).saveBlocks(any());
+
+        actions.get("Save Current Blocks").accept(mock(DialogResponseView.class), player);
+        saving.complete(null);
+
+        verify(arenas).saveBlocks(map);
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Template saved. Arena copies are updating automatically.")));
+    }
+
+    private ArenaMap arenaMap() {
+        var maps = mock(MapManager.class);
+        when(server.plugin.getMapManager()).thenReturn(maps);
+        var map = new ArenaMap("mines");
+        map.setDisplayName("The Mines");
+        map.setCopies(20);
+        when(maps.getMap("mines")).thenReturn(map);
+        return map;
+    }
+
     @Test void invalidSubmissionKeepsFormOpenAndCloseStillWorksWithoutFormValues() {
         new ArenaDialogs(server.plugin).create(player);
         submissions.getFirst().accept(mock(DialogResponseView.class), player);

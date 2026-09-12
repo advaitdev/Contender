@@ -22,6 +22,24 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ArenaProtectionTest {
+    @Test void directorsAndOtherPlayersCannotEnterAnArenaWhileItIsBeingPrepared() {
+        World world = mock(World.class);
+        Player director = mock(Player.class);
+        Location from = new Location(world, 0, 70, 0), to = new Location(world, 32, 70, 32);
+        ArenaManager arenas = mock(ArenaManager.class);
+        when(arenas.isPreparingEntry(from, to)).thenReturn(true);
+        var listener = new ArenaProtectionListener(mock(DuelManager.class), arenas);
+        var walk = new PlayerMoveEvent(director, from, to);
+        listener.onMove(walk);
+        assertTrue(walk.isCancelled());
+        var teleport = new PlayerTeleportEvent(director, from, to, PlayerTeleportEvent.TeleportCause.COMMAND);
+        listener.onTeleport(teleport);
+        assertTrue(teleport.isCancelled());
+        var leave = new PlayerTeleportEvent(director, to, from, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        listener.onTeleport(leave);
+        assertFalse(leave.isCancelled());
+    }
+
     @Test void idleTemplatesAreProtectedWhileReservedDeathMannequinsCanAnimate() {
         World world = mock(World.class);
         ArenaManager arenas = mock(ArenaManager.class);

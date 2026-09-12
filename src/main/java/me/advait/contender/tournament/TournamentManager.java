@@ -65,9 +65,6 @@ public final class TournamentManager extends AbstractGameState {
         if (tournament == null) throw new IllegalStateException("Create a tournament first.");
         requireEligibleEntries(tournament);
         if (contender.getVoteManager().isVoteActive()) throw new IllegalStateException("Wait for the vote to finish.");
-        if (contender.getArenaManager().available(tournament.mapId()) == 0 && playing.isEmpty()) {
-            throw new IllegalStateException("Prepare this map's arenas with /arena before starting.");
-        }
         tournament.resume();
         save();
         tick();
@@ -125,7 +122,8 @@ public final class TournamentManager extends AbstractGameState {
         if (tournament == null) return;
         if (contender.getMinigameManager() != null && contender.getMinigameManager().active()) return;
         if (!tournament.isRunning() || contender.getVoteManager().isVoteActive() || contender.getRaceManager() != null && contender.getRaceManager().active()) return;
-        waitingReason = "Waiting for players or a free arena.";
+        waitingReason = contender.getArenaManager().available(tournament.mapId()) == 0
+                ? contender.getArenaManager().readiness(tournament.mapId()) : "Waiting for players or a free arena.";
         while (contender.getArenaManager().available(tournament.mapId()) > 0) {
             TournamentMatch match = tournament.nextMatch(this::available);
             if (match == null) break;

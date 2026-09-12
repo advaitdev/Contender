@@ -33,8 +33,12 @@ public final class ArenaInstance {
     public boolean owns(ArenaLease lease) {
         return lease != null && lease.instance() == this && lease.token().equals(reservation);
     }
+    void beginRepair() {
+        if (reservation != null || status != Status.FAILED) throw new IllegalStateException("Arena copy is still in use.");
+        status = Status.PREPARING;
+    }
     long beginReset() {
-        if (status == Status.FAILED) throw new IllegalStateException("Rebuild this arena copy before using it again.");
+        if (status == Status.FAILED) throw new IllegalStateException("This arena copy is waiting for an automatic reset.");
         long revision = ++resetRevision;
         status = Status.RESETTING;
         return revision;

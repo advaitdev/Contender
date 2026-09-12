@@ -62,7 +62,7 @@ public class DuelManager {
             if (completion == null && reservedForTournament(uuid)) throw new IllegalStateException(player.getName() + " is entered in the tournament.");
         }
         ArenaLease arena = plugin.getArenaManager().acquire(setup.getSelectedMap().getId());
-        if (arena == null) throw new IllegalStateException("No copies of this map are ready. Prepare them with /arena or wait for a free copy.");
+        if (arena == null) throw new IllegalStateException(plugin.getArenaManager().readiness(setup.getSelectedMap().getId()));
         Duel duel;
         try {
             duel = new Duel(plugin, this, setup, arena, completion != null);

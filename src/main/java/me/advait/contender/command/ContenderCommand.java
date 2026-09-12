@@ -44,6 +44,7 @@ public class ContenderCommand implements CommandExecutor {
             plugin.getNameTagManager().refresh();
             plugin.getMapManager().loadMaps();
             plugin.getKitManager().loadKits();
+            plugin.loadConfiguredWorlds();
             plugin.getArenaManager().reloadTemplates();
 
             if (sender instanceof Player player) {

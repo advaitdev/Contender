@@ -51,7 +51,7 @@ public final class Dialogs {
         player.showDialog(Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(DialogText.heading(title)).body(styledBody)
                         .inputs(inputs).pause(false).canCloseWithEscape(true).afterAction(DialogBase.DialogAfterAction.NONE).build())
-                .type(DialogType.multiAction(buttons, exit, columns))));
+                .type(buttons.isEmpty() ? DialogType.notice(exit) : DialogType.multiAction(buttons, exit, columns))));
     }
     /** Adds a complete navigation row below the other actions, with Previous left and Next right. */
     public static void navigationRow(List<ActionButton> buttons, ActionButton previous, ActionButton next) {

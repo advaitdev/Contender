@@ -8,97 +8,86 @@ import me.advait.contender.Contender;
 import me.advait.contender.hacker.*;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
+
 import java.util.*;
-import java.util.function.BiConsumer;
 
 public final class HackerDialogs {
-    private static final List<HackSetting> COMBAT = List.of(HackSetting.REACH, HackSetting.ATTACK_SPEED, HackSetting.ATTACK_DAMAGE, HackSetting.RESISTANCE);
-    private static final List<HackSetting> MOVEMENT = List.of(HackSetting.ANTI_KNOCKBACK, HackSetting.MOVEMENT_SPEED, HackSetting.JUMP_STRENGTH, HackSetting.STEP_HEIGHT);
-    private static final class Draft {
-        final UUID selection;
-        HackSettings settings;
-        Draft(HackerManager.Profile profile) { selection = profile.selection(); settings = profile.settings(); }
-    }
+    private record Session(UUID selection) { }
+
     private final HackerManager hackers;
     private final Contender plugin;
     private final Dialogs dialogs;
-    private final Map<UUID, Draft> drafts = new HashMap<>();
-    public HackerDialogs(Contender plugin, HackerManager hackers) { this.plugin = plugin; this.hackers = hackers; dialogs = new Dialogs(plugin); }
+    private final Map<UUID, Session> sessions = new HashMap<>();
+
+    public HackerDialogs(Contender plugin, HackerManager hackers) {
+        this.plugin = plugin;
+        this.hackers = hackers;
+        dialogs = new Dialogs(plugin);
+    }
+
     public void open(Player player) {
         if (!hackers.isHacker(player.getUniqueId())) {
             player.closeDialog(); Dialogs.error(player, "Only selected hackers can open this menu."); return;
         }
-        Draft draft = new Draft(hackers.profile(player.getUniqueId()));
-        drafts.put(player.getUniqueId(), draft); edit(player, draft, false);
-    }
-    public void forget(Player player) { drafts.remove(player.getUniqueId()); }
-    public void clear() {
-        for (Player player : plugin.getServer().getOnlinePlayers()) if (drafts.containsKey(player.getUniqueId())) player.closeDialog();
-        drafts.clear();
-    }
-    private void check(Player player, Draft draft) {
         var profile = hackers.profile(player.getUniqueId());
-        if (drafts.get(player.getUniqueId()) != draft || !hackers.isHacker(player.getUniqueId()) || profile == null || !profile.selection().equals(draft.selection)) {
+        var session = new Session(profile.selection());
+        sessions.put(player.getUniqueId(), session);
+        List<DialogInput> inputs = new ArrayList<>();
+        for (HackSetting setting : HackSetting.values()) {
+            Component label = setting.icon.label(setting.label, DialogPalette.TEXT)
+                    .append(DialogPalette.text(" [" + setting.display(setting.warning) + "]", DialogPalette.MUTED));
+            String suffix = switch (setting.unit) { case "%" -> "%%"; case "blocks" -> " blocks"; default -> setting.unit; };
+            inputs.add(DialogInput.numberRange(setting.key(), DialogPalette.regular(label), (float) setting.min, (float) setting.max)
+                    .initial((float) profile.settings().get(setting)).step(step(setting)).width(300)
+                    .labelFormat("%s: %s" + suffix).build());
+        }
+        // A notice's Close button is also its Escape action, and includes all current input values.
+        ActionButton close = dialogs.button(player, DialogPalette.text("Close", DialogPalette.MUTED), null, false, 150,
+                (p, response) -> {
+                    check(p, session);
+                    HackSettings settings = read(response);
+                    hackers.update(p, session.selection(), settings);
+                    forget(p);
+                    p.closeDialog();
+                });
+        dialogs.show(player, "Hacks", List.of(
+                DialogBody.plainMessage(DialogPalette.text("Changes apply when you close this menu.\nAbilities are active during your games.", DialogPalette.MUTED), 300),
+                DialogBody.plainMessage(DialogIcon.INFO.label("Values above the limits in brackets may look blatant.", DialogPalette.ACCENT), 300)),
+                inputs, List.of(), 1, 150, close);
+    }
+
+    public void forget(Player player) { sessions.remove(player.getUniqueId()); }
+
+    public void clear() {
+        Set<UUID> open = Set.copyOf(sessions.keySet());
+        sessions.clear();
+        for (Player player : plugin.getServer().getOnlinePlayers()) if (open.contains(player.getUniqueId())) player.closeDialog();
+    }
+
+    private void check(Player player, Session session) {
+        var profile = hackers.profile(player.getUniqueId());
+        if (sessions.get(player.getUniqueId()) != session || !hackers.isHacker(player.getUniqueId())
+                || profile == null || !profile.selection().equals(session.selection())) {
             throw new IllegalStateException("This menu has expired. Open /hacks again.");
         }
     }
-    private ActionButton button(Player owner, Draft draft, DialogIcon icon, String label, boolean primary, BiConsumer<Player, DialogResponseView> callback) {
-        return dialogs.button(owner, icon.label(label, primary ? DialogPalette.ACCENT : DialogPalette.MUTED), null, false, 150,
-                (player, response) -> { check(player, draft); callback.accept(player, response); });
+
+    private static float step(HackSetting setting) {
+        return switch (setting) {
+            case RESISTANCE, ANTI_KNOCKBACK -> 1f;
+            case MOVEMENT_SPEED, JUMP_STRENGTH -> .01f;
+            default -> .05f;
+        };
     }
-    private void edit(Player player, Draft draft, boolean movement) {
-        check(player, draft);
-        var settings = movement ? MOVEMENT : COMBAT;
-        var inputs = new ArrayList<DialogInput>();
-        Component ranges = Component.empty();
-        for (var setting : settings) {
-            inputs.add(DialogInput.text(setting.key(), setting.icon.label(setting.label + " (" + setting.unit + ")"))
-                    .initial(HackSetting.number(draft.settings.get(setting))).maxLength(12).width(300).build());
-            if (!ranges.equals(Component.empty())) ranges = ranges.appendNewline();
-            ranges = ranges.append(DialogPalette.text(setting.label + ": " + HackSetting.number(setting.min) + " to " + setting.display(setting.max), DialogPalette.MUTED));
+
+    private static HackSettings read(DialogResponseView response) {
+        var values = new EnumMap<HackSetting, Double>(HackSetting.class);
+        for (HackSetting setting : HackSetting.values()) {
+            Float value = response.getFloat(setting.key());
+            if (value == null || !Float.isFinite(value)) throw new IllegalArgumentException("Choose a value for " + setting.label + ".");
+            // Use the slider's decimal representation, avoiding float noise at limits such as 0.6.
+            values.put(setting, setting.validate(Double.parseDouble(Float.toString(value))));
         }
-        var buttons = new ArrayList<ActionButton>();
-        ActionButton back = button(player, draft, DialogIcon.BACK, movement ? "Back: Combat" : "Discard Changes", false, (p, response) -> {
-            if (movement) { read(draft, settings, response); edit(p, draft, false); }
-            else { forget(p); p.closeDialog(); }
-        });
-        ActionButton next = button(player, draft, DialogIcon.NEXT, movement ? "Next: Review" : "Next: Movement", true, (p, response) -> {
-            read(draft, settings, response);
-            if (movement) review(p, draft); else edit(p, draft, true);
-        });
-        Dialogs.navigationRow(buttons, back, next, 150);
-        dialogs.show(player, movement ? "Hacks: Movement" : "Hacks: Combat", List.of(
-                DialogBody.plainMessage(DialogPalette.text("Only active while you are fighting in a duel.\nChanges apply after you save on the Review screen.", DialogPalette.MUTED), 300),
-                DialogBody.plainMessage(ranges, 300)), inputs, buttons, 2, 300, null);
-    }
-    private void read(Draft draft, List<HackSetting> settings, DialogResponseView response) {
-        var changes = new EnumMap<HackSetting, Double>(HackSetting.class);
-        for (var setting : settings) {
-            try { changes.put(setting, setting.validate(Double.parseDouble(Dialogs.text(response, setting.key())))); }
-            catch (NumberFormatException invalid) { throw new IllegalArgumentException("Enter a number for " + setting.label + "."); }
-        }
-        draft.settings = draft.settings.with(changes);
-    }
-    private void review(Player player, Draft draft) {
-        check(player, draft);
-        Component summary = Component.empty();
-        for (var setting : HackSetting.values()) {
-            summary = summary.append(setting.icon.sprite()).append(DialogPalette.text(" " + setting.label + ": ", DialogPalette.MUTED))
-                    .append(DialogPalette.text(setting.display(draft.settings.get(setting)), DialogPalette.TEXT)).appendNewline();
-        }
-        List<HackSetting> warnings = draft.settings.warnings();
-        Component warning = DialogPalette.text("Abilities apply while you are fighting.\nVoid damage and sumo fall losses still count.", DialogPalette.MUTED);
-        if (!warnings.isEmpty()) {
-            warning = DialogIcon.INFO.label("These Settings May Look Blatant", DialogPalette.WARNING)
-                    .appendNewline().append(DialogPalette.text(String.join(", ", warnings.stream().map(setting -> setting.label).toList())
-                            + ".\nOther players may notice these values. You can go back and lower them, or use them anyway.", DialogPalette.TEXT));
-        }
-        var buttons = new ArrayList<ActionButton>();
-        Dialogs.navigationRow(buttons,
-                button(player, draft, DialogIcon.BACK, "Back: Movement", false, (p, response) -> edit(p, draft, true)),
-                button(player, draft, DialogIcon.SAVE, warnings.isEmpty() ? "Save & Close" : "Use These Settings", true, (p, response) -> {
-                    hackers.update(p, draft.selection, draft.settings); forget(p); p.closeDialog();
-                }), 150);
-        dialogs.show(player, "Review Hacks", List.of(DialogBody.plainMessage(summary, 300), DialogBody.plainMessage(warning, 300)), List.of(), buttons, 2, 300, null);
+        return new HackSettings(values);
     }
 }

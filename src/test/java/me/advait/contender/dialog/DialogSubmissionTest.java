@@ -15,6 +15,7 @@ import io.papermc.paper.registry.data.dialog.body.PlainMessageDialogBody;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.MultiActionType;
+import io.papermc.paper.registry.data.dialog.type.NoticeType;
 import io.papermc.paper.registry.data.dialog.input.NumberRangeDialogInput;
 import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import me.advait.contender.arena.ArenaManager;
@@ -120,6 +121,12 @@ class DialogSubmissionTest {
             when(builder.build()).thenReturn(mock(MultiActionType.class));
             return builder;
         });
+        when(provider.notice(any(ActionButton.class))).thenAnswer(call -> {
+            shownFooter = call.getArgument(0);
+            shownButtons = List.of(shownFooter);
+            shownColumns = 1;
+            return mock(NoticeType.class);
+        });
         clicks = mockStatic(ClickEvent.class);
         bukkit = mockStatic(Bukkit.class);
         bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
@@ -175,10 +182,14 @@ class DialogSubmissionTest {
             inputKeys.add(key);
             var input = mock(NumberRangeDialogInput.class);
             when(input.key()).thenReturn(key);
+            when(input.start()).thenReturn(call.getArgument(2));
+            when(input.end()).thenReturn(call.getArgument(3));
             var builder = mock(NumberRangeDialogInput.Builder.class, RETURNS_SELF);
             when(input.label()).thenReturn(call.getArgument(1));
             when(builder.initial(anyFloat())).thenAnswer(initial -> { initialNumbers.put(key, initial.getArgument(0)); return builder; });
             when(builder.width(anyInt())).thenAnswer(width -> { when(input.width()).thenReturn(width.getArgument(0)); return builder; });
+            when(builder.step(anyFloat())).thenAnswer(step -> { when(input.step()).thenReturn(step.getArgument(0)); return builder; });
+            when(builder.labelFormat(anyString())).thenAnswer(format -> { when(input.labelFormat()).thenReturn(format.getArgument(0)); return builder; });
             when(builder.build()).thenReturn(input);
             return builder;
         });
@@ -305,32 +316,48 @@ class DialogSubmissionTest {
         verify(races).configure(new me.advait.contender.race.RaceCourse("race", 15, "Finish", 3, false));
     }
 
-    @Test void hackerReviewWarnsBeforeSavingAndExpiredOrForeignCallbacksCannotCommit() {
-        var manager = mock(me.advait.contender.hacker.HackerManager.class);
-        when(manager.isHacker(player.getUniqueId())).thenReturn(true);
-        UUID selection = UUID.randomUUID();
-        when(manager.profile(player.getUniqueId())).thenReturn(new me.advait.contender.hacker.HackerManager.Profile("Alice",
-                me.advait.contender.hacker.HackSettings.defaults(), selection, false));
+    @Test void hackerSlidersApplyOnCloseAndIgnoreForeignOrRepeatedCallbacks() {
+        var manager = hackerManager();
+        UUID selection = manager.profile(player.getUniqueId()).selection();
         var menu = new HackerDialogs(server.plugin, manager); menu.open(player);
-        assertEquals(2, shownColumns); assertEquals(4, shownInputs.size());
-        assertTrue(shownInputs.stream().allMatch(input -> ((TextDialogInput) input).width() == 300));
-        assertEquals(150, shownButtons.getFirst().width());
-        var combat = mock(DialogResponseView.class);
-        when(combat.getText("reach")).thenReturn("6"); when(combat.getText("attack_speed")).thenReturn("1.5");
-        when(combat.getText("attack_damage")).thenReturn("1"); when(combat.getText("resistance")).thenReturn("0");
-        actions.get("Next: Movement").accept(combat, player);
-        var movement = mock(DialogResponseView.class);
-        when(movement.getText("anti_knockback")).thenReturn("100"); when(movement.getText("movement_speed")).thenReturn("1");
-        when(movement.getText("jump_strength")).thenReturn("1"); when(movement.getText("step_height")).thenReturn("0.6");
-        actions.get("Next: Review").accept(movement, player);
-        assertTrue(messages.stream().anyMatch(text -> text.contains("These Settings May Look Blatant")));
+        assertEquals("Hacks", plain(shownTitle));
+        assertEquals(1, shownColumns);
+        assertEquals(List.of("Close"), shownButtons.stream().map(b -> plain(b.label())).toList());
+        assertEquals(150, shownFooter.width());
+        assertEquals("Close", ((TextComponent) shownFooter.label()).content()); // No Close icon.
+        assertEquals(8, shownInputs.size());
+        for (var setting : me.advait.contender.hacker.HackSetting.values()) {
+            var input = (NumberRangeDialogInput) shownInputs.stream().filter(i -> i.key().equals(setting.key())).findFirst().orElseThrow();
+            assertEquals(300, input.width());
+            assertEquals((float) setting.min, input.start());
+            assertEquals((float) setting.max, input.end());
+            assertEquals((float) setting.normal, initialNumbers.get(setting.key()));
+            assertTrue(input.step() > 0);
+            assertTrue(plain(input.label()).contains("[" + setting.display(setting.warning) + "]"));
+            assertInstanceOf(ObjectComponent.class, input.label().children().getFirst());
+            assertRegular(input.label());
+        }
+        assertEquals("%s: %s%%", ((NumberRangeDialogInput) shownInputs.get(3)).labelFormat());
+        assertTrue(messages.stream().anyMatch(text -> text.contains("may look blatant")));
+        assertTrue(messages.stream().anyMatch(text -> text.contains("when you close")));
+        assertFalse(actions.keySet().stream().anyMatch(label -> label.contains("Save") || label.contains("Review") || label.contains("Next")));
         verify(manager, never()).update(any(), any(), any());
-        var save = actions.get("Use These Settings");
+
+        var response = hackerSliders();
+        when(response.getFloat("reach")).thenReturn(6f);
+        when(response.getFloat("anti_knockback")).thenReturn(100f);
+        var close = callbackByAction.get(shownFooter.action()); // Notice uses this same action for Escape.
         Player stranger = mock(Player.class); when(stranger.getUniqueId()).thenReturn(UUID.randomUUID());
-        save.accept(mock(DialogResponseView.class), stranger); verify(manager, never()).update(any(), any(), any());
-        save.accept(mock(DialogResponseView.class), player);
-        verify(manager).update(eq(player), eq(selection), argThat(settings -> settings.get(me.advait.contender.hacker.HackSetting.REACH) == 6));
-        save.accept(mock(DialogResponseView.class), player); verify(manager, times(1)).update(any(), any(), any());
+        close.accept(response, stranger);
+        verify(manager, never()).update(any(), any(), any());
+        close.accept(response, player);
+        verify(manager).update(eq(player), eq(selection), argThat(settings ->
+                settings.get(me.advait.contender.hacker.HackSetting.REACH) == 6
+                && settings.get(me.advait.contender.hacker.HackSetting.ANTI_KNOCKBACK) == 100
+                && settings.get(me.advait.contender.hacker.HackSetting.STEP_HEIGHT) == .6));
+        verify(player).closeDialog();
+        close.accept(response, player);
+        verify(manager, times(1)).update(any(), any(), any());
     }
 
     @Test void nonHackersCannotOpenOrUseAnOldHackerFormEvenWithAdminPermissions() {
@@ -340,10 +367,65 @@ class DialogSubmissionTest {
         when(manager.isHacker(player.getUniqueId())).thenReturn(true);
         when(manager.profile(player.getUniqueId())).thenReturn(new me.advait.contender.hacker.HackerManager.Profile("Alice",
                 me.advait.contender.hacker.HackSettings.defaults(), UUID.randomUUID(), false));
-        menu.open(player); var next = actions.get("Next: Movement");
+        menu.open(player); var close = actions.get("Close");
         when(manager.isHacker(player.getUniqueId())).thenReturn(false);
-        var response = mock(DialogResponseView.class); next.accept(response, player);
-        verify(response, never()).getText(anyString()); verify(manager, never()).update(any(), any(), any());
+        var response = mock(DialogResponseView.class); close.accept(response, player);
+        verify(response, never()).getFloat(anyString()); verify(manager, never()).update(any(), any(), any());
+    }
+
+    @Test void hackerCloseValidatesEverySliderBeforeApplyingAndCanRetry() {
+        var manager = hackerManager();
+        new HackerDialogs(server.plugin, manager).open(player);
+        var close = actions.get("Close");
+        var response = hackerSliders();
+        for (Float invalid : new Float[]{null, Float.NaN, Float.POSITIVE_INFINITY, .5f, 4f}) {
+            when(response.getFloat("step_height")).thenReturn(invalid);
+            close.accept(response, player);
+            verify(manager, never()).update(any(), any(), any());
+        }
+        verify(player, never()).closeDialog();
+        when(response.getFloat("step_height")).thenReturn(.6f);
+        close.accept(response, player);
+        verify(manager).update(eq(player), any(), any());
+        verify(player).closeDialog();
+    }
+
+    @Test void reopenedReselectedAndClearedHackerMenusCannotApplyStaleSliders() {
+        var manager = hackerManager();
+        var menu = new HackerDialogs(server.plugin, manager);
+        menu.open(player);
+        var oldClose = actions.get("Close");
+        menu.open(player);
+        var response = hackerSliders();
+        oldClose.accept(response, player);
+        verify(manager, never()).update(any(), any(), any());
+
+        var selectionClose = actions.get("Close");
+        when(manager.profile(player.getUniqueId())).thenReturn(new me.advait.contender.hacker.HackerManager.Profile("Alice",
+                me.advait.contender.hacker.HackSettings.defaults(), UUID.randomUUID(), false));
+        selectionClose.accept(response, player);
+        verify(manager, never()).update(any(), any(), any());
+
+        menu.open(player);
+        var clearedClose = actions.get("Close");
+        menu.clear();
+        clearedClose.accept(response, player);
+        verify(manager, never()).update(any(), any(), any());
+    }
+
+    private me.advait.contender.hacker.HackerManager hackerManager() {
+        var manager = mock(me.advait.contender.hacker.HackerManager.class);
+        when(manager.isHacker(player.getUniqueId())).thenReturn(true);
+        when(manager.profile(player.getUniqueId())).thenReturn(new me.advait.contender.hacker.HackerManager.Profile("Alice",
+                me.advait.contender.hacker.HackSettings.defaults(), UUID.randomUUID(), false));
+        return manager;
+    }
+
+    private DialogResponseView hackerSliders() {
+        var response = mock(DialogResponseView.class);
+        for (var setting : me.advait.contender.hacker.HackSetting.values())
+            when(response.getFloat(setting.key())).thenReturn((float) setting.normal);
+        return response;
     }
 
     @Test void mapFormSubmitsMinesWithoutOverwritingPapersCallbackId() {

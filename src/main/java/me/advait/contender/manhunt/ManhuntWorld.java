@@ -24,6 +24,7 @@ final class ManhuntWorld {
     private String name;
     private World world;
     private boolean freezing;
+    private long generation;
 
     ManhuntWorld(Contender plugin) { this.plugin = plugin; file = new File(plugin.getDataFolder(), "manhunt-world.yml"); }
     String name() { return name; }
@@ -58,6 +59,8 @@ final class ManhuntWorld {
         return load(valid);
     }
     private CompletableFuture<Void> load(BooleanSupplier valid) {
+        long expectedGeneration = ++generation;
+        BooleanSupplier current = () -> generation == expectedGeneration && valid.getAsBoolean();
         state = State.PREPARING; save();
         world = new WorldCreator(name).environment(World.Environment.THE_END).generateStructures(true).createWorld();
         if (world == null) { state = State.FAILED; save(); throw new IllegalStateException("The End world could not be created."); }
@@ -67,6 +70,7 @@ final class ManhuntWorld {
         world.setGameRule(GameRules.IMMEDIATE_RESPAWN, true); world.setGameRule(GameRules.KEEP_INVENTORY, true);
         world.setDifficulty(Difficulty.NORMAL); world.setPVP(true); world.setTime(6000);
         freeze();
+        World preparingWorld = world;
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
         // A small queue avoids issuing hundreds of chunk generation requests at once.
         List<int[]> coordinates = new ArrayList<>();
@@ -74,21 +78,26 @@ final class ManhuntWorld {
         for (int index = 0; index < coordinates.size(); index += 8) {
             var batch = coordinates.subList(index, Math.min(index + 8, coordinates.size()));
             chain = chain.thenCompose(ignored -> {
-                if (!valid.getAsBoolean()) return CompletableFuture.failedFuture(new IllegalStateException("End preparation stopped."));
-                var loads = batch.stream().map(c -> world.getChunkAtAsync(c[0], c[1], true).thenAccept(chunk -> {
-                    if (valid.getAsBoolean()) { chunk.addPluginChunkTicket(plugin); tickets.add(chunk); }
+                if (!current.getAsBoolean()) return CompletableFuture.failedFuture(new IllegalStateException("End preparation stopped."));
+                var loads = batch.stream().map(c -> preparingWorld.getChunkAtAsync(c[0], c[1], true).thenAccept(chunk -> {
+                    if (current.getAsBoolean()) { chunk.addPluginChunkTicket(plugin); tickets.add(chunk); }
                 })).toArray(CompletableFuture[]::new);
                 return CompletableFuture.allOf(loads);
             });
         }
         return chain.thenRun(() -> {
-            if (!valid.getAsBoolean()) throw new IllegalStateException("End preparation stopped.");
+            if (!current.getAsBoolean()) throw new IllegalStateException("End preparation stopped.");
             findPillars();
             if (pillars.isEmpty()) throw new IllegalStateException("No obsidian pillars were found in the End.");
             // This dragon gives preparation a real, frozen target even before a player activates the native battle.
             if (world.getEntitiesByClass(EnderDragon.class).isEmpty()) world.spawn(new Location(world, 0, 110, 0), EnderDragon.class);
             freezeTick(); world.save(); state = State.READY; save();
-        }).whenComplete((ignored, failure) -> { if (failure != null) { state = State.FAILED; save(); releaseTickets(); } });
+        }).whenComplete((ignored, failure) -> {
+            if (failure != null && generation == expectedGeneration) {
+                state = State.FAILED;
+                try { save(); } finally { releaseTickets(); }
+            }
+        });
     }
     void use() {
         if (!ready()) throw new IllegalStateException("Prepare a fresh End world in Setup Tools first.");
@@ -152,7 +161,15 @@ final class ManhuntWorld {
         if (world != null) { world.setGameRule(GameRules.RANDOM_TICK_SPEED, 3); world.setGameRule(GameRules.SPAWN_MOBS, true); }
     }
     private void releaseTickets() { tickets.forEach(c -> c.removePluginChunkTicket(plugin)); tickets.clear(); }
+    void cancelPreparation() {
+        generation++;
+        if (state != State.PREPARING) return;
+        state = State.FAILED;
+        try { save(); }
+        finally { releaseTickets(); }
+    }
     void close() {
+        generation++;
         thaw(); releaseTickets(); pillars.clear();
         if (world != null && world.getPlayers().isEmpty()) Bukkit.unloadWorld(world, true);
         world = null;

@@ -47,12 +47,12 @@ class ArenaLayoutTest {
     @Test void reservationsSurviveResetsAndStaleReleasesCannotFreeAnotherMatch() {
         ArenaInstance instance = ArenaLayout.place(template(), "arenas", 0, 1024, -64, 320);
         assertNull(instance.acquire());
-        instance.restored();
+        instance.restored(instance.beginReset());
         ArenaLease first = instance.acquire();
         assertNotNull(first); assertNull(instance.acquire());
-        instance.beginReset();
+        long reset = instance.beginReset();
         assertNull(instance.acquire());
-        instance.restored();
+        instance.restored(reset);
         assertEquals(ArenaInstance.Status.IN_USE, instance.status());
         instance.release(first);
         ArenaLease second = instance.acquire();

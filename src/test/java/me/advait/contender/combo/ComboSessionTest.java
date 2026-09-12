@@ -174,6 +174,28 @@ class ComboSessionTest {
         field(session, "fighter", null);
         assertDoesNotThrow(() -> queued.getFirst().run()); verify(player, never()).teleport(any(Location.class));
     }
+    @Test void teardownContinuesAfterBotPlayerAndChunkCleanupFailures() throws Exception {
+        Player watcher = mock(Player.class); UUID watcherId = UUID.randomUUID();
+        when(watcher.getUniqueId()).thenReturn(watcherId);
+        bukkit.when(() -> Bukkit.getPlayer(watcherId)).thenReturn(watcher);
+        bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(player, watcher));
+        @SuppressWarnings("unchecked") Set<UUID> entered = (Set<UUID>) get(session, "entered"); entered.add(watcherId);
+        Chunk first = mock(Chunk.class), second = mock(Chunk.class);
+        @SuppressWarnings("unchecked") Set<Chunk> tickets = (Set<Chunk>) get(session, "tickets"); tickets.addAll(List.of(first, second));
+        doThrow(new IllegalStateException("Bot removal failed")).when(bot).remove();
+        when(manager.restore(player)).thenThrow(new IllegalStateException("Return failed"));
+        doThrow(new IllegalStateException("Ticket removal failed")).when(first).removePluginChunkTicket(plugin);
+        doThrow(new IllegalStateException("Voice refresh failed")).when(plugin).refreshVoiceRouting();
+
+        assertThrows(IllegalStateException.class, session::disable);
+
+        assertFalse(session.isEnabled()); assertFalse(session.owns(player.getUniqueId())); assertFalse(session.owns(watcherId));
+        verify(manager).restore(player); verify(manager).restore(watcher);
+        verify(first).removePluginChunkTicket(plugin); verify(second).removePluginChunkTicket(plugin);
+        verify(watcher).sendActionBar(net.kyori.adventure.text.Component.empty());
+        verify(plugin).refreshHackerAttributes(); assertTrue(tickets.isEmpty()); assertNull(get(session, "bot"));
+        assertDoesNotThrow(session::disable); verify(manager).restore(watcher);
+    }
     private static Object get(Object object, String name) throws Exception { Field field = object.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(object); }
     private static void field(Object object, String name, Object value) throws Exception { field(object.getClass(), object, name, value); }
     private static void field(Class<?> type, Object object, String name, Object value) throws Exception { Field field = type.getDeclaredField(name); field.setAccessible(true); field.set(object, value); }

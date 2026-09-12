@@ -121,7 +121,15 @@ public final class TournamentDialogs {
                 menuAction(player, DialogIcon.MACE, "Minigames", TEXT, "Prepare race courses, the End world, and Combo arenas.", this::minigameTools),
                 menuAction(player, DialogIcon.MAP, "Maps & Kits", TEXT, "Create maps and edit the kits used in matches.", this::assets),
                 menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board and set the lobby return point.", this::venue),
-                menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title shown above tab and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools))), this::open);
+                menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title shown above tab and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools)),
+                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop all events, including interrupted games.", this::confirmCancelAll)), this::open);
+    }
+    private void confirmCancelAll(Player player) {
+        menu(player, "Force Cancel All?", DialogText.muted("Stop every tournament, minigame, duel, and vote.\nPlayers will be returned to the lobby.\n\nUse this if an interrupted event is stuck."), List.of(
+                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop all events now.", p -> {
+                    p.closeDialog();
+                    new me.advait.contender.command.CancelAllCommand(plugin).cancel(p);
+                })), this::tools);
     }
     private void minigameTools(Player player) {
         menu(player, "Minigames", DialogText.muted("Prepare each mode before creating the event."), List.of(

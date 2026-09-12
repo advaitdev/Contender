@@ -85,7 +85,7 @@ public final class ArenaManager {
     public World getWorld() { return world; }
     public boolean isArenaWorld(World candidate) { return world != null && world.equals(candidate); }
     public boolean isEditing(String mapId) { return editing.contains(mapId); }
-    public boolean hasPendingWork() { return !editing.isEmpty() || pools.keySet().stream().anyMatch(this::isBusy); }
+    public boolean hasPendingWork() { return !work.isDone() || !editing.isEmpty() || pools.keySet().stream().anyMatch(this::isBusy); }
     public void reloadTemplates() {
         if (hasPendingWork()) throw new IllegalStateException("Wait for matches and arena preparation to finish.");
         pools.clear();
@@ -110,11 +110,18 @@ public final class ArenaManager {
         return null;
     }
     public void release(ArenaLease lease) {
+        if (lease == null || !lease.instance().owns(lease)) return;
         if (closed) lease.instance().failed();
         lease.instance().release(lease);
     }
     public void discard(ArenaLease lease) {
-        if (lease.instance().owns(lease)) lease.instance().failed();
+        if (lease != null && lease.instance().owns(lease)) lease.instance().failed();
+    }
+    /** Releases a cancelled game's copy without waiting for a reset. Rebuild it before reuse. */
+    public void abandon(ArenaLease lease) {
+        if (lease == null || !lease.instance().owns(lease)) return;
+        lease.instance().failed();
+        lease.instance().release(lease);
     }
     public ArenaInstance at(Location location) {
         if (!isArenaWorld(location.getWorld())) return null;
@@ -196,6 +203,17 @@ public final class ArenaManager {
 
     private void requireEditable(ArenaMap map) {
         if (isBusy(map.getId())) throw new IllegalStateException("Wait for this map's matches and arena preparation to finish.");
+        for (ArenaInstance instance : instances(map.getId())) requireEmpty(instance);
+    }
+
+    private void requireEmpty(ArenaInstance instance) {
+        if (world == null) return;
+        for (Player player : world.getPlayers()) {
+            Location location = player.getLocation();
+            if (instance.cell().containsColumn(location.getX(), location.getZ())) {
+                throw new IllegalStateException("Move everyone out of this arena copy before rebuilding it.");
+            }
+        }
     }
 
     public CompletableFuture<Void> prepare(ArenaMap map) {
@@ -237,35 +255,51 @@ public final class ArenaManager {
     }
 
     public CompletableFuture<Void> reset(ArenaLease lease) {
-        if (!lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
+        if (closed || lease == null || !lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
+        if (lease.instance().status() == ArenaInstance.Status.FAILED) return CompletableFuture.failedFuture(
+                new IllegalStateException("Rebuild this arena copy before using it again."));
         Clipboard clipboard = clipboards.get(lease.instance().map().getId());
         if (clipboard == null) return CompletableFuture.failedFuture(new IllegalStateException("Map template is not loaded."));
         return restore(lease.instance(), clipboard);
     }
 
     private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard) {
-        instance.beginReset();
-        return enqueue(() -> chunks.run(world, instance.map().getBounds(), () -> {
-            // Remove entities across this slot, including those that wandered beyond the selection.
-            for (var entity : world.getEntities()) {
-                if (entity instanceof Player) continue;
-                Location location = entity.getLocation();
-                if (instance.cell().containsColumn(location.getX(), location.getZ())) entity.remove();
-            }
-            var targetWorld = BukkitAdapter.adapt(world);
-            BlockBounds bounds = instance.map().getBounds();
-            return async(() -> {
-                try (EditSession session = WorldEdit.getInstance().newEditSession(targetWorld)) {
-                    Operations.complete(new ClipboardHolder(clipboard).createPaste(session)
-                            .to(BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()))
-                            .ignoreAirBlocks(false).copyEntities(true).copyBiomes(true).build());
+        long revision = instance.beginReset();
+        return enqueue(() -> {
+            requireReset(instance, revision);
+            return chunks.run(world, instance.map().getBounds(), () -> {
+                requireReset(instance, revision);
+                requireEmpty(instance);
+                // Remove entities across this slot, including those that wandered beyond the selection.
+                for (var entity : world.getEntities()) {
+                    if (entity instanceof Player) continue;
+                    Location location = entity.getLocation();
+                    if (instance.cell().containsColumn(location.getX(), location.getZ())) entity.remove();
                 }
-                return null;
+                var targetWorld = BukkitAdapter.adapt(world);
+                BlockBounds bounds = instance.map().getBounds();
+                return async(() -> {
+                    // This may have waited for a worker after the main-thread checks above.
+                    if (!instance.isReset(revision)) throw new IllegalStateException("Arena reset was cancelled.");
+                    try (EditSession session = WorldEdit.getInstance().newEditSession(targetWorld)) {
+                        Operations.complete(new ClipboardHolder(clipboard).createPaste(session)
+                                .to(BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()))
+                                .ignoreAirBlocks(false).copyEntities(true).copyBiomes(true).build());
+                    }
+                    return null;
+                });
             });
-        })).<Void>thenApply(ignored -> {
-            instance.restored();
+        }).<Void>thenApply(ignored -> {
+            requireReset(instance, revision);
+            instance.restored(revision);
             return null;
-        }).whenComplete((ignored, failure) -> { if (failure != null) instance.failed(); });
+        }).whenComplete((ignored, failure) -> { if (failure != null) instance.failed(revision); });
+    }
+
+    private void requireReset(ArenaInstance instance, long revision) {
+        if (closed || !instance.isReset(revision) || !instances(instance.map().getId()).contains(instance)) {
+            throw new IllegalStateException("Arena reset was cancelled.");
+        }
     }
 
     private CompletableFuture<Clipboard> capture(ArenaMap map) {

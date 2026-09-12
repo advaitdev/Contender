@@ -174,6 +174,7 @@ public final class Contender extends JavaPlugin {
         commands.command("tier").setExecutor(new TierCommand(this));
         commands.command("arena").setExecutor(new DialogCommand(true, new ArenaDialogs(this)::open));
         commands.command("tournament").setExecutor(new DialogCommand(true, new TournamentDialogs(this)::open));
+        commands.command("cancelall").setExecutor(new CancelAllCommand(this));
         commands.command("spectate").setExecutor(new DialogCommand(false, new DuelDialogs(this)::spectate));
         var duelCmd = commands.command("duel");
         if (duelCmd != null) duelCmd.setExecutor(new DuelCommand(this, duelManager));

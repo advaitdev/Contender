@@ -1,6 +1,7 @@
 package me.advait.contender.race;
 
 import me.advait.contender.Contender;
+import me.advait.contender.arena.ArenaLease;
 import me.advait.contender.game.AbstractGameState;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.dialog.Dialogs;
@@ -31,7 +32,9 @@ public final class RaceManager extends AbstractGameState {
     private final Map<me.advait.contender.arena.ArenaLease, RaceSession> stranded = new HashMap<>();
     private RaceRun current;
     private RaceSession session;
-    private boolean selected, resetting;
+    private boolean selected;
+    private ArenaLease resettingLease;
+    private long cleanupGeneration;
     public RaceManager(Contender plugin) {
         super(plugin); contender = plugin; store = new RaceStore(plugin.getDataFolder()); returns = new RaceReturns(plugin); fireworks = new RaceFinishFireworks(plugin);
         setupMobs = new RaceSetupMobs(plugin, this::courses);
@@ -66,7 +69,7 @@ public final class RaceManager extends AbstractGameState {
     public RaceRun current() { return current; }
     public RaceRun displayed() { return selected ? current : null; }
     public boolean active() { return session != null; }
-    public boolean busy() { return active() || resetting || !stranded.isEmpty(); }
+    public boolean busy() { return active() || resettingLease != null; }
     public boolean owns(UUID id) { return session != null && session.owns(id); }
     public boolean isReserved(UUID id) { return current != null && !current.terminal() && current.racer(id) != null; }
     public boolean isRacing(UUID id) { return session != null && session.racing(id); }
@@ -137,27 +140,90 @@ public final class RaceManager extends AbstractGameState {
         if (contender.getMinigameManager() != null && contender.getMinigameManager().pendingReturn(racer.id()) || returns.pending(racer.id())) throw new IllegalStateException("Return " + racer.name() + " to the lobby before starting.");
     }
     public void end(RaceRun.State state) {
-        if (current == null || current.terminal()) return;
-        current.end(state);
+        if (current == null && session == null) return;
+        if (current != null && !current.terminal()) current.end(state);
         fireworks.clear();
         try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save race results", failure); }
         RaceSession previous = session; session = null;
         if (previous != null) {
-            previous.disable(); resetting = true;
+            try { previous.disable(); }
+            catch (RuntimeException | Error failure) { contender.getLogger().log(Level.SEVERE, "Could not close race session", failure); }
             // Never paste an arena over a player whose lobby teleport was denied.
             boolean occupied = Bukkit.getOnlinePlayers().stream().anyMatch(p -> previous.contains(p.getLocation()));
             if (occupied) {
-                contender.getArenaManager().discard(previous.lease()); stranded.put(previous.lease(), previous); resetting = false;
+                contender.getArenaManager().discard(previous.lease()); stranded.put(previous.lease(), previous);
                 contender.getLogger().warning("Race arena remains reserved until everyone has left it. Pending lobby returns will be retried.");
             }
-            else contender.getArenaManager().reset(previous.lease()).whenComplete((ignored, failure) -> {
-                if (failure != null) contender.getArenaManager().discard(previous.lease());
-                contender.getArenaManager().release(previous.lease());
-                resetting = false;
+            else reset(previous.lease());
+        }
+        restorePending();
+        refresh();
+    }
+    private void reset(ArenaLease lease) {
+        resettingLease = lease;
+        long generation = ++cleanupGeneration;
+        try {
+            contender.getArenaManager().reset(lease).whenComplete((ignored, failure) -> {
+                if (generation != cleanupGeneration || resettingLease != lease) return;
+                resettingLease = null;
+                try {
+                    if (failure != null) contender.getArenaManager().discard(lease);
+                } finally { contender.getArenaManager().release(lease); }
                 if (failure != null) contender.getLogger().log(Level.SEVERE, "Could not reset race arena", failure);
             });
+        } catch (RuntimeException | Error failure) {
+            resettingLease = null;
+            contender.getArenaManager().abandon(lease);
+            contender.getLogger().log(Level.SEVERE, "Could not begin race arena reset", failure);
         }
-        refresh();
+    }
+    /** Emergency cleanup also handles interrupted results and an unfinished arena reset. */
+    public void forceCancel() {
+        RaceSession previous = session;
+        session = null;
+        Set<ArenaLease> leases = new LinkedHashSet<>(stranded.keySet());
+        if (previous != null) leases.add(previous.lease());
+        if (resettingLease != null) leases.add(resettingLease);
+        resettingLease = null;
+        cleanupGeneration++;
+        stranded.clear();
+        selected = false;
+        if (current != null && current.state() != RaceRun.State.FINISHED) current.end(RaceRun.State.CANCELLED);
+        List<Throwable> failures = new ArrayList<>();
+        cleanup(failures, "Could not save cancelled race", this::save);
+        cleanup(failures, "Could not clear race fireworks", fireworks::clear);
+        if (previous != null) cleanup(failures, "Could not close race session", previous::disable);
+        restorePending();
+        cleanup(failures, "Could not return race observers", () -> returnObservers(leases));
+        for (ArenaLease lease : leases) cleanup(failures, "Could not release race arena", () -> contender.getArenaManager().abandon(lease));
+        cleanup(failures, "Could not refresh race display", this::refresh);
+        if (!failures.isEmpty()) {
+            var failure = new IllegalStateException("The race stopped, but some cleanup failed. Check the server log.");
+            failures.forEach(failure::addSuppressed);
+            throw failure;
+        }
+    }
+    private void cleanup(List<Throwable> failures, String message, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException | Error failure) { failures.add(failure); contender.getLogger().log(Level.SEVERE, message, failure); }
+    }
+    private void restorePending() {
+        for (Player player : Bukkit.getOnlinePlayers()) if (!owns(player.getUniqueId()) && returns.pending(player.getUniqueId())) {
+            try { restore(player); }
+            catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not restore racer " + player.getName(), failure); }
+        }
+    }
+    private void returnObservers(Set<ArenaLease> leases) {
+        var lobby = contender.getLobbyManager().getLobbyLocation();
+        if (lobby == null) return;
+        for (Player player : Bukkit.getOnlinePlayers()) if (!player.isDead() && !returns.pending(player.getUniqueId())) {
+            Location location = player.getLocation();
+            boolean inside = leases.stream().anyMatch(lease -> location.getWorld() != null
+                    && lease.instance().map().getWorldName().equals(location.getWorld().getName())
+                    && lease.instance().cell().containsColumn(location.getX(), location.getZ()));
+            if (inside) try { player.teleport(lobby); }
+            catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not return race observer " + player.getName(), failure); }
+        }
     }
     void failed(Throwable failure) {
         contender.getLogger().log(Level.SEVERE, "Mace Race stopped", failure);

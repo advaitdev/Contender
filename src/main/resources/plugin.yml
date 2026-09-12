@@ -56,6 +56,10 @@ commands:
     description: Cancel a player's duel without recording a result
     permission: contender.master
     usage: /cancelduel [player]
+  cancelall:
+    description: Force cancel all events, duels, and votes
+    permission: contender.master
+    usage: /cancelall
   endduel:
     description: End the duel you are currently in
     permission: contender.master

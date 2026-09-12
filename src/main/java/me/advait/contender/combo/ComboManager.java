@@ -29,6 +29,9 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
     private ComboRun current;
     private ComboSession session;
     private boolean resetting;
+    private Reset pendingReset;
+    private long resetGeneration;
+    private record Reset(ArenaLease lease, long generation) { }
     public ComboManager(Contender plugin) {
         super(plugin); contender = plugin; store = new ComboStore(plugin.getDataFolder());
         returns = new PlayerReturnStore(plugin, "combo-returns.yml"); dialogs = new ComboDialogs(plugin);
@@ -45,12 +48,8 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
         }, 20, 100);
     }
     @Override protected void onDisable() {
-        if (session != null) {
-            current.end(ComboRun.State.INTERRUPTED); safeSave();
-            ComboSession old = session; session = null; old.disable();
-            contender.getArenaManager().discard(old.lease()); contender.getArenaManager().release(old.lease());
-        }
-        stranded.keySet().forEach(contender.getArenaManager()::release); stranded.clear();
+        if (current != null && !current.terminal()) { current.end(ComboRun.State.INTERRUPTED); safeSave(); }
+        stopImmediately();
     }
     @Override public String id() { return "combo"; }
     @Override public String displayName() { return "Combo"; }
@@ -60,7 +59,7 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
     @Override public boolean terminal() { return current == null || current.terminal(); }
     @Override public boolean cancelled() { return current != null && current.state() == ComboRun.State.CANCELLED; }
     @Override public boolean active() { return session != null; }
-    @Override public boolean busy() { return active() || resetting || !stranded.isEmpty(); }
+    @Override public boolean busy() { return active() || resetting; }
     @Override public boolean isReserved(UUID id) { return current != null && !current.terminal() && current.entry(id) != null && !current.entry(id).done(); }
     @Override public boolean owns(UUID id) { return session != null && session.owns(id); }
     @Override public boolean isPlaying(UUID id) { return session != null && session.playing(id); }
@@ -141,19 +140,84 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
         session.watch(player);
     }
     public void end(ComboRun.State state) {
-        if (current == null || current.terminal()) return;
-        current.end(state); safeSave();
+        if (current != null && !current.terminal()) { current.end(state); safeSave(); }
         ComboSession old = session; session = null;
         if (old != null) {
-            old.disable(); resetting = true;
-            if (Bukkit.getOnlinePlayers().stream().anyMatch(p -> old.contains(p.getLocation()))) {
-                contender.getArenaManager().discard(old.lease()); stranded.put(old.lease(), old); resetting = false;
-            } else contender.getArenaManager().reset(old.lease()).whenComplete((ignored, failure) -> {
-                if (failure != null) { contender.getArenaManager().discard(old.lease()); contender.getLogger().log(Level.SEVERE, "Could not reset Combo arena", failure); }
-                contender.getArenaManager().release(old.lease()); resetting = false;
-            });
+            boolean cleaned = disableSession(old);
+            recoverOnlinePlayers();
+            if (!cleaned) abandon(old.lease());
+            else if (Bukkit.getOnlinePlayers().stream().anyMatch(p -> old.contains(p.getLocation()))) {
+                contender.getArenaManager().discard(old.lease()); stranded.put(old.lease(), old);
+            } else reset(old.lease());
         }
         refresh();
+    }
+    /** Cancels retained terminal state too, including resets whose completion will arrive later. */
+    @Override public void forceCancel() {
+        if (current != null && current.state() != ComboRun.State.CANCELLED) {
+            current.end(ComboRun.State.CANCELLED); safeSave();
+        }
+        stopImmediately();
+        refresh();
+    }
+    private void stopImmediately() {
+        ComboSession old = session; session = null;
+        Reset reset = pendingReset; pendingReset = null;
+        resetGeneration++; resetting = false;
+        Set<ArenaLease> abandoned = new HashSet<>(stranded.keySet()); stranded.clear();
+        if (reset != null) abandoned.add(reset.lease());
+        if (old != null) {
+            abandoned.add(old.lease());
+            disableSession(old);
+        }
+        for (ArenaLease lease : abandoned) abandon(lease);
+        recoverOnlinePlayers();
+        evacuateObservers(abandoned);
+    }
+    private boolean disableSession(ComboSession old) {
+        try { old.disable(); return true; }
+        catch (RuntimeException | Error failure) {
+            contender.getLogger().log(Level.SEVERE, "Could not finish Combo cleanup", failure);
+            return false;
+        }
+    }
+    private void recoverOnlinePlayers() {
+        for (Player player : Bukkit.getOnlinePlayers()) recover(player);
+    }
+    private void evacuateObservers(Collection<ArenaLease> leases) {
+        if (leases.isEmpty()) return;
+        Location lobby = contender.getLobbyManager().getLobbyLocation();
+        if (lobby == null) return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.isDead() || pendingReturn(player.getUniqueId())) continue;
+            try {
+                Location location = player.getLocation();
+                if (leases.stream().noneMatch(lease -> location.getWorld() != null
+                        && location.getWorld().getName().equals(lease.instance().map().getWorldName())
+                        && lease.instance().cell().containsColumn(location.getX(), location.getZ()))) continue;
+                // Unregistered observers have no captured inventory to restore.
+                if (!player.teleport(lobby)) contender.getLogger().warning("Could not return Combo observer " + player.getName() + ": the lobby teleport was blocked.");
+            } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not return a Combo observer", failure); }
+        }
+    }
+    private void abandon(ArenaLease lease) {
+        try { contender.getArenaManager().abandon(lease); }
+        catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not quarantine Combo arena", failure); }
+    }
+    private void reset(ArenaLease lease) {
+        Reset reset = new Reset(lease, ++resetGeneration);
+        pendingReset = reset; resetting = true;
+        try {
+            contender.getArenaManager().reset(lease).whenComplete((ignored, failure) -> finishReset(reset, failure));
+        } catch (RuntimeException failure) { finishReset(reset, failure); }
+    }
+    private void finishReset(Reset reset, Throwable failure) {
+        if (pendingReset != reset || reset.generation() != resetGeneration) return;
+        pendingReset = null; resetting = false;
+        if (failure != null) {
+            abandon(reset.lease());
+            contender.getLogger().log(Level.SEVERE, "Could not reset Combo arena", failure);
+        } else contender.getArenaManager().release(reset.lease());
     }
     @Override public void withdraw(UUID id) {
         if (session != null && session.owns(id)) session.withdraw(id);

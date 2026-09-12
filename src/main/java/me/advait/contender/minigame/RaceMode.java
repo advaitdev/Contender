@@ -28,6 +28,7 @@ public final class RaceMode implements MinigameMode {
     public boolean isSpectator(UUID id) { return owns(id) && manager().current().racer(id).done(); }
     public boolean pendingReturn(UUID id) { return manager().pendingReturn(id); }
     public void withdraw(UUID id) { manager().withdraw(id); }
+    public void forceCancel() { manager().forceCancel(); }
     public boolean restore(Player player) { return manager().restore(player); }
     public void open(Player player) { new RaceDialogs(plugin).open(player); }
     public void createDialog(Player player) { new RaceDialogs(plugin).create(player); }

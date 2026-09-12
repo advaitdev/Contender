@@ -65,6 +65,16 @@ class ManhuntSessionTest {
             assertFalse(f.session.playing(f.hunter.getUniqueId())); assertTrue(f.session.owns(f.hunter.getUniqueId()));
         }
     }
+    @Test void aCountdownCleanupErrorDoesNotPreventCollisionOrInventoryRestoration() {
+        try (var f = new Fixture()) {
+            when(f.env.plugin.getLogger()).thenReturn(java.util.logging.Logger.getAnonymousLogger());
+            doThrow(new IllegalStateException("connection failed")).when(f.runner).sendActionBar(any(Component.class));
+            f.session.disable();
+            verify(f.runner).setCollidable(true); verify(f.hunter).setCollidable(true);
+            verify(f.manager).restore(f.runner); verify(f.manager).restore(f.hunter);
+            f.env.scheduled.forEach(task -> verify(task.task()).cancel());
+        }
+    }
     @Test void liveDisconnectUsesTheSameOneLifeRuleAndRejoinOnlySpectates() {
         try (var f = new Fixture()) {
             f.start(); var quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(f.hunter);

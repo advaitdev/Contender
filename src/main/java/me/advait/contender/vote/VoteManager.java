@@ -38,6 +38,13 @@ public class VoteManager {
         }
     }
 
+    public void forceCancel() {
+        VoteSession previous = activeSession;
+        activeSession = null;
+        try { if (previous != null) previous.cancel(); }
+        finally { timer.hide(); }
+    }
+
     public boolean isVoteActive() {
         return activeSession != null;
     }

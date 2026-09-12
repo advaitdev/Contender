@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import java.io.File;
 import java.util.*;
+import java.util.logging.Level;
 
 /** Coordinates event selection and ownership without putting mode rules in the tournament scheduler. */
 public final class MinigameManager {
@@ -73,6 +74,24 @@ public final class MinigameManager {
         return modes.values().stream().anyMatch(mode -> mode.leaveSpectating(player));
     }
     public void withdraw(UUID id) { modes.values().forEach(mode -> mode.withdraw(id)); }
+    /** Stop scheduling first; one broken mode must not prevent the others from being cleared. */
+    public List<String> forceCancelAll() {
+        List<String> failures = new ArrayList<>();
+        cancelStep("Round robin", () -> plugin.getTournamentManager().forceCancel(), failures);
+        cancelStep("Duels", () -> plugin.getDuelManager().forceCancelAll(), failures);
+        for (MinigameMode mode : modes.values()) cancelStep(mode.displayName(), mode::forceCancel, failures);
+        cancelStep("Vote", () -> plugin.getVoteManager().forceCancel(), failures);
+        cancelStep("Event selection", () -> saveSelection(""), failures);
+        cancelStep("Displays", this::refresh, failures);
+        return List.copyOf(failures);
+    }
+    private void cancelStep(String name, Runnable action, List<String> failures) {
+        try { action.run(); }
+        catch (RuntimeException | LinkageError failure) {
+            failures.add(name);
+            plugin.getLogger().log(Level.SEVERE, "Force cancellation failed: " + name, failure);
+        }
+    }
     public boolean restore(Player player) {
         for (MinigameMode mode : modes.values()) if (mode.pendingReturn(player.getUniqueId()) && !mode.restore(player)) return false;
         return true;

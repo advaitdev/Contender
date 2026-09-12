@@ -163,16 +163,21 @@ public final class RaceSession extends AbstractGameState {
         if (grounding.landed(player.getUniqueId(), RaceGrounding.supported(location.getWorld(), box))) returnPlayer(player);
     }
     @Override protected void onDisable() {
-        contender.refreshHackerAttributes();
+        cleanup("Could not restore racer attributes", contender::refreshHackerAttributes);
         for (var racer : run.racers()) {
             Player player = Bukkit.getPlayer(racer.id());
             if (player != null) {
-                try { returning.add(racer.id()); manager.restore(player); }
-                catch (RuntimeException error) { contender.getLogger().log(java.util.logging.Level.SEVERE, "Could not restore racer " + racer.name(), error); }
+                returning.add(racer.id());
+                cleanup("Could not restore racer " + racer.name(), () -> manager.restore(player));
             }
         }
-        for (Chunk chunk : tickets) chunk.removePluginChunkTicket(plugin);
-        tickets.clear(); grounding.clear(); contender.refreshVoiceRouting();
+        for (Chunk chunk : tickets) cleanup("Could not release race chunk", () -> chunk.removePluginChunkTicket(plugin));
+        tickets.clear(); grounding.clear();
+        cleanup("Could not restore race voice routing", contender::refreshVoiceRouting);
+    }
+    private void cleanup(String message, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException | Error failure) { contender.getLogger().log(java.util.logging.Level.SEVERE, message, failure); }
     }
     public void withdraw(UUID id) {
         run.withdraw(id); returning.add(id); grounding.reset(id); manager.save();

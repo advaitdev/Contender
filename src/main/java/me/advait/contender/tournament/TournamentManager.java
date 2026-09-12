@@ -84,6 +84,15 @@ public final class TournamentManager extends AbstractGameState {
         board.update(tournament, playing);
         if (contender.getTabManager() != null) contender.getTabManager().refresh();
     }
+    /** Clear scheduler state before the coordinator forcibly tears down every duel. */
+    public void forceCancel() {
+        if (tournament != null) tournament.cancel();
+        playing.clear();
+        waitingReason = "";
+        save();
+        board.update(tournament, playing);
+        if (contender.getTabManager() != null) contender.getTabManager().refresh();
+    }
     /** Pause before cancelling so the scheduler cannot immediately restart this pairing. */
     public boolean cancelDuel(Duel duel) {
         boolean tournamentMatch = playing.containsValue(duel);
@@ -134,8 +143,8 @@ public final class TournamentManager extends AbstractGameState {
             match.start();
             try {
                 Duel duel = contender.getDuelManager().startDuel(setup, result -> {
-                    playing.remove(match.number());
                     if (tournament != startedTournament) return;
+                    playing.remove(match.number());
                     match.finish(result);
                     save();
                     board.update(tournament, playing);

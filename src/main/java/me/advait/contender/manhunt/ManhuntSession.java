@@ -101,10 +101,14 @@ final class ManhuntSession extends AbstractGameState {
         for (UUID id : entered) {
             Player player = Bukkit.getPlayer(id);
             if (player == null) continue;
-            player.sendActionBar(Component.empty()); player.setCollidable(collisions.getOrDefault(id, true));
-            if (!player.isDead()) try { manager.restore(player); }
-            catch (RuntimeException failure) { contender.getLogger().log(java.util.logging.Level.SEVERE, "Could not restore Manhunt player " + player.getName(), failure); }
+            cleanup("Could not clear Manhunt countdown for " + player.getName(), () -> player.sendActionBar(Component.empty()));
+            cleanup("Could not restore Manhunt collision for " + player.getName(), () -> player.setCollidable(collisions.getOrDefault(id, true)));
+            if (!player.isDead()) cleanup("Could not restore Manhunt player " + player.getName(), () -> manager.restore(player));
         }
+    }
+    private void cleanup(String message, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException | Error failure) { contender.getLogger().log(java.util.logging.Level.SEVERE, message, failure); }
     }
     void withdraw(UUID id) {
         if (!owns(id)) { run.eliminate(id); manager.save(); manager.refresh(); return; }

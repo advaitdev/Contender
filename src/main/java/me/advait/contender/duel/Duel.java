@@ -712,6 +712,39 @@ public class Duel {
         setState(new EndingState(this, true));
     }
 
+    /** Stop immediately without waiting on a rollback or recording a match result. */
+    public void forceCancel() {
+        if (isFinished()) return;
+        resultReason = DuelResult.Reason.CANCELLED;
+        AbstractDuelState previous = state;
+        state = new EndedState(this);
+        RuntimeException incomplete = new IllegalStateException("Could not finish every duel cleanup step.");
+        cleanupStep(previous::disable, incomplete);
+        cleanupStep(this::stopSpectatorVisibility, incomplete);
+        if (!participantsRestored) {
+            participantsRestored = true;
+            for (UUID id : getAllParticipants()) {
+                Player player = Bukkit.getPlayer(id);
+                if (player == null) continue;
+                cleanupStep(() -> {
+                    plugin.getLobbyManager().sendToLobby(player);
+                    restorePreDuelInventory(id, player);
+                }, incomplete);
+            }
+        }
+        cleanupStep(this::clearCountdown, incomplete);
+        cleanupStep(this::clearDeathEffects, incomplete);
+        placedBlocks.clear();
+        if (arena != null) cleanupStep(() -> plugin.getArenaManager().abandon(arena), incomplete);
+        cleanupStep(() -> manager.endDuel(this), incomplete);
+        if (incomplete.getSuppressed().length > 0) throw incomplete;
+    }
+
+    private static void cleanupStep(Runnable action, RuntimeException failure) {
+        try { action.run(); }
+        catch (RuntimeException problem) { failure.addSuppressed(problem); }
+    }
+
     /** Synchronous teardown for plugin disable; it must not schedule new plugin tasks. */
     public void shutdown() {
         if (isFinished()) return;

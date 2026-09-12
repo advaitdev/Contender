@@ -650,7 +650,7 @@ class DialogSubmissionTest {
 
         actions.get("Setup Tools").accept(mock(DialogResponseView.class), player);
         assertEquals(1, shownColumns);
-        assertEquals(List.of("Minigames", "Maps & Kits", "Board & Lobby", "Tab Title"), shownButtons.stream().map(b -> plain(b.label())).toList());
+        assertEquals(List.of("Minigames", "Maps & Kits", "Board & Lobby", "Tab Title", "Force Cancel All"), shownButtons.stream().map(b -> plain(b.label())).toList());
         assertEquals("Back", plain(shownFooter.label()));
         actions.get("Tab Title").accept(mock(DialogResponseView.class), player);
         assertEquals(List.of("Show Preview", "Save"), shownButtons.stream().map(b -> plain(b.label())).toList());

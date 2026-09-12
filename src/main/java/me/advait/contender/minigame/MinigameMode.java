@@ -22,6 +22,8 @@ public interface MinigameMode {
     boolean isSpectator(UUID id);
     boolean pendingReturn(UUID id);
     void withdraw(UUID id);
+    /** Cancels even an interrupted event and releases its runtime ownership. */
+    void forceCancel();
     default boolean leaveSpectating(Player player) { return false; }
     boolean restore(Player player);
     void open(Player player);

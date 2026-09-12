@@ -92,6 +92,16 @@ class ConcurrentDuelsTest {
             verify(arenas).release(firstArena);
             verify(completion, times(1)).accept(any());
             verify(arenas, never()).release(secondArena);
+
+            manager.createSetup(ids.get(4));
+            doThrow(new IllegalStateException("Test cleanup failure")).when(second).forceCancel();
+            assertThrows(IllegalStateException.class, manager::forceCancelAll);
+            assertTrue(manager.getActiveDuels().isEmpty());
+            for (UUID id : ids) assertNull(manager.getDuel(id));
+            assertNull(manager.getSetup(ids.get(4)));
+            verify(completion, times(1)).accept(any());
+            assertDoesNotThrow(() -> manager.startDuel(setup(map, ids.get(0), ids.get(1))),
+                    "Emergency cancellation must not permanently disable new duels");
         }
     }
 }

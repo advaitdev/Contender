@@ -42,6 +42,7 @@ public class VoteSession {
         broadcastTimerActionBar();
 
         timerTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (ended) return;
             remainingSeconds--;
             if (remainingSeconds <= 0) {
                 timerTask.cancel();
@@ -123,6 +124,16 @@ public class VoteSession {
 
         for (Player player : Bukkit.getOnlinePlayers()) player.sendActionBar(Component.empty());
         try { announceResults(); } finally { manager.onSessionEnd(); }
+    }
+
+    /** Emergency cancellation does not announce a winner. */
+    void cancel() {
+        ended = true;
+        if (timerTask != null) {
+            timerTask.cancel();
+            timerTask = null;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) player.sendActionBar(Component.empty());
     }
 
     private void announceResults() {

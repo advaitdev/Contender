@@ -70,6 +70,25 @@ class DuelLifecycleTest {
         }
     }
 
+    @Test void forceCancellationFinishesEvenWhenRollbackNeverCompletes() {
+        try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            DuelManager manager = mock(DuelManager.class);
+            Duel duel = duel(server, manager);
+            List<Runnable> resets = new ArrayList<>();
+            doAnswer(call -> { resets.add(call.getArgument(0)); return null; }).when(duel).rollbackArena(any());
+            duel.forceEnd();
+            assertFalse(duel.isFinished());
+            duel.forceCancel();
+            assertTrue(duel.isFinished());
+            assertEquals(DuelResult.Reason.CANCELLED, duel.getResult().reason());
+            assertEquals(0, server.handlers.getRegisteredListeners().length);
+            resets.getFirst().run();
+            duel.forceCancel();
+            verify(manager, times(1)).endDuel(duel);
+            assertTrue(server.scheduled.isEmpty());
+        }
+    }
+
     @Test void betweenRoundCountdownEndsBeforeCombatAndCancelledCallbacksCannotReshowIt() {
         try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
             Duel duel = duel(server, mock(DuelManager.class));

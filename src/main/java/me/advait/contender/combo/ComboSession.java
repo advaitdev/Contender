@@ -56,13 +56,26 @@ final class ComboSession extends AbstractGameState {
         });
     }
     @Override protected void onDisable() {
-        removeBot(); clearTurnEntities();
+        List<Throwable> failures = new ArrayList<>();
+        clean(this::removeBot, failures);
+        clean(this::clearTurnEntities, failures);
         for (UUID id : List.copyOf(entered)) {
-            try { returnPlayer(id); } catch (RuntimeException failure) { contender.getLogger().log(java.util.logging.Level.SEVERE, "Could not restore a Combo player", failure); }
+            clean(() -> returnPlayer(id), failures);
         }
-        for (Chunk chunk : tickets) chunk.removePluginChunkTicket(contender);
-        tickets.clear(); Bukkit.getOnlinePlayers().forEach(p -> p.sendActionBar(Component.empty()));
-        contender.refreshVoiceRouting(); contender.refreshHackerAttributes();
+        entered.clear(); watchers.clear(); fighter = null; live = false;
+        for (Chunk chunk : List.copyOf(tickets)) clean(() -> chunk.removePluginChunkTicket(contender), failures);
+        tickets.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) clean(() -> player.sendActionBar(Component.empty()), failures);
+        clean(contender::refreshVoiceRouting, failures);
+        clean(contender::refreshHackerAttributes, failures);
+        if (!failures.isEmpty()) {
+            var failure = new IllegalStateException("Could not finish Combo cleanup", failures.getFirst());
+            failures.stream().skip(1).forEach(failure::addSuppressed);
+            throw failure;
+        }
+    }
+    private static void clean(Runnable action, List<Throwable> failures) {
+        try { action.run(); } catch (RuntimeException | Error failure) { failures.add(failure); }
     }
     private void tick() {
         tick++;
@@ -138,7 +151,10 @@ final class ComboSession extends AbstractGameState {
             if (!(entity instanceof Player) && contains(entity.getLocation()) && !templateEntities.contains(entity.getUniqueId())) entity.remove();
         }
     }
-    private void removeBot() { if (bot != null) { bot.remove(); bot = null; motion = null; } }
+    private void removeBot() {
+        Mannequin old = bot; bot = null; motion = null;
+        if (old != null) old.remove();
+    }
     private void retry() {
         if (resettingTurn || fighter == null) return;
         resettingTurn = true; run.retry();

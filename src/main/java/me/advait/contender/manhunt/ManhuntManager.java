@@ -111,20 +111,53 @@ public final class ManhuntManager extends AbstractGameState implements MinigameM
         if (contender.getMinigameManager().pendingReturn(entry.id())) throw new IllegalStateException("Return " + entry.name() + " to the lobby first.");
     }
     public void cancel(UUID id) { requireCurrent(id); finish(ManhuntRun.State.CANCELLED, false); }
+    @Override public void forceCancel() {
+        ManhuntSession previous = session;
+        session = null;
+        if (current != null) current.cancel();
+        List<Throwable> failures = new ArrayList<>();
+        cleanup(failures, "Could not save cancelled Manhunt", () -> { if (current != null) save(); });
+        cleanup(failures, "Could not stop End preparation", endWorld::cancelPreparation);
+        if (previous != null) cleanup(failures, "Could not close Manhunt session", previous::disable);
+        restorePending();
+        cleanup(failures, "Could not return Manhunt observers", this::returnObservers);
+        cleanup(failures, "Could not freeze the Manhunt End", endWorld::freeze);
+        cleanup(failures, "Could not refresh Manhunt display", this::refresh);
+        if (!failures.isEmpty()) {
+            var failure = new IllegalStateException("Manhunt stopped, but some cleanup failed. Check the server log.");
+            failures.forEach(failure::addSuppressed);
+            throw failure;
+        }
+    }
+    private void cleanup(List<Throwable> failures, String message, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException | Error failure) { failures.add(failure); contender.getLogger().log(Level.SEVERE, message, failure); }
+    }
+    private void restorePending() {
+        for (Player player : Bukkit.getOnlinePlayers()) if (!owns(player.getUniqueId()) && returns.pending(player.getUniqueId())) {
+            try { returns.restore(player); }
+            catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not restore Manhunt player " + player.getName(), failure); }
+        }
+    }
+    private void returnObservers() {
+        var lobby = contender.getLobbyManager().getLobbyLocation();
+        if (lobby == null) return;
+        for (Player player : Bukkit.getOnlinePlayers()) if (!player.isDead() && inArena(player.getLocation()) && !returns.pending(player.getUniqueId())) {
+            try { player.teleport(lobby); }
+            catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not return Manhunt observer " + player.getName(), failure); }
+        }
+    }
     void completed() { finish(current.state(), true); }
     void finish(ManhuntRun.State result, boolean announce) {
-        if (current == null || current.terminal() && session == null) return;
-        current.end(result);
-        try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save Manhunt result", failure); }
+        if (current == null && session == null) return;
+        if (current != null) current.end(result);
+        try { if (current != null) save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save Manhunt result", failure); }
         ManhuntSession previous = session; session = null;
-        if (previous != null) previous.disable();
-        for (var entry : current.entries()) {
-            var player = Bukkit.getPlayer(entry.id());
-            if (player != null && !player.isDead() && returns.pending(entry.id())) try { returns.restore(player); }
-            catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not return " + entry.name() + " from Manhunt", failure); }
-        }
+        if (previous != null) try { previous.disable(); }
+        catch (RuntimeException | Error failure) { contender.getLogger().log(Level.SEVERE, "Could not close Manhunt session", failure); }
+        restorePending();
         if (endWorld.state() == ManhuntWorld.State.USED) endWorld.freeze();
-        if (announce) Bukkit.broadcast(Component.text(current.state() == ManhuntRun.State.RUNNERS_WON ? "The runners win!" : "The hunters win!", NamedTextColor.GREEN));
+        if (announce && current != null) Bukkit.broadcast(Component.text(current.state() == ManhuntRun.State.RUNNERS_WON ? "The runners win!" : "The hunters win!", NamedTextColor.GREEN));
         refresh();
     }
     void failed(Throwable failure) {

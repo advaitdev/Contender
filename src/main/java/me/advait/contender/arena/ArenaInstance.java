@@ -10,7 +10,8 @@ public final class ArenaInstance {
     private final int slot;
     private final ArenaMap map;
     private final BlockBounds cell;
-    private Status status = Status.PREPARING;
+    private volatile Status status = Status.PREPARING;
+    private volatile long resetRevision;
     private UUID reservation;
 
     public ArenaInstance(int slot, ArenaMap map, BlockBounds cell) {
@@ -32,9 +33,23 @@ public final class ArenaInstance {
     public boolean owns(ArenaLease lease) {
         return lease != null && lease.instance() == this && lease.token().equals(reservation);
     }
-    void beginReset() { status = Status.RESETTING; }
-    void restored() { status = reservation == null ? Status.READY : Status.IN_USE; }
-    void failed() { status = Status.FAILED; }
+    long beginReset() {
+        if (status == Status.FAILED) throw new IllegalStateException("Rebuild this arena copy before using it again.");
+        long revision = ++resetRevision;
+        status = Status.RESETTING;
+        return revision;
+    }
+    boolean isReset(long revision) { return resetRevision == revision && status == Status.RESETTING; }
+    boolean restored(long revision) {
+        if (!isReset(revision)) return false;
+        status = reservation == null ? Status.READY : Status.IN_USE;
+        return true;
+    }
+    void failed(long revision) { if (isReset(revision)) failed(); }
+    void failed() {
+        status = Status.FAILED;
+        resetRevision++;
+    }
     public void release(ArenaLease lease) {
         if (!owns(lease)) return;
         reservation = null;

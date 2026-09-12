@@ -43,9 +43,19 @@ class TournamentCancellationTest {
             assertFalse(tournament.isRunning());
             clearInvocations(tab); manager.cancel();
             verify(tab, atLeastOnce()).refresh(); assertTrue(tournament.isCancelled());
-            completion.getValue().accept(new DuelResult(DuelResult.Reason.CANCELLED, 1, 0, null));
+            var oldCompletion = completion.getValue();
+            manager.forceCancel();
             assertTrue(manager.playing().isEmpty()); assertNull(tournament.matches().getFirst().result());
             assertFalse(tournament.isRunning());
+
+            var replacement = new Tournament(UUID.randomUUID(), "Axe", "map", "kit", tournament.entries(), false, false, 3, 10, 2);
+            Duel newDuel = mock(Duel.class);
+            when(duels.startDuel(any(DuelSetup.class), completion.capture())).thenReturn(newDuel);
+            when(arenas.available("map")).thenReturn(1, 1, 0);
+            manager.create(replacement); manager.resume();
+            oldCompletion.accept(new DuelResult(DuelResult.Reason.CANCELLED, 1, 0, null));
+            assertSame(newDuel, manager.playing().get(1), "A late result must not remove the replacement pairing");
+            assertTrue(replacement.isRunning());
         }
     }
 }

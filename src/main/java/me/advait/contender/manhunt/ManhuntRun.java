@@ -66,6 +66,9 @@ public final class ManhuntRun {
             state = result;
         }
     }
+    void cancel() {
+        if (!terminal() || state == State.INTERRUPTED) state = State.CANCELLED;
+    }
     void restore(State saved, Collection<UUID> eliminated) {
         if (!entries.stream().map(Entry::id).toList().containsAll(eliminated)) throw new IllegalArgumentException("Unknown player in Manhunt results.");
         state = saved; out.addAll(eliminated);

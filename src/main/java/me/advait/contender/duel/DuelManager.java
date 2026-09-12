@@ -168,4 +168,28 @@ public class DuelManager {
         for (Duel duel : new ArrayList<>(activeDuels)) duel.forceEnd();
         activeSetups.clear();
     }
+    public void forceCancelAll() {
+        boolean wasStopping = stopping;
+        stopping = true;
+        completions.clear();
+        activeSetups.clear();
+        RuntimeException incomplete = new IllegalStateException("Some duels could not be fully cleaned up.");
+        try {
+            for (Duel duel : new ArrayList<>(activeDuels)) {
+                try { duel.forceCancel(); }
+                catch (RuntimeException failure) { incomplete.addSuppressed(failure); }
+                finally {
+                    activeDuels.remove(duel);
+                    playerDuelMap.values().removeIf(value -> value == duel);
+                }
+            }
+        } finally {
+            activeDuels.clear();
+            playerDuelMap.clear();
+            stopping = wasStopping;
+            plugin.refreshVoiceRouting();
+            plugin.refreshHackerAttributes();
+        }
+        if (incomplete.getSuppressed().length > 0) throw incomplete;
+    }
 }

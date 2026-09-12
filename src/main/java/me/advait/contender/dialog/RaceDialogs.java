@@ -157,6 +157,7 @@ public final class RaceDialogs {
     }
     private void course(Player player, String id) {
         var manager = plugin.getRaceManager(); var course = manager.course(id);
+        manager.protectCourseMobs(id);
         menu(player, mapName(id), DialogText.paragraphs(DialogText.lines(DialogText.detail("Map ID", id),
                         DialogText.detail("Checkpoint Jump", String.valueOf(course.maxAdvance())), DialogText.detail("Finish Mob", course.finishName()),
                         groundReturnDetail(id)),

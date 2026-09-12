@@ -24,6 +24,7 @@ public final class RaceManager extends AbstractGameState {
     private final RaceStore store;
     private final RaceReturns returns;
     private final RaceFinishFireworks fireworks;
+    private final RaceSetupMobs setupMobs;
     private final Map<String, RaceCourse> courses = new LinkedHashMap<>();
     private final Map<UUID, String> numbering = new HashMap<>(), markingFinish = new HashMap<>();
     private final Map<me.advait.contender.arena.ArenaLease, RaceSession> stranded = new HashMap<>();
@@ -32,10 +33,12 @@ public final class RaceManager extends AbstractGameState {
     private boolean selected, resetting;
     public RaceManager(Contender plugin) {
         super(plugin); contender = plugin; store = new RaceStore(plugin.getDataFolder()); returns = new RaceReturns(plugin); fireworks = new RaceFinishFireworks(plugin);
+        setupMobs = new RaceSetupMobs(plugin, this::courses);
     }
     @Override protected void onEnable() {
         var saved = store.load(); courses.putAll(saved.courses()); current = saved.run(); selected = saved.selected(); save();
         fireworks.enable();
+        setupMobs.enable();
         runRepeating(() -> {
             for (Player player : Bukkit.getOnlinePlayers()) if (!owns(player.getUniqueId()) && returns.pending(player.getUniqueId())) {
                 try { restore(player); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not restore race inventory", failure); }
@@ -47,6 +50,7 @@ public final class RaceManager extends AbstractGameState {
     }
     @Override protected void onDisable() {
         fireworks.disable();
+        setupMobs.disable();
         if (session != null) { current.end(RaceRun.State.INTERRUPTED); try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save interrupted race", failure); } RaceSession old = session; session = null; old.disable(); contender.getArenaManager().discard(old.lease()); contender.getArenaManager().release(old.lease()); }
         stranded.keySet().forEach(contender.getArenaManager()::release); stranded.clear();
         numbering.clear(); markingFinish.clear();
@@ -72,7 +76,7 @@ public final class RaceManager extends AbstractGameState {
     }
     public void configure(RaceCourse course) {
         if ((busy() || current != null && !current.terminal()) && current != null && current.mapId().equals(course.mapId())) throw new IllegalStateException("Wait for the race and arena reset to finish.");
-        requireMap(course.mapId()); courses.put(course.mapId(), course); save();
+        requireMap(course.mapId()); courses.put(course.mapId(), course); save(); setupMobs.watch(course.mapId());
     }
     public void create(String name, String mapId, int advance, int minutes, List<TournamentEntry> entries) {
         create(name, mapId, advance, minutes, entries, "");
@@ -171,6 +175,7 @@ public final class RaceManager extends AbstractGameState {
     }
     public void setStart(String mapId, Player player) {
         ArenaMap map = requireMap(mapId);
+        setupMobs.watch(mapId);
         contender.getArenaManager().setSpawn(map, "1", player.getLocation());
         // Race maps share the pool format. The second team spawn is unused in a race.
         if (map.getTeam2Point() == null) contender.getArenaManager().setSpawn(map, "2", player.getLocation());
@@ -180,7 +185,8 @@ public final class RaceManager extends AbstractGameState {
         if (busy()) throw new IllegalStateException("Wait for the race and arena reset to finish.");
         RaceCourse course = course(mapId); Set<Chunk> tickets = new HashSet<>();
         return loadChunks(contender, map, tickets, this::isEnabled).thenCompose(ignored -> {
-            scan(map, course); configure(course);
+            var mobs = scan(map, course); configure(course);
+            mobs.values().forEach(mob -> setupMobs.protect(mob, mapId));
             return contender.getArenaManager().saveBlocks(map).thenCompose(done -> contender.getArenaManager().prepare(map));
         }).whenComplete((ignored, failure) -> tickets.forEach(c -> c.removePluginChunkTicket(plugin)));
     }
@@ -189,13 +195,19 @@ public final class RaceManager extends AbstractGameState {
         if (!source.contains(player.getLocation())) throw new IllegalArgumentException("Stand inside the map selection to number mobs.");
         if (mapId.equals(numbering.get(player.getUniqueId()))) { numbering.remove(player.getUniqueId()); Dialogs.tell(player, "Checkpoint numbering stopped."); return; }
         if (numbering.containsValue(mapId)) throw new IllegalStateException("Someone is already numbering mobs in this map.");
+        setupMobs.watch(mapId);
         numbering.put(player.getUniqueId(), mapId); markingFinish.remove(player.getUniqueId());
         Dialogs.tell(player, "Spawn mobs inside the selection to number them. Reopen this menu to stop.");
     }
     public boolean numbering(Player player, String mapId) { return mapId.equals(numbering.get(player.getUniqueId())); }
     public void markFinish(Player player, String mapId) {
         requireMap(mapId); markingFinish.put(player.getUniqueId(), mapId); numbering.remove(player.getUniqueId());
+        setupMobs.watch(mapId);
         Dialogs.tell(player, "Right-click the finish mob inside the map selection.");
+    }
+    public void protectCourseMobs(String mapId) {
+        requireMap(mapId);
+        setupMobs.watch(mapId);
     }
     private ArenaMap requireMap(String id) {
         ArenaMap map = contender.getMapManager().getMap(id);
@@ -213,7 +225,7 @@ public final class RaceManager extends AbstractGameState {
             int next = entities(map).stream().mapToInt(e -> course(id).checkpoint(plainName(e)))
                     .filter(n -> n > 0 && n < Integer.MAX_VALUE).max().orElse(0) + 1;
             event.getEntity().customName(Component.text("#" + next, NamedTextColor.GOLD));
-            event.getEntity().setCustomNameVisible(true); event.getEntity().setAI(false); event.getEntity().setGravity(false); event.getEntity().setPersistent(true);
+            setupMobs.protect(event.getEntity(), id);
             break;
         }
     }
@@ -225,7 +237,7 @@ public final class RaceManager extends AbstractGameState {
             Dialogs.tell(event.getPlayer(), "Choose a mob inside the map selection."); return;
         }
         mob.customName(Component.text(course(mapId).finishName(), NamedTextColor.GOLD)); mob.setCustomNameVisible(true);
-        mob.setAI(false); mob.setGravity(false); mob.setPersistent(true); markingFinish.remove(event.getPlayer().getUniqueId());
+        setupMobs.protect(mob, mapId); markingFinish.remove(event.getPlayer().getUniqueId());
         Dialogs.tell(event.getPlayer(), "Finish mob set. Save the course to update its copies.");
     }
     @EventHandler public void quit(PlayerQuitEvent e) { numbering.remove(e.getPlayer().getUniqueId()); markingFinish.remove(e.getPlayer().getUniqueId()); }

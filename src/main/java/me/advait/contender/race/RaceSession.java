@@ -29,11 +29,13 @@ public final class RaceSession extends AbstractGameState {
     private final Map<UUID, Integer> mobs = new HashMap<>();
     private final Map<Integer, Location> checkpoints = new HashMap<>();
     private final Map<UUID, LivingEntity> targets = new HashMap<>();
+    private final Map<UUID, Location> targetAnchors = new HashMap<>();
     private final Set<UUID> entered = new HashSet<>();
     private final Set<UUID> returning = new HashSet<>();
     private final Map<UUID, Long> bedCooldown = new HashMap<>();
     private final RaceGrounding grounding = new RaceGrounding();
     private boolean internalTeleport;
+    private boolean internalTargetTeleport;
     private int countdown = 10;
 
     RaceSession(Contender plugin, RaceManager manager, RaceRun run, RaceCourse course, ArenaLease lease) {
@@ -48,6 +50,9 @@ public final class RaceSession extends AbstractGameState {
     public boolean racing(UUID id) { return owns(id) && run.state() == RaceRun.State.RUNNING && !run.racer(id).done(); }
     public boolean prepared() { return run.state() != RaceRun.State.READY; }
     @Override protected void onEnable() {
+        World world = Bukkit.getWorld(lease.instance().map().getWorldName());
+        // In 26.2 hostile mobs are removed in Peaceful, even when they are persistent.
+        if (world != null && world.getDifficulty() == Difficulty.PEACEFUL) world.setDifficulty(Difficulty.NORMAL);
         RaceManager.loadChunks(contender, lease.instance().map(), tickets, this::isEnabled).whenComplete((ignored, failure) -> {
             if (!isEnabled()) return;
             if (failure != null) { manager.failed(failure); return; }
@@ -63,13 +68,17 @@ public final class RaceSession extends AbstractGameState {
             int index = entry.getKey() == Integer.MAX_VALUE ? count + 1 : entry.getKey();
             LivingEntity entity = entry.getValue();
             mobs.put(entity.getUniqueId(), index); targets.put(entity.getUniqueId(), entity);
+            targetAnchors.put(entity.getUniqueId(), entity.getLocation().clone());
             checkpoints.put(index, entity.getLocation().add(0, course.returnHeight(), 0));
             var health = entity.getAttribute(Attribute.MAX_HEALTH);
             if (health == null) throw new IllegalArgumentException("Checkpoint mobs must have health.");
             health.setBaseValue(1024); entity.setHealth(1024); entity.setInvulnerable(false);
             entity.setMaximumNoDamageTicks(0); entity.setNoDamageTicks(0);
             entity.setAI(false); entity.setGravity(false); entity.setSilent(true); entity.setCollidable(false);
+            entity.setCanPickupItems(false);
             entity.setRemoveWhenFarAway(false); entity.setPersistent(true); entity.setCustomNameVisible(true);
+            entity.leaveVehicle(); entity.eject();
+            if (entity.isLeashed()) entity.setLeashHolder(null);
             entity.setFireTicks(0); entity.getActivePotionEffects().forEach(e -> entity.removePotionEffect(e.getType()));
             var knockback = entity.getAttribute(Attribute.KNOCKBACK_RESISTANCE); if (knockback != null) knockback.setBaseValue(1);
             var explosion = entity.getAttribute(Attribute.EXPLOSION_KNOCKBACK_RESISTANCE); if (explosion != null) explosion.setBaseValue(1);
@@ -122,6 +131,21 @@ public final class RaceSession extends AbstractGameState {
     }
     // Keep the HUD full even if another plugin changes food directly between hunger events.
     void monitorRacers() {
+        // Some displacement (for example riding or a direct position change) bypasses EntityMoveEvent.
+        for (LivingEntity target : targets.values()) {
+            if (!target.isValid() || target.isDead()) continue; // tick() stops the race if a target was removed.
+            target.setVelocity(new Vector());
+            Location anchor = targetAnchors.get(target.getUniqueId());
+            if (!target.getLocation().equals(anchor)) {
+                internalTargetTeleport = true;
+                try {
+                    if (!target.teleport(anchor.clone())) {
+                        manager.failed(new IllegalStateException("A checkpoint mob could not be returned to its position."));
+                        return;
+                    }
+                } finally { internalTargetTeleport = false; }
+            }
+        }
         for (UUID id : entered) {
             Player player = Bukkit.getPlayer(id);
             if (player == null || !owns(id) || player.isDead()) continue;
@@ -272,7 +296,35 @@ public final class RaceSession extends AbstractGameState {
     @EventHandler public void inventory(InventoryDragEvent e) { if (owns(e.getWhoClicked().getUniqueId())) e.setCancelled(true); }
     @EventHandler public void swap(PlayerSwapHandItemsEvent e) { if (owns(e.getPlayer().getUniqueId())) e.setCancelled(true); }
     @EventHandler public void portal(EntityPortalEvent e) { if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
-    @EventHandler public void mobTeleport(EntityTeleportEvent e) { if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobTeleport(EntityTeleportEvent e) { if (!internalTargetTeleport && mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobMove(io.papermc.paper.event.entity.EntityMoveEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId())) { e.setCancelled(true); e.getEntity().setVelocity(new Vector()); }
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobKnockback(io.papermc.paper.event.entity.EntityKnockbackEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobMount(EntityMountEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId()) || mobs.containsKey(e.getMount().getUniqueId())) e.setCancelled(true);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobLeash(PlayerLeashEntityEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobInteract(PlayerInteractEntityEvent e) {
+        if (mobs.containsKey(e.getRightClicked().getUniqueId())) e.setCancelled(true);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobBucket(PlayerBucketEntityEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobDeath(EntityDeathEvent e) {
+        if (mobs.containsKey(e.getEntity().getUniqueId())) {
+            e.setCancelled(true); e.setReviveHealth(e.getEntity().getMaxHealth());
+            e.getDrops().clear(); e.setDroppedExp(0); e.setShouldPlayDeathSound(false);
+        }
+    }
+    @EventHandler(priority = EventPriority.HIGHEST) public void mobExplode(ExplosionPrimeEvent e) {
+        // Creepers discard themselves when exploding, bypassing EntityDeathEvent entirely.
+        if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true);
+    }
     @EventHandler public void transform(EntityTransformEvent e) { if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
     @EventHandler public void advancement(PlayerAdvancementDoneEvent e) { if (owns(e.getPlayer().getUniqueId())) e.message(null); }
     @EventHandler(priority = EventPriority.MONITOR) public void join(PlayerJoinEvent e) {

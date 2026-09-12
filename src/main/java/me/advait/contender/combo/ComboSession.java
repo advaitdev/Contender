@@ -27,6 +27,7 @@ final class ComboSession extends AbstractGameState {
     private final ArenaLease lease;
     private final Set<Chunk> tickets = new HashSet<>();
     private final Set<UUID> entered = new HashSet<>(), watchers = new HashSet<>(), templateEntities = new HashSet<>();
+    private final Set<UUID> spectatorOptOuts = new HashSet<>();
     private Mannequin bot;
     private MannequinMotion motion;
     private UUID fighter;
@@ -62,7 +63,7 @@ final class ComboSession extends AbstractGameState {
         for (UUID id : List.copyOf(entered)) {
             clean(() -> returnPlayer(id), failures);
         }
-        entered.clear(); watchers.clear(); fighter = null; live = false;
+        entered.clear(); watchers.clear(); spectatorOptOuts.clear(); fighter = null; live = false;
         for (Chunk chunk : List.copyOf(tickets)) clean(() -> chunk.removePluginChunkTicket(contender), failures);
         tickets.clear();
         for (Player player : Bukkit.getOnlinePlayers()) clean(() -> player.sendActionBar(Component.empty()), failures);
@@ -79,6 +80,8 @@ final class ComboSession extends AbstractGameState {
     }
     private void tick() {
         tick++;
+        // Also picks up late arrivals after their pending inventory return has finished.
+        if (tick == 1 || tick % 20 == 0) watchRoster();
         if (tick % 5 == 0) Bukkit.getOnlinePlayers().forEach(p -> p.sendActionBar(Component.text("Combo: " + (cleared ? "∞" : run.hits()), NamedTextColor.GREEN)));
         if (tick % 20 == 0) manager.refresh();
         if (fighter == null) {
@@ -108,6 +111,13 @@ final class ComboSession extends AbstractGameState {
             player.damage(7, bot);
         }
     }
+    private void watchRoster() {
+        for (var entry : run.entries()) {
+            if (entry.withdrawn() || owns(entry.id()) || spectatorOptOuts.contains(entry.id()) || !manager.available(entry)) continue;
+            Player player = Bukkit.getPlayer(entry.id());
+            if (player != null) spectate(player);
+        }
+    }
     private boolean withinReach(Player player) {
         var eye = bot.getEyeLocation().toVector(); var box = player.getBoundingBox();
         double x = Math.clamp(eye.getX(), box.getMinX(), box.getMaxX());
@@ -118,12 +128,13 @@ final class ComboSession extends AbstractGameState {
     private void begin(ComboRun.Entry entry) {
         Player player = Objects.requireNonNull(Bukkit.getPlayer(entry.id()));
         if (!owns(entry.id())) manager.capture(player);
-        entered.add(entry.id()); watchers.remove(entry.id()); fighter = entry.id();
+        entered.add(entry.id()); watchers.remove(entry.id()); spectatorOptOuts.remove(entry.id()); fighter = entry.id();
         run.begin(entry.id()); manager.save(); cleared = false;
         resetPositions(player); contender.refreshVoiceRouting(); contender.refreshHackerAttributes(); manager.refresh();
     }
     private void resetPositions(Player player) {
         removeBot(); clearTurnEntities(); live = false; resettingTurn = false; lastAcceptedHit = -1;
+        if (player.getGameMode() == GameMode.SPECTATOR) player.setSpectatorTarget(null);
         if (!teleport(player, lease.instance().map().getTeam1Spawn())) throw new IllegalStateException("The Combo teleport was blocked for " + player.getName() + ".");
         player.setGameMode(GameMode.SURVIVAL); player.setAllowFlight(false); player.setFlying(false);
         var kit = manager.requireSwordKit(run.kitId());
@@ -164,17 +175,24 @@ final class ComboSession extends AbstractGameState {
     private void scored() {
         if (resettingTurn) return;
         resettingTurn = true; manager.save(); manager.refresh();
+        UUID expected = fighter;
         runLater(() -> {
+            if (!Objects.equals(expected, fighter)) return;
             UUID previous = fighter; fighter = null; removeBot(); clearTurnEntities(); live = false;
-            if (previous != null) returnPlayer(previous);
+            Player player = previous == null ? null : Bukkit.getPlayer(previous);
+            if (player != null) {
+                try { spectate(player); }
+                catch (RuntimeException failure) { manager.failed(failure); return; }
+            } else if (previous != null) { entered.remove(previous); watchers.remove(previous); }
             nextTurn = tick + 40; resettingTurn = false;
         }, 1);
     }
     private void disconnected(UUID id) {
         run.disconnect(id); fighter = null; live = false; resettingTurn = false; removeBot(); clearTurnEntities();
-        entered.remove(id); manager.save(); nextTurn = tick + 20; manager.refresh();
+        entered.remove(id); watchers.remove(id); manager.save(); nextTurn = tick + 20; manager.refresh();
     }
     void withdraw(UUID id) {
+        spectatorOptOuts.add(id);
         run.withdraw(id);
         if (Objects.equals(fighter, id)) { fighter = null; live = false; resettingTurn = false; removeBot(); clearTurnEntities(); nextTurn = tick + 20; }
         returnPlayer(id); manager.save();
@@ -184,13 +202,21 @@ final class ComboSession extends AbstractGameState {
         if (playing(id)) throw new IllegalStateException("Finish your turn before spectating.");
         if (watchers.contains(id)) return;
         if (contender.getDuelManager().getDuel(id) != null || contender.getMinigameManager().pendingReturn(id) || contender.getMinigameManager().owns(id)) throw new IllegalStateException("Return to the lobby before spectating.");
-        manager.capture(player); entered.add(id); watchers.add(id);
+        spectate(player); spectatorOptOuts.remove(id);
+    }
+    private void spectate(Player player) {
+        UUID id = player.getUniqueId();
+        if (!owns(id)) manager.capture(player);
+        entered.add(id); watchers.add(id);
+        if (player.getGameMode() == GameMode.SPECTATOR) player.setSpectatorTarget(null);
         if (!teleport(player, lease.instance().map().getSpectatorSpawn())) { returnPlayer(id); throw new IllegalStateException("The spectator teleport was blocked."); }
-        player.setGameMode(GameMode.SPECTATOR); contender.refreshVoiceRouting();
+        player.setGameMode(GameMode.SPECTATOR); player.setFallDistance(0); player.setVelocity(new Vector()); full(player);
+        contender.refreshVoiceRouting(); contender.refreshHackerAttributes();
     }
     boolean unwatch(Player player) {
         UUID id = player.getUniqueId();
         if (!watchers.contains(id) || Objects.equals(fighter, id)) return false;
+        spectatorOptOuts.add(id);
         entered.remove(id); watchers.remove(id);
         if (!manager.restore(player)) me.advait.contender.dialog.Dialogs.tell(player, "The lobby teleport was blocked. Your return will be retried.");
         contender.refreshVoiceRouting(); contender.refreshHackerAttributes();

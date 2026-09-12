@@ -62,7 +62,7 @@ class ComboSessionTest {
         when(event.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_ATTACK); when(event.getDamage()).thenReturn(7.0);
         return event;
     }
-    @Test void turnSetupAndRetryWorkWithMannequinEquipmentRestrictions() throws Exception {
+    @Test void watcherStartsTheirTurnAndRetriesWithoutReplacingTheirReturnSnapshot() throws Exception {
         try (var access = mockStatic(RegistryAccess.class);
              var items = mockConstruction(ItemStack.class);
              var motions = mockConstruction(MannequinMotion.class)) {
@@ -91,11 +91,17 @@ class ComboSessionTest {
                 setup.accept(spawned);
                 return spawned;
             });
-            Method reset = ComboSession.class.getDeclaredMethod("resetPositions", Player.class);
-            reset.setAccessible(true);
+            run.disconnect(player.getUniqueId()); field(session, "fighter", null);
+            @SuppressWarnings("unchecked") Set<UUID> watchers = (Set<UUID>) get(session, "watchers"); watchers.add(player.getUniqueId());
+            when(player.getGameMode()).thenReturn(GameMode.SPECTATOR);
+            Method begin = ComboSession.class.getDeclaredMethod("begin", ComboRun.Entry.class);
+            begin.setAccessible(true);
 
-            assertDoesNotThrow(() -> reset.invoke(session, player));
+            assertDoesNotThrow(() -> begin.invoke(session, run.entries().getFirst()));
             assertSame(spawned, get(session, "bot"));
+            assertTrue(session.playing(player.getUniqueId())); assertFalse(session.watching(player.getUniqueId()));
+            verify(player).setSpectatorTarget(null); verify(player).setGameMode(GameMode.SURVIVAL);
+            verify(manager, never()).capture(player); verify(manager, never()).restore(player);
             assertFalse((boolean) get(session, "live"));
             verify(equipment).setArmorContents(new ItemStack[]{null, null, null, helmetCopy});
             verify(spawned).setHealth(1024);
@@ -125,21 +131,27 @@ class ComboSessionTest {
         var sweep = hit(player, bot); when(sweep.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK);
         session.damage(sweep); verify(sweep).setCancelled(true); assertEquals(0, run.hits());
     }
-    @Test void fifthReturnedHitRetriesButSixthRecordsResultAndReturnsPlayer() throws Exception {
+    @Test void fifthReturnedHitRetriesButSixthRecordsResultAndKeepsPlayerSpectatingUntilCleanup() throws Exception {
+        when(player.teleport(any(Location.class))).thenReturn(true);
         field(session, "live", true); for (int i = 0; i < 5; i++) run.hit(player.getUniqueId());
         var returned = hit(bot, player); session.damage(returned); session.score(returned);
         verify(returned, never()).setCancelled(true); assertEquals(0, run.hits()); assertFalse(run.entries().getFirst().done());
         assertEquals(1, queued.size()); queued.clear(); field(session, "resettingTurn", false);
         for (int i = 0; i < 6; i++) run.hit(player.getUniqueId()); session.score(hit(bot, player));
         assertEquals(6, run.entries().getFirst().score()); assertNull(run.playing());
-        queued.getFirst().run(); verify(manager).restore(player); assertFalse(session.owns(player.getUniqueId())); verify(bot).remove();
+        queued.getFirst().run(); verify(manager, never()).restore(player); verify(manager, never()).capture(player);
+        assertTrue(session.owns(player.getUniqueId())); assertTrue(session.watching(player.getUniqueId()));
+        assertFalse(session.playing(player.getUniqueId())); verify(player).setGameMode(GameMode.SPECTATOR); verify(bot).remove();
+        session.disable(); verify(manager).restore(player); assertFalse(session.owns(player.getUniqueId()));
     }
     @Test void genuineFallBelowArenaClearsAndUnaidedIdleFallDoesNot() throws Exception {
+        when(player.teleport(any(Location.class))).thenReturn(true);
         field(session, "live", true); run.hit(player.getUniqueId());
         when(bot.getLocation()).thenReturn(new Location(world, 15, 56, 1));
         Method tick = ComboSession.class.getDeclaredMethod("tick"); tick.setAccessible(true); tick.invoke(session);
         assertTrue(run.entries().getFirst().cleared()); assertEquals("∞", run.entries().getFirst().value());
-        assertEquals(true, get(session, "cleared")); queued.getFirst().run(); verify(manager).restore(player);
+        assertEquals(true, get(session, "cleared")); queued.getFirst().run(); verify(manager, never()).restore(player);
+        assertTrue(session.watching(player.getUniqueId())); verify(player).setGameMode(GameMode.SPECTATOR);
     }
     @Test void spectatorDamageAndEnvironmentCannotEndACombo() throws Exception {
         var hazard = mock(EntityDamageEvent.class); when(hazard.getEntity()).thenReturn(player);

@@ -64,6 +64,7 @@ class ComboSessionTest {
     }
     @Test void watcherStartsTheirTurnAndRetriesWithoutReplacingTheirReturnSnapshot() throws Exception {
         try (var access = mockStatic(RegistryAccess.class);
+             var appearance = mockStatic(ComboAppearance.class);
              var items = mockConstruction(ItemStack.class);
              var motions = mockConstruction(MannequinMotion.class)) {
             access.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
@@ -105,6 +106,7 @@ class ComboSessionTest {
             assertFalse((boolean) get(session, "live"));
             verify(equipment).setArmorContents(new ItemStack[]{null, null, null, helmetCopy});
             verify(spawned).setHealth(1024);
+            appearance.verify(() -> ComboAppearance.apply(spawned));
 
             field(session, "live", true);
             run.hit(player.getUniqueId());
@@ -121,8 +123,37 @@ class ComboSessionTest {
     @Test void actualSwordHitStartsTheIdleBotWithoutRemovingNativeHitDamage() throws Exception {
         var event = hit(player, bot); session.damage(event); session.score(event);
         verify(event, never()).setCancelled(true); assertEquals(1, run.hits()); assertEquals(true, get(session, "live"));
-        assertEquals(5, get(session, "reactAt"));
+        var attacks = (ComboAttackTiming) get(session, "attacks");
+        assertFalse(attacks.reacting(7)); assertTrue(attacks.reacting(8));
         session.score(event); assertEquals(1, run.hits(), "A duplicate event in the same tick must not count twice");
+        verify(world).playSound(eq(bot.getLocation()), eq("minecraft:entity.player.hurt"), eq(SoundCategory.PLAYERS), eq(1.0f), anyFloat());
+    }
+    @Test void returnAttackNeedsAimRecoveryAndTimeInRange() throws Exception {
+        session.score(hit(player, bot));
+        // Looking along +Z at a player's body two blocks away.
+        when(bot.getEyeLocation()).thenReturn(new Location(world, 3, 66.62, 1, 0, 0));
+        when(player.getBoundingBox()).thenReturn(new org.bukkit.util.BoundingBox(2.7, 65, 2.7, 3.3, 66.8, 3.3));
+        when(bot.hasLineOfSight(player)).thenReturn(true);
+        Method tick = ComboSession.class.getDeclaredMethod("tick"); tick.setAccessible(true);
+
+        for (int i = 1; i < 8; i++) tick.invoke(session);
+        verify(player, never()).damage(anyDouble(), any(Entity.class));
+        tick.invoke(session);
+        verify(player).damage(7, bot); verify(bot).swingMainHand();
+        for (int i = 9; i < 28; i++) tick.invoke(session);
+        verify(player).damage(7, bot);
+        tick.invoke(session);
+        verify(player, times(2)).damage(7, bot);
+    }
+    @Test void nearbyPlayersBehindTheBotAndBeyondItsReachCannotBeHit() throws Exception {
+        Method reach = ComboSession.class.getDeclaredMethod("withinReach", Player.class); reach.setAccessible(true);
+        when(bot.getEyeLocation()).thenReturn(new Location(world, 3, 66.62, 1, 0, 0));
+        when(player.getBoundingBox()).thenReturn(new org.bukkit.util.BoundingBox(2.7, 65, -1.3, 3.3, 66.8, -0.7));
+        assertEquals(false, reach.invoke(session, player), "Nearby but behind the bot's aim");
+        when(player.getBoundingBox()).thenReturn(new org.bukkit.util.BoundingBox(2.7, 65, 3.6, 3.3, 66.8, 4.2));
+        assertEquals(false, reach.invoke(session, player), "Normal should not hit 2.6 blocks from its eyes");
+        when(player.getBoundingBox()).thenReturn(new org.bukkit.util.BoundingBox(2.7, 65, 3.4, 3.3, 66.8, 4.0));
+        assertEquals(true, reach.invoke(session, player));
     }
     @Test void onlyCurrentPlayersDirectSwordHitsCanStartTheAttempt() {
         var outsider = mock(Player.class); when(outsider.getUniqueId()).thenReturn(UUID.randomUUID());

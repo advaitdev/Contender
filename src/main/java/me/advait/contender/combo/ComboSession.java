@@ -25,16 +25,18 @@ final class ComboSession extends AbstractGameState {
     private final ComboManager manager;
     private final ComboRun run;
     private final ArenaLease lease;
+    private final ComboAttackTiming attacks;
     private final Set<Chunk> tickets = new HashSet<>();
     private final Set<UUID> entered = new HashSet<>(), watchers = new HashSet<>(), templateEntities = new HashSet<>();
     private final Set<UUID> spectatorOptOuts = new HashSet<>();
     private Mannequin bot;
     private MannequinMotion motion;
     private UUID fighter;
-    private int tick, nextTurn, nextAttack, reactAt, lastAcceptedHit = -1;
+    private int tick, nextTurn, lastAcceptedHit = -1;
     private boolean live, resettingTurn, internalTeleport, cleared;
     ComboSession(Contender plugin, ComboManager manager, ComboRun run, ArenaLease lease) {
         super(plugin); contender = plugin; this.manager = manager; this.run = run; this.lease = lease;
+        attacks = new ComboAttackTiming(run.difficulty());
     }
     ArenaLease lease() { return lease; }
     boolean contains(Location location) {
@@ -99,13 +101,13 @@ final class ComboSession extends AbstractGameState {
             if (run.clear()) { cleared = true; scored(); } else retry();
             return;
         }
-        if (resettingTurn || !live) { motion.drive(bot, player, run.difficulty().speed(), false); return; }
+        if (resettingTurn || !live) { motion.drive(bot, player, run.difficulty(), false); return; }
         if (!contains(bot.getLocation())) { retry(); return; }
         double distance = player.getLocation().distanceSquared(bot.getLocation());
-        boolean reacting = tick >= reactAt;
-        motion.drive(bot, player, run.difficulty().speed(), reacting && distance > 1.4);
-        if (reacting && tick >= nextAttack && withinReach(player) && bot.hasLineOfSight(player)) {
-            nextAttack = tick + run.difficulty().attackTicks(); bot.swingMainHand();
+        boolean reacting = attacks.reacting(tick);
+        motion.drive(bot, player, run.difficulty(), reacting && distance > 1.4);
+        if (attacks.shouldSwing(tick, withinReach(player) && bot.hasLineOfSight(player))) {
+            bot.swingMainHand();
             // Mannequins have no native attack implementation. Sourced melee damage runs Paper's
             // ordinary hurt, shield and knockback handling, with the sword's full-charge cadence above.
             player.damage(7, bot);
@@ -119,11 +121,8 @@ final class ComboSession extends AbstractGameState {
         }
     }
     private boolean withinReach(Player player) {
-        var eye = bot.getEyeLocation().toVector(); var box = player.getBoundingBox();
-        double x = Math.clamp(eye.getX(), box.getMinX(), box.getMaxX());
-        double y = Math.clamp(eye.getY(), box.getMinY(), box.getMaxY());
-        double z = Math.clamp(eye.getZ(), box.getMinZ(), box.getMaxZ());
-        return eye.distanceSquared(new Vector(x, y, z)) <= run.difficulty().reach() * run.difficulty().reach();
+        var eye = bot.getEyeLocation();
+        return player.getBoundingBox().rayTrace(eye.toVector(), eye.getDirection(), run.difficulty().reach()) != null;
     }
     private void begin(ComboRun.Entry entry) {
         Player player = Objects.requireNonNull(Bukkit.getPlayer(entry.id()));
@@ -133,7 +132,7 @@ final class ComboSession extends AbstractGameState {
         resetPositions(player); contender.refreshVoiceRouting(); contender.refreshHackerAttributes(); manager.refresh();
     }
     private void resetPositions(Player player) {
-        removeBot(); clearTurnEntities(); live = false; resettingTurn = false; lastAcceptedHit = -1;
+        removeBot(); clearTurnEntities(); live = false; resettingTurn = false; lastAcceptedHit = -1; attacks.reset();
         if (player.getGameMode() == GameMode.SPECTATOR) player.setSpectatorTarget(null);
         if (!teleport(player, lease.instance().map().getTeam1Spawn())) throw new IllegalStateException("The Combo teleport was blocked for " + player.getName() + ".");
         player.setGameMode(GameMode.SURVIVAL); player.setAllowFlight(false); player.setFlying(false);
@@ -143,7 +142,7 @@ final class ComboSession extends AbstractGameState {
         bot = spawn.getWorld().spawn(spawn, Mannequin.class, entity -> {
             entity.setPersistent(false); entity.setRemoveWhenFarAway(false); entity.setImmovable(false); entity.setDescription(null);
             entity.customName(Component.text("Combo", NamedTextColor.WHITE)); entity.setCustomNameVisible(false);
-            entity.setGravity(true); entity.setInvulnerable(false); entity.setCollidable(false); entity.setSilent(true);
+            entity.setGravity(true); entity.setInvulnerable(false); entity.setCollidable(false); ComboAppearance.apply(entity);
             Objects.requireNonNull(entity.getAttribute(Attribute.MAX_HEALTH)).setBaseValue(1024); entity.setHealth(1024);
             entity.getEquipment().setItemInMainHand(new ItemStack(Material.DIAMOND_SWORD));
             entity.getEquipment().setArmorContents(Arrays.stream(kit.getArmor()).map(i -> i == null ? null : i.clone()).toArray(ItemStack[]::new));
@@ -248,8 +247,8 @@ final class ComboSession extends AbstractGameState {
         if (ourBot(event.getEntity()) && event.getDamager() instanceof Player player && playing(player.getUniqueId())
                 && event.getCause() == EntityDamageEvent.DamageCause.ENTITY_ATTACK && sword(player) && lastAcceptedHit != tick) {
             if (run.hit(player.getUniqueId())) {
-                lastAcceptedHit = tick; reactAt = tick + run.difficulty().reactionTicks();
-                if (!live) { live = true; nextAttack = reactAt; }
+                lastAcceptedHit = tick; attacks.hit(tick); live = true;
+                ComboAppearance.hurt(bot);
             }
         } else if (event.getEntity() instanceof Player player && playing(player.getUniqueId()) && ourBot(event.getDamager()) && event.getCause() == EntityDamageEvent.DamageCause.ENTITY_ATTACK && live) {
             // A fully blocked sword swing does not break the combo.

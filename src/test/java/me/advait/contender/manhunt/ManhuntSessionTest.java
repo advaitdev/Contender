@@ -90,7 +90,38 @@ class ManhuntSessionTest {
             f.start(); var outsider = f.player("Director"); var attack = mock(EntityDamageByEntityEvent.class);
             when(attack.getEntity()).thenReturn(f.runner); when(attack.getDamager()).thenReturn(outsider); f.session.damage(attack); verify(attack).setCancelled(true);
             var death = mock(EntityDeathEvent.class); when(death.getEntity()).thenReturn(f.dragon); f.session.dragonDeath(death);
-            assertEquals(ManhuntRun.State.RUNNERS_WON, f.run.state()); verify(f.manager).completed();
+            assertEquals(ManhuntRun.State.RUNNERS_WON, f.run.state()); verify(f.manager).runnersWon();
+            verify(f.manager, never()).completed(); verify(f.manager, never()).finish(any(), anyBoolean());
+            var returnTask = f.env.scheduled.getLast(); assertEquals(200, returnTask.delay()); assertFalse(returnTask.repeating());
+            assertTrue(f.session.owns(f.runner.getUniqueId())); assertTrue(f.session.owns(f.hunter.getUniqueId()));
+            verify(f.manager, never()).restore(any()); verify(f.prepared, never()).freeze();
+            returnTask.run(); verify(f.manager).finish(ManhuntRun.State.RUNNERS_WON, false);
+        }
+    }
+    @Test void deathAnimationStartsTheWinDelayOnceAndDamageCannotChangeTheResult() {
+        try (var f = new Fixture()) {
+            f.start(); when(f.dragon.getDeathAnimationTicks()).thenReturn(1);
+            var tick = f.env.scheduled.get(1);
+            tick.run();
+            int tasks = f.env.scheduled.size();
+            tick.run();
+            var death = mock(EntityDeathEvent.class); when(death.getEntity()).thenReturn(f.dragon); f.session.dragonDeath(death);
+            assertEquals(tasks, f.env.scheduled.size()); verify(f.manager).runnersWon();
+            var fall = damage(f.runner, EntityDamageEvent.DamageCause.FALL); f.session.damage(fall); verify(fall).setCancelled(true);
+            var quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(f.runner); f.session.quit(quit);
+            assertEquals(ManhuntRun.State.RUNNERS_WON, f.run.state());
+            verify(f.manager, never()).completed(); verify(f.prepared, never()).freeze();
+        }
+    }
+    @Test void cancellingDuringTheDeathAnimationInvalidatesTheDelayedFinish() {
+        try (var f = new Fixture()) {
+            f.start(); when(f.dragon.getDeathAnimationTicks()).thenReturn(1);
+            f.env.scheduled.get(1).run(); var returnTask = f.env.scheduled.getLast();
+            f.session.disable();
+            verify(returnTask.task()).cancel();
+            returnTask.run();
+            verify(f.manager, never()).finish(any(), anyBoolean());
+            verify(f.manager).restore(f.runner); verify(f.manager).restore(f.hunter);
         }
     }
     @Test void kitHurtFlagsProtectHealthButVoidRemainsLethalAndHungerStaysFull() {

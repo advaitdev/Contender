@@ -148,6 +148,11 @@ public final class ManhuntManager extends AbstractGameState implements MinigameM
         }
     }
     void completed() { finish(current.state(), true); }
+    void runnersWon() {
+        try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save Manhunt result", failure); }
+        Bukkit.broadcast(Component.text("The runners win!", NamedTextColor.GREEN));
+        refresh();
+    }
     void finish(ManhuntRun.State result, boolean announce) {
         if (current == null && session == null) return;
         if (current != null) current.end(result);

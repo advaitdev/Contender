@@ -132,7 +132,13 @@ final class ManhuntSession extends AbstractGameState {
         player.getInventory().clear(); player.setFireTicks(0); player.setFallDistance(0);
         player.setGameMode(GameMode.SPECTATOR); player.setCollidable(collisions.getOrDefault(player.getUniqueId(), true));
     }
-    private void dragonDied() { if (run.dragonDied()) manager.completed(); }
+    private void dragonDied() {
+        if (!run.dragonDied()) return;
+        manager.runnersWon();
+        // Keep the world ticking while the dragon plays its death animation. Disabling this
+        // session cancels the delayed return too, including /cancelall during the celebration.
+        runLater(() -> guarded(() -> manager.finish(ManhuntRun.State.RUNNERS_WON, false)), 200);
+    }
     static Player attacker(Entity entity) {
         if (entity instanceof Player player) return player;
         if (entity instanceof Projectile projectile && projectile.getShooter() instanceof Player player) return player;

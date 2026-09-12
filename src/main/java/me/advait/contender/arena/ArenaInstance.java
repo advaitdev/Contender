@@ -12,6 +12,7 @@ public final class ArenaInstance {
     private final BlockBounds cell;
     private volatile Status status = Status.PREPARING;
     private volatile long resetRevision;
+    private boolean cleanForCache;
     private UUID reservation;
 
     public ArenaInstance(int slot, ArenaMap map, BlockBounds cell) {
@@ -24,9 +25,16 @@ public final class ArenaInstance {
     public BlockBounds cell() { return cell; }
     public Status status() { return status; }
     public boolean isReserved() { return reservation != null; }
+    boolean canCache() { return status == Status.READY && reservation == null && cleanForCache; }
+    void reuseSavedCopy() {
+        if (status != Status.PREPARING || reservation != null) throw new IllegalStateException("Arena copy is already in use.");
+        status = Status.READY;
+        cleanForCache = true;
+    }
     public ArenaLease acquire() {
         if (status != Status.READY || reservation != null) return null;
         reservation = UUID.randomUUID();
+        cleanForCache = false;
         status = Status.IN_USE;
         return new ArenaLease(this, reservation);
     }
@@ -41,17 +49,20 @@ public final class ArenaInstance {
         if (status == Status.FAILED) throw new IllegalStateException("This arena copy is waiting for an automatic reset.");
         long revision = ++resetRevision;
         status = Status.RESETTING;
+        cleanForCache = false;
         return revision;
     }
     boolean isReset(long revision) { return resetRevision == revision && status == Status.RESETTING; }
     boolean restored(long revision) {
         if (!isReset(revision)) return false;
         status = reservation == null ? Status.READY : Status.IN_USE;
+        cleanForCache = true;
         return true;
     }
     void failed(long revision) { if (isReset(revision)) failed(); }
     void failed() {
         status = Status.FAILED;
+        cleanForCache = false;
         resetRevision++;
     }
     public void release(ArenaLease lease) {

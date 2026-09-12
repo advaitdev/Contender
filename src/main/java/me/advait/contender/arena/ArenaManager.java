@@ -39,6 +39,7 @@ public final class ArenaManager {
     private final ArenaChunks chunks;
     private final Map<String, List<ArenaInstance>> pools = new LinkedHashMap<>();
     private final Map<String, Clipboard> clipboards = new HashMap<>();
+    private final Map<String, Boolean> templateCacheEligibility = new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<String> editing = new HashSet<>();
     private final Set<CompletableFuture<?>> pending = new HashSet<>();
     private final Map<String, CompletableFuture<Void>> preparing = new HashMap<>();
@@ -71,6 +72,7 @@ public final class ArenaManager {
         }
     }
     private World world;
+    private ArenaReadyCache readyCache;
     private boolean closed;
     private int spacing;
 
@@ -81,6 +83,19 @@ public final class ArenaManager {
     }
 
     public void initialize() {
+        if (readyCache == null) {
+            readyCache = new ArenaReadyCache(plugin.getDataFolder().toPath());
+            try { readyCache.consume(); }
+            catch (IOException failure) {
+                // An old record must not survive a running server that can change its copies.
+                try { readyCache.invalidate(); }
+                catch (IOException blocked) {
+                    blocked.addSuppressed(failure);
+                    throw new IllegalStateException("Could not invalidate arena-ready.yml before loading arenas.", blocked);
+                }
+                plugin.getLogger().log(Level.WARNING, "Could not read the saved arena readiness; copies will rebuild.", failure);
+            }
+        }
         String name = plugin.getConfig().getString("arenas.world", "contender_arenas");
         if (name.equals(plugin.getLobbyManager().getLobbyWorldName())
                 || maps.getMaps().stream().anyMatch(map -> map.getWorldName().equals(name))) {
@@ -113,11 +128,13 @@ public final class ArenaManager {
     public boolean hasPendingWork() { return !work.isDone() || !templateWork.isDone() || !editing.isEmpty() || pools.keySet().stream().anyMatch(this::isBusy); }
     public void reloadTemplates() {
         if (hasPendingWork()) throw new IllegalStateException("Wait for matches and arena preparation to finish.");
+        if (readyCache != null) readyCache.forget();
         pools.clear();
         retries.clear();
         failures.clear();
         clipboards.values().forEach(Clipboard::close);
         clipboards.clear();
+        templateCacheEligibility.clear();
         initialize();
     }
     public List<ArenaInstance> instances(String mapId) { return List.copyOf(pools.getOrDefault(mapId, List.of())); }
@@ -220,6 +237,7 @@ public final class ArenaManager {
             case "spectator" -> map.setSpectatorSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             default -> throw new IllegalArgumentException("Choose team 1, team 2, or spectator.");
         }
+        forgetReadyCopies(map);
         pools.remove(map.getId());
         maps.save(map);
         prepareSoon(map);
@@ -230,6 +248,7 @@ public final class ArenaManager {
         if (name.isBlank() || name.length() > 64) throw new IllegalArgumentException("Choose a map name between 1 and 64 characters.");
         map.setCopies(copies);
         map.setDisplayName(name.strip());
+        forgetReadyCopies(map);
         pools.remove(map.getId());
         maps.save(map);
         prepareSoon(map);
@@ -237,6 +256,7 @@ public final class ArenaManager {
 
     public CompletableFuture<Void> saveBlocks(ArenaMap map) {
         requireEditable(map);
+        forgetReadyCopies(map);
         editing.add(map.getId());
         pools.remove(map.getId());
         return capture(map).thenAccept(clipboard -> {
@@ -284,6 +304,7 @@ public final class ArenaManager {
             validateSpawn(map, map.getTeam2Point());
             if (map.getSpectatorPoint() != null) validateSpawn(map, map.getSpectatorPoint());
             List<ArenaInstance> pool = pools.get(map.getId());
+            List<ArenaInstance> reusable = new ArrayList<>();
             if (pool == null) {
                 int first = maps.allocateSlots(map);
                 pool = new ArrayList<>();
@@ -291,6 +312,16 @@ public final class ArenaManager {
                     pool.add(ArenaLayout.place(map, world.getName(), first + i, spacing, world.getMinHeight(), world.getMaxHeight()));
                 }
                 pools.put(map.getId(), pool);
+                if (readyCache != null) {
+                    for (ArenaInstance instance : pool) {
+                        try {
+                            if (empty(instance) && readyCache.reusable(map, instance, world, spacing)) reusable.add(instance);
+                        } catch (IOException failure) {
+                            plugin.getLogger().log(Level.WARNING, "Could not check saved arena copy " + instance.slot() + "; it will rebuild.", failure);
+                        }
+                    }
+                    forgetReadyCopies(map);
+                }
             }
             List<ArenaInstance> candidates = pool.stream().filter(instance -> !instance.isReserved())
                     .filter(instance -> restoring.containsKey(instance)
@@ -301,6 +332,11 @@ public final class ArenaManager {
             loadTemplate(map).thenCompose(clipboard -> {
                 if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
                 clipboards.put(map.getId(), clipboard);
+                // Cached copies still need a loaded template before any lease can later reset them.
+                if (cacheable(map)) {
+                    for (ArenaInstance instance : reusable) instance.reuseSavedCopy();
+                    if (!reusable.isEmpty()) plugin.getLogger().info("Reused " + reusable.size() + " saved arena copies for " + map.getId() + ".");
+                }
                 CompletableFuture<Void> attempts = CompletableFuture.completedFuture(null);
                 for (ArenaInstance instance : candidates) {
                     // Queue one copy per map at a time, allowing other maps to make progress.
@@ -353,10 +389,30 @@ public final class ArenaManager {
             return async(status, () -> {
                 try (var input = Files.newInputStream(schematicPath(map.getSchematic()));
                      var reader = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getReader(input)) {
-                    return reader.read();
+                    Clipboard clipboard = reader.read();
+                    classifyTemplate(map.getSchematic(), clipboard);
+                    return clipboard;
                 }
             });
         }).whenComplete((ignored, failure) -> progress.remove(map.getId(), status));
+    }
+
+    private void forgetReadyCopies(ArenaMap map) {
+        if (readyCache != null) readyCache.forget(map.getId());
+    }
+
+    private void classifyTemplate(String revision, Clipboard clipboard) {
+        if (revision == null || templateCacheEligibility.containsKey(revision)) return;
+        boolean cacheable = false;
+        try { cacheable = ArenaTemplateSafety.cacheable(clipboard); }
+        catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING, "Could not check template " + revision + " for restart reuse; its copies will rebuild.", failure);
+        }
+        templateCacheEligibility.put(revision, cacheable);
+    }
+
+    private boolean cacheable(ArenaMap map) {
+        return map.getSchematic() != null && Boolean.TRUE.equals(templateCacheEligibility.get(map.getSchematic()));
     }
 
     private boolean needsRepair(ArenaInstance instance) {
@@ -570,6 +626,7 @@ public final class ArenaManager {
                             clipboard.removeEntity(entity);
                         }
                     }
+                    classifyTemplate(fileName, clipboard);
                     Path path = schematicPath(fileName);
                     Files.createDirectories(path.getParent());
                     try (var output = Files.newOutputStream(path);
@@ -653,13 +710,44 @@ public final class ArenaManager {
         });
     }
     public void shutdown() {
+        if (closed) return;
         closed = true;
         if (maintenance != null) maintenance.cancel();
         scheduledPreparation.clear();
         chunks.close();
+        saveReadyCopies();
         pools.values().forEach(pool -> pool.forEach(ArenaInstance::failed));
         for (CompletableFuture<?> future : new ArrayList<>(pending)) future.cancel(false);
         pending.clear();
         // Active FAWE work may still reference a clipboard; do not close it during a paste.
+    }
+
+    private void saveReadyCopies() {
+        if (readyCache == null || world == null) return;
+        if (!plugin.getServer().isStopping()) {
+            try { readyCache.invalidate(); }
+            catch (IOException failure) { plugin.getLogger().log(Level.WARNING, "Could not invalidate arena readiness after plugin disable.", failure); }
+            return;
+        }
+        try {
+            List<ArenaReadyCache.Entry> saved = new ArrayList<>();
+            for (ArenaMap map : maps.getMaps()) {
+                if (isEditing(map.getId()) || !cacheable(map)) continue;
+                for (ArenaInstance instance : instances(map.getId())) {
+                    if (instance.canCache() && !restoring.containsKey(instance) && empty(instance)) {
+                        try { saved.add(readyCache.entry(map, instance, world, spacing)); }
+                        catch (IOException failure) {
+                            plugin.getLogger().log(Level.WARNING, "Could not cache arena copy " + instance.slot() + "; it will rebuild next startup.", failure);
+                        }
+                    }
+                }
+            }
+            // Flush chunk/entity writes before publishing a cache that will skip their next paste.
+            // Active and partially pasted copies were excluded above and always rebuild after a restart.
+            if (!saved.isEmpty()) world.save(true);
+            readyCache.write(saved);
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING, "Could not save arena readiness; copies will rebuild next startup.", failure);
+        }
     }
 }

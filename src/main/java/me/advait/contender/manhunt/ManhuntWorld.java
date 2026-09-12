@@ -5,6 +5,7 @@ import me.advait.contender.util.YamlStorage;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.*;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 import java.io.File;
 import java.util.*;
@@ -14,16 +15,20 @@ import java.util.function.BooleanSupplier;
 /** Creates only uniquely named, owned End worlds. Used worlds are never silently reused or deleted. */
 final class ManhuntWorld {
     enum State { EMPTY, PREPARING, READY, USED, FAILED }
+    private static final NamespacedKey FROZEN_GRAVITY = new NamespacedKey("contender", "manhunt_frozen_gravity");
+    private static final NamespacedKey FROZEN_AI = new NamespacedKey("contender", "manhunt_frozen_ai");
     private record Frozen(Entity entity, Location location, boolean gravity, Boolean ai) { }
     private final Contender plugin;
     private final File file;
     private final Set<Chunk> tickets = new HashSet<>();
     private final Map<UUID, Frozen> frozen = new HashMap<>();
+    private final Set<CompletableFuture<Void>> entityLoads = new HashSet<>();
     private final List<List<Location>> pillars = new ArrayList<>();
     private State state = State.EMPTY;
     private String name;
     private World world;
     private boolean freezing;
+    private boolean loadedPreparedWorld;
     private long generation;
 
     ManhuntWorld(Contender plugin) { this.plugin = plugin; file = new File(plugin.getDataFolder(), "manhunt-world.yml"); }
@@ -49,12 +54,14 @@ final class ManhuntWorld {
         if (state != State.READY) return CompletableFuture.completedFuture(null);
         String folder = yaml.getString("folder");
         if (folder == null || !new File(folder).isDirectory()) { state = State.FAILED; save(); return CompletableFuture.completedFuture(null); }
+        loadedPreparedWorld = true;
         return load(valid);
     }
     CompletableFuture<Void> prepare(BooleanSupplier valid) {
         if (state == State.PREPARING) throw new IllegalStateException("The End is still being prepared.");
         if (world != null && !world.getPlayers().isEmpty()) throw new IllegalStateException("Everyone must leave the previous End world first.");
         close();
+        loadedPreparedWorld = false;
         name = "contender_manhunt_" + UUID.randomUUID().toString().replace("-", "");
         return load(valid);
     }
@@ -85,12 +92,15 @@ final class ManhuntWorld {
                 return CompletableFuture.allOf(loads);
             });
         }
-        return chain.thenRun(() -> {
+        return chain.thenCompose(ignored -> awaitEntities(current)).thenRun(() -> {
             if (!current.getAsBoolean()) throw new IllegalStateException("End preparation stopped.");
             findPillars();
             if (pillars.isEmpty()) throw new IllegalStateException("No obsidian pillars were found in the End.");
             // This dragon gives preparation a real, frozen target even before a player activates the native battle.
-            if (world.getEntitiesByClass(EnderDragon.class).isEmpty()) world.spawn(new Location(world, 0, 110, 0), EnderDragon.class);
+            if (world.getEntitiesByClass(EnderDragon.class).isEmpty()) {
+                EnderDragon dragon = world.spawn(new Location(world, 0, 110, 0), EnderDragon.class);
+                dragon.setPhase(EnderDragon.Phase.CIRCLING);
+            }
             freezeTick(); world.save(); state = State.READY; save();
         }).whenComplete((ignored, failure) -> {
             if (failure != null && generation == expectedGeneration) {
@@ -98,6 +108,21 @@ final class ManhuntWorld {
                 try { save(); } finally { releaseTickets(); }
             }
         });
+    }
+    private CompletableFuture<Void> awaitEntities(BooleanSupplier valid) {
+        if (!valid.getAsBoolean()) return CompletableFuture.failedFuture(new IllegalStateException("End preparation stopped."));
+        if (tickets.stream().allMatch(Chunk::isEntitiesLoaded)) return CompletableFuture.completedFuture(null);
+        var ready = new CompletableFuture<Void>();
+        entityLoads.add(ready);
+        int[] waited = {0};
+        // Block chunk futures can finish before saved entities arrive. Do not spawn a second dragon then.
+        var task = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            if (!valid.getAsBoolean()) ready.completeExceptionally(new IllegalStateException("End preparation stopped."));
+            else if (tickets.stream().allMatch(Chunk::isEntitiesLoaded)) ready.complete(null);
+            else if (++waited[0] >= 1200) ready.completeExceptionally(new IllegalStateException("The End's entities took too long to load. Prepare the End again."));
+        }, 1, 1);
+        ready.whenComplete((ignored, failure) -> { task.cancel(); entityLoads.remove(ready); });
+        return ready;
     }
     void use() {
         if (!ready()) throw new IllegalStateException("Prepare a fresh End world in Setup Tools first.");
@@ -138,8 +163,22 @@ final class ManhuntWorld {
     void freeze() { freezing = true; freezeTick(); }
     void freezeEntity(Entity entity) {
         if (!freezing || entity instanceof Player || frozen.containsKey(entity.getUniqueId())) return;
-        Boolean ai = entity instanceof LivingEntity living ? living.hasAI() : null;
-        frozen.put(entity.getUniqueId(), new Frozen(entity, entity.getLocation(), entity.hasGravity(), ai));
+        var data = entity.getPersistentDataContainer();
+        Byte savedGravity = data.get(FROZEN_GRAVITY, PersistentDataType.BYTE);
+        Byte savedAi = data.get(FROZEN_AI, PersistentDataType.BYTE);
+        boolean gravity = savedGravity != null ? savedGravity != 0 : entity.hasGravity();
+        Boolean ai = entity instanceof LivingEntity living ? savedAi != null ? savedAi != 0 : living.hasAI() : null;
+        // Older prepared Ends saved disabled flags without recording their originals.
+        // Only repair that exact state in a reloaded, owned End, leaving tagged values intact.
+        if (loadedPreparedWorld && savedGravity == null && savedAi == null
+                && entity instanceof Mob && !gravity && Boolean.FALSE.equals(ai)) {
+            gravity = true;
+            ai = true;
+        }
+        frozen.put(entity.getUniqueId(), new Frozen(entity, entity.getLocation(), gravity, ai));
+        // Keep the originals with the entity, so a save or crash during preparation cannot lose them.
+        data.set(FROZEN_GRAVITY, PersistentDataType.BYTE, (byte) (gravity ? 1 : 0));
+        if (ai != null) data.set(FROZEN_AI, PersistentDataType.BYTE, (byte) (ai ? 1 : 0));
         entity.setVelocity(new Vector()); entity.setGravity(false);
         if (entity instanceof LivingEntity living) living.setAI(false);
     }
@@ -156,11 +195,21 @@ final class ManhuntWorld {
         for (var saved : frozen.values()) if (saved.entity().isValid()) {
             saved.entity().setGravity(saved.gravity());
             if (saved.ai() != null && saved.entity() instanceof LivingEntity living) living.setAI(saved.ai());
+            var data = saved.entity().getPersistentDataContainer();
+            data.remove(FROZEN_GRAVITY);
+            data.remove(FROZEN_AI);
+            // Plugin-spawned dragons begin in HOVER, which never transitions on its own.
+            if (saved.entity() instanceof EnderDragon dragon && !dragon.isDead()
+                    && dragon.getPhase() == EnderDragon.Phase.HOVER) dragon.setPhase(EnderDragon.Phase.CIRCLING);
         }
         frozen.clear();
+        loadedPreparedWorld = false;
         if (world != null) { world.setGameRule(GameRules.RANDOM_TICK_SPEED, 3); world.setGameRule(GameRules.SPAWN_MOBS, true); }
     }
-    private void releaseTickets() { tickets.forEach(c -> c.removePluginChunkTicket(plugin)); tickets.clear(); }
+    private void releaseTickets() {
+        for (var pending : List.copyOf(entityLoads)) pending.completeExceptionally(new IllegalStateException("End preparation stopped."));
+        tickets.forEach(c -> c.removePluginChunkTicket(plugin)); tickets.clear();
+    }
     void cancelPreparation() {
         generation++;
         if (state != State.PREPARING) return;

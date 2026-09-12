@@ -1,6 +1,7 @@
 package me.advait.contender.manhunt;
 
 import me.advait.contender.Contender;
+import io.papermc.paper.registry.RegistryAccess;
 import org.bukkit.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,12 +20,20 @@ class ManhuntWorldCancellationTest {
         List<CompletableFuture<Chunk>> firstLoads = new ArrayList<>(), nextLoads = new ArrayList<>();
         when(first.getChunkAtAsync(anyInt(), anyInt(), eq(true))).thenAnswer(call -> pending(firstLoads));
         when(next.getChunkAtAsync(anyInt(), anyInt(), eq(true))).thenAnswer(call -> pending(nextLoads));
-        try (var bukkit = mockStatic(Bukkit.class);
+        try (var registries = mockStatic(RegistryAccess.class);
+             var bridges = mockStatic(io.papermc.paper.InternalAPIBridge.class);
+             var bukkit = mockStatic(Bukkit.class);
              var creators = mockConstruction(WorldCreator.class, (creator, context) -> {
                  when(creator.environment(World.Environment.THE_END)).thenReturn(creator);
                  when(creator.generateStructures(true)).thenReturn(creator);
                  when(creator.createWorld()).thenReturn(context.getCount() == 1 ? first : next);
              })) {
+            registries.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
+            bridges.when(io.papermc.paper.InternalAPIBridge::get).thenReturn(mock(io.papermc.paper.InternalAPIBridge.class));
+            var gameRules = Registry.GAME_RULE;
+            Map<net.kyori.adventure.key.Key, GameRule<?>> rules = new HashMap<>();
+            doAnswer(call -> rules.computeIfAbsent(call.getArgument(0), key -> mock(GameRule.class)))
+                    .when(gameRules).getOrThrow(any(net.kyori.adventure.key.Key.class));
             var prepared = new ManhuntWorld(plugin);
             var oldPreparation = prepared.prepare(() -> true);
             assertEquals(8, firstLoads.size());

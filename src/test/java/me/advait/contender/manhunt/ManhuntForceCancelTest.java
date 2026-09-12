@@ -74,6 +74,27 @@ class ManhuntForceCancelTest {
         }
     }
 
+    @Test void runnersWinIsSavedAndAnnouncedBeforeTheDelayedWorldCleanup() throws Exception {
+        try (var f = new Fixture()) {
+            f.run.countdown(); f.run.start(); f.run.dragonDied();
+            var session = mock(ManhuntSession.class); set(f.manager, "session", session);
+            when(f.world.state()).thenReturn(ManhuntWorld.State.USED);
+
+            f.manager.runnersWon();
+
+            assertTrue(f.manager.active()); assertTrue(f.manager.busy());
+            assertEquals(ManhuntRun.State.RUNNERS_WON, new ManhuntStore(folder.toFile()).load().state());
+            verify(session, never()).disable(); verify(f.world, never()).freeze();
+            var message = net.kyori.adventure.text.Component.text("The runners win!", net.kyori.adventure.text.format.NamedTextColor.GREEN);
+            f.bukkit.verify(() -> Bukkit.broadcast(message));
+
+            f.manager.finish(ManhuntRun.State.RUNNERS_WON, false);
+
+            assertFalse(f.manager.active()); verify(session).disable(); verify(f.world).freeze();
+            f.bukkit.verify(() -> Bukkit.broadcast(message), times(1));
+        }
+    }
+
     private final class Fixture implements AutoCloseable {
         final Contender plugin = mock(Contender.class);
         final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);

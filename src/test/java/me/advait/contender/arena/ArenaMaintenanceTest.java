@@ -20,12 +20,140 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ArenaMaintenanceTest {
+    @Test void cleanCachedCopiesSkipPastingAndKeepTheirTemplateForLaterResets() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            assertDoesNotThrow(() -> f.manager.prepare(f.map).join());
+
+            assertEquals(2, f.manager.available("course"));
+            assertTrue(f.pastes.isEmpty());
+            ArenaLease lease = f.manager.acquire("course");
+            var reset = f.manager.reset(lease);
+            assertEquals(1, f.pastes.size(), "A reused copy still has a loaded template for reset");
+            f.pastes.getLast().complete(null);
+            assertDoesNotThrow(reset::join);
+            f.manager.release(lease);
+            assertEquals(2, f.manager.available("course"));
+        }
+    }
+
+    @Test void missingCopyChunksRebuildWithoutDiscardingOtherCachedCopies() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(false);
+            var preparation = f.manager.prepare(f.map);
+            assertEquals(1, f.manager.available("course"));
+            assertEquals(1, f.pastes.size());
+            assertFalse(preparation.isDone());
+            f.pastes.getLast().complete(null);
+            assertDoesNotThrow(preparation::join);
+            assertEquals(2, f.manager.available("course"));
+        }
+    }
+
+    @Test void cachedCopiesCannotBeLeasedUntilTheirTemplateLoads() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            f.clipboards.clear();
+            field(f.manager, "templateWork", new CompletableFuture<Void>());
+
+            var preparation = f.manager.prepare(f.map);
+
+            assertFalse(preparation.isDone());
+            assertEquals(0, f.manager.available("course"));
+            assertNull(f.manager.acquire("course"));
+            assertTrue(f.pastes.isEmpty());
+        }
+    }
+
+    @Test void dynamicOrUnclassifiedTemplatesRebuildInsteadOfUsingSavedCopies() throws Exception {
+        for (Boolean eligibility : new Boolean[]{false, null}) {
+            try (Fixture f = new Fixture()) {
+                f.installCache(true);
+                if (eligibility == null) f.eligibility.clear();
+                else f.eligibility.put(f.map.getSchematic(), eligibility);
+
+                var preparation = f.manager.prepare(f.map);
+
+                assertEquals(0, f.manager.available("course"));
+                assertEquals(1, f.pastes.size());
+                f.pastes.getFirst().complete(null);
+                f.pastes.getLast().complete(null);
+                assertDoesNotThrow(preparation::join);
+                assertEquals(2, f.manager.available("course"));
+            }
+        }
+    }
+
+    @Test void dynamicTemplatesNeverPublishReusableEntriesEvenWhenReady() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            f.manager.prepare(f.map).join();
+            f.eligibility.put(f.map.getSchematic(), false);
+            when(f.server.server.isStopping()).thenReturn(true);
+
+            f.manager.shutdown();
+
+            var yaml = YamlConfiguration.loadConfiguration(f.directory.resolve("arena-ready.yml").toFile());
+            assertTrue(yaml.getMapList("copies").isEmpty());
+            verify(f.world, never()).save(anyBoolean());
+        }
+    }
+
+    @Test void orderlyShutdownFlushesBeforePublishingOnlyCleanCopies() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            f.manager.prepare(f.map).join();
+            ArenaLease dirty = f.manager.acquire("course");
+            f.manager.release(dirty);
+            when(f.server.server.isStopping()).thenReturn(true);
+            doAnswer(call -> {
+                assertFalse(Files.exists(f.directory.resolve("arena-ready.yml")), "Cache publication follows the completed flush");
+                return null;
+            }).when(f.world).save(true);
+
+            f.manager.shutdown();
+
+            verify(f.world).save(true);
+            var yaml = YamlConfiguration.loadConfiguration(f.directory.resolve("arena-ready.yml").toFile());
+            assertEquals(1, yaml.getMapList("copies").size());
+            assertEquals(1, yaml.getMapList("copies").getFirst().get("slot"));
+        }
+    }
+
+    @Test void pluginDisableWhileServerRunsDoesNotPublishAReusableCache() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            f.manager.prepare(f.map).join();
+
+            f.manager.shutdown();
+
+            verify(f.world, never()).save(anyBoolean());
+            assertFalse(Files.exists(f.directory.resolve("arena-ready.yml")));
+        }
+    }
+
+    @Test void failedWorldFlushLeavesNoCacheForNextStartup() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.installCache(true);
+            f.manager.prepare(f.map).join();
+            when(f.server.server.isStopping()).thenReturn(true);
+            doThrow(new IllegalStateException("Disk unavailable")).when(f.world).save(true);
+
+            assertDoesNotThrow(f.manager::shutdown);
+
+            assertFalse(Files.exists(f.directory.resolve("arena-ready.yml")));
+        }
+    }
+
     @Test void startupPreparesSavedMapsAndRegistersMaintenanceUntilShutdown() throws Exception {
         try (var registries = mockStatic(io.papermc.paper.registry.RegistryAccess.class);
              var bridges = mockStatic(io.papermc.paper.InternalAPIBridge.class);
@@ -291,6 +419,10 @@ class ArenaMaintenanceTest {
         final List<CompletableFuture<Void>> pastes = new ArrayList<>();
         final org.mockito.MockedConstruction<ArenaChunks> chunks;
         final ArenaManager manager;
+        final Path directory = Files.createTempDirectory("contender-arena-maintenance-");
+        final Path worldFolder = Files.createDirectories(directory.resolve("world"));
+        final Map<String, Clipboard> clipboards;
+        final Map<String, Boolean> eligibility;
 
         @SuppressWarnings("unchecked") Fixture() throws Exception {
             chunks = mockConstruction(ArenaChunks.class, (loading, context) -> doAnswer(call -> {
@@ -299,11 +431,14 @@ class ArenaMaintenanceTest {
                 return paste;
             }).when(loading).run(any(), any(), any()));
             manager = new ArenaManager(server.plugin, maps);
+            when(server.plugin.getDataFolder()).thenReturn(directory.toFile());
             when(server.plugin.getName()).thenReturn("Contender");
             when(server.plugin.namespace()).thenReturn("contender");
             when(server.plugin.getConfig()).thenReturn(new YamlConfiguration());
             when(server.plugin.getLogger()).thenReturn(Logger.getAnonymousLogger());
             when(world.getName()).thenReturn("contender_arenas");
+            when(world.getUID()).thenReturn(UUID.randomUUID());
+            when(world.getWorldFolder()).thenReturn(worldFolder.toFile());
             when(world.getMinHeight()).thenReturn(-64);
             when(world.getMaxHeight()).thenReturn(320);
             when(world.getPersistentDataContainer()).thenReturn(mock(PersistentDataContainer.class));
@@ -312,13 +447,32 @@ class ArenaMaintenanceTest {
             map.setTeam1Spawn(2, 2, 2, 0, 0);
             map.setTeam2Spawn(12, 2, 12, 0, 0);
             map.setCopies(2);
+            map.setSchematic("course-original.schem");
+            Files.createDirectories(directory.resolve("maps"));
+            Files.writeString(directory.resolve("maps/course-original.schem"), "saved template");
             when(maps.getMaps()).thenReturn(List.of(map));
             when(maps.getMap("course")).thenReturn(map);
             field(manager, "world", world);
             field(manager, "spacing", 1024);
-            var clipboards = ArenaManager.class.getDeclaredField("clipboards");
-            clipboards.setAccessible(true);
-            ((Map<String, Clipboard>) clipboards.get(manager)).put("course", mock(Clipboard.class));
+            var stored = ArenaManager.class.getDeclaredField("clipboards");
+            stored.setAccessible(true);
+            clipboards = (Map<String, Clipboard>) stored.get(manager);
+            clipboards.put("course", mock(Clipboard.class));
+            var eligibilityField = ArenaManager.class.getDeclaredField("templateCacheEligibility");
+            eligibilityField.setAccessible(true);
+            eligibility = (Map<String, Boolean>) eligibilityField.get(manager);
+        }
+
+        void installCache(boolean secondHasChunks) throws Exception {
+            ArenaReadyCache cache = new ArenaReadyCache(directory);
+            ArenaInstance first = ArenaLayout.place(map, world.getName(), 0, 1024, -64, 320);
+            ArenaInstance second = ArenaLayout.place(map, world.getName(), 1, 1024, -64, 320);
+            ArenaReadyCacheTest.writeChunks(worldFolder, first.map().getBounds());
+            if (secondHasChunks) ArenaReadyCacheTest.writeChunks(worldFolder, second.map().getBounds());
+            cache.write(List.of(cache.entry(map, first, world, 1024), cache.entry(map, second, world, 1024)));
+            cache.consume();
+            field(manager, "readyCache", cache);
+            eligibility.put(map.getSchematic(), true);
         }
 
         void prepareAll() {
@@ -332,6 +486,9 @@ class ArenaMaintenanceTest {
             manager.shutdown();
             chunks.close();
             server.close();
+            try (var paths = Files.walk(directory)) {
+                for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            } catch (java.io.IOException failure) { throw new AssertionError(failure); }
         }
     }
 

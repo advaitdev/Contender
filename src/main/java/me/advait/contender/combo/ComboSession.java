@@ -123,7 +123,6 @@ final class ComboSession extends AbstractGameState {
             Objects.requireNonNull(entity.getAttribute(Attribute.MAX_HEALTH)).setBaseValue(1024); entity.setHealth(1024);
             entity.getEquipment().setItemInMainHand(new ItemStack(Material.DIAMOND_SWORD));
             entity.getEquipment().setArmorContents(Arrays.stream(kit.getArmor()).map(i -> i == null ? null : i.clone()).toArray(ItemStack[]::new));
-            entity.getEquipment().setItemInMainHandDropChance(0);
             var resistance = entity.getAttribute(Attribute.KNOCKBACK_RESISTANCE); if (resistance != null) resistance.setBaseValue(0);
         });
         motion = new MannequinMotion(bot);

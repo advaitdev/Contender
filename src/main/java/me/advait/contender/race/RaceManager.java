@@ -162,7 +162,7 @@ public final class RaceManager extends AbstractGameState {
     void failed(Throwable failure) {
         contender.getLogger().log(Level.SEVERE, "Mace Race stopped", failure);
         Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("contender.master"))
-                .forEach(p -> Dialogs.tell(p, "Mace Race stopped: " + rootMessage(failure)));
+                .forEach(p -> Dialogs.error(p, "Mace Race stopped: " + rootMessage(failure)));
         end(RaceRun.State.INTERRUPTED);
     }
     public void withdraw(UUID id) {

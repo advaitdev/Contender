@@ -163,7 +163,7 @@ public final class ComboManager extends AbstractGameState implements MinigameMod
     }
     void failed(Throwable failure) {
         contender.getLogger().log(Level.SEVERE, "Combo stopped", failure);
-        Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("contender.master")).forEach(p -> Dialogs.tell(p, "Combo stopped: " + message(failure)));
+        Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("contender.master")).forEach(p -> Dialogs.error(p, "Combo stopped: " + message(failure)));
         end(ComboRun.State.INTERRUPTED);
     }
     public static String message(Throwable error) { while (error.getCause() != null) error = error.getCause(); return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage(); }

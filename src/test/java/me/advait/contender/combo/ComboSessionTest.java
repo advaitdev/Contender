@@ -4,16 +4,20 @@ import me.advait.contender.Contender;
 import me.advait.contender.arena.*;
 import me.advait.contender.game.AbstractGameState;
 import me.advait.contender.map.*;
+import io.papermc.paper.registry.RegistryAccess;
 import org.bukkit.*;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.scheduler.*;
 import org.junit.jupiter.api.*;
 import org.mockito.MockedStatic;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -57,6 +61,56 @@ class ComboSessionTest {
         when(event.getDamager()).thenReturn(attacker); when(event.getEntity()).thenReturn(victim);
         when(event.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_ATTACK); when(event.getDamage()).thenReturn(7.0);
         return event;
+    }
+    @Test void turnSetupAndRetryWorkWithMannequinEquipmentRestrictions() throws Exception {
+        try (var access = mockStatic(RegistryAccess.class);
+             var items = mockConstruction(ItemStack.class);
+             var motions = mockConstruction(MannequinMotion.class)) {
+            access.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
+            // Initialize Bukkit's attribute registry before the spawn callback uses Attribute constants.
+            var attributes = Registry.ATTRIBUTE;
+            doAnswer(call -> mock(org.bukkit.attribute.Attribute.class)).when(attributes)
+                    .getOrThrow(any(net.kyori.adventure.key.Key.class));
+            var equipment = mock(EntityEquipment.class, call -> {
+                if (call.getMethod().getName().startsWith("set") && call.getMethod().getName().endsWith("DropChance"))
+                    throw new UnsupportedOperationException("Cannot set drop chance for non-Mob entity");
+                return RETURNS_DEFAULTS.answer(call);
+            });
+            Mannequin spawned = mock(Mannequin.class);
+            when(spawned.getUniqueId()).thenReturn(UUID.randomUUID());
+            when(spawned.getEquipment()).thenReturn(equipment);
+            when(spawned.getAttribute(any())).thenReturn(mock(AttributeInstance.class));
+            when(player.teleport(any(Location.class))).thenReturn(true);
+            var kit = mock(me.advait.contender.kit.Kit.class);
+            ItemStack helmet = mock(ItemStack.class), helmetCopy = mock(ItemStack.class);
+            when(helmet.clone()).thenReturn(helmetCopy);
+            when(kit.getArmor()).thenReturn(new ItemStack[]{null, null, null, helmet});
+            when(manager.requireSwordKit(run.kitId())).thenReturn(kit);
+            when(world.spawn(any(Location.class), eq(Mannequin.class), org.mockito.ArgumentMatchers.<Consumer<Mannequin>>any())).thenAnswer(call -> {
+                Consumer<Mannequin> setup = call.getArgument(2);
+                setup.accept(spawned);
+                return spawned;
+            });
+            Method reset = ComboSession.class.getDeclaredMethod("resetPositions", Player.class);
+            reset.setAccessible(true);
+
+            assertDoesNotThrow(() -> reset.invoke(session, player));
+            assertSame(spawned, get(session, "bot"));
+            assertFalse((boolean) get(session, "live"));
+            verify(equipment).setArmorContents(new ItemStack[]{null, null, null, helmetCopy});
+            verify(spawned).setHealth(1024);
+
+            field(session, "live", true);
+            run.hit(player.getUniqueId());
+            session.score(hit(spawned, player));
+            assertDoesNotThrow(() -> queued.getLast().run());
+            assertEquals(0, run.hits());
+            assertFalse(run.entries().getFirst().done());
+            assertFalse((boolean) get(session, "live"));
+            verify(kit, times(2)).apply(player);
+            verify(equipment, times(2)).setItemInMainHand(any(ItemStack.class));
+            assertEquals(2, motions.constructed().size());
+        }
     }
     @Test void actualSwordHitStartsTheIdleBotWithoutRemovingNativeHitDamage() throws Exception {
         var event = hit(player, bot); session.damage(event); session.score(event);

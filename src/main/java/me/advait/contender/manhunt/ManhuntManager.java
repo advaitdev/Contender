@@ -129,7 +129,7 @@ public final class ManhuntManager extends AbstractGameState implements MinigameM
     }
     void failed(Throwable failure) {
         contender.getLogger().log(Level.SEVERE, "Manhunt stopped", failure);
-        Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("contender.master")).forEach(p -> Dialogs.tell(p, "Manhunt stopped: " + failure.getMessage()));
+        Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("contender.master")).forEach(p -> Dialogs.error(p, "Manhunt stopped: " + failure.getMessage()));
         finish(ManhuntRun.State.INTERRUPTED, false);
     }
     @Override public void withdraw(UUID id) {

@@ -1,6 +1,6 @@
 # Contender
 
-Contender runs duels, round-robin tournaments, and Mace Race on Paper 26.2 with Java 25 or newer. FastAsyncWorldEdit is required. Spectator allays are built in. Simple Voice Chat provides voice controls when installed.
+Contender runs duels, round-robin tournaments, and Mace Race on Paper 26.2 with Java 25 or newer. FastAsyncWorldEdit is required. Spectator allays are built in. Simple Voice Chat runs independently when installed.
 
 Text uses Minecraft's default font. Dialog icons use built-in sprites and player heads. No custom resource pack is required.
 
@@ -12,7 +12,7 @@ Only contestants can enter duels, tournaments, or community votes. Eliminate a p
 
 The separate deceased status and `/deceased` command have been removed. Existing entries in `spectators.yml` are imported into spectator roles once, while director assignments are preserved. The old file remains as a backup. Role assignments survive restarts and are applied when players join or return to the lobby.
 
-`/options` opens a Minecraft Dialog. Admins can edit the director and spectator prefixes and choose their prefix/name color from the Minecraft colors. Changes apply to everyone with that role and are saved in `config.yml`. The default tags are gold `[Director]` and gray `[Spectator]`. **Chat & Voice** and **PvP Settings** open dialogs from the same menu and require `contender.admin`. Chat controls are grouped into Lobby, Contestants, Spectators, and Admin Bypass. Each form has a Back / Save row; Back discards unsaved edits. Voice settings use Simple Voice Chat. Settings continue to use `chat_settings.yml` and `pvp_settings.yml`.
+`/options` opens a Minecraft Dialog. Admins can edit the director and spectator prefixes and choose their prefix/name color from the Minecraft colors. Changes apply to everyone with that role and are saved in `config.yml`. The default tags are gold `[Director]` and gray `[Spectator]`. **Chat & Voice** and **PvP Settings** open dialogs from the same menu and require `contender.admin`. Chat controls are grouped into Lobby, Contestants, Spectators, and Admin Bypass. Each form has a Back / Save row; Back discards unsaved edits. Saved Contender voice controls are inactive; Simple Voice Chat uses its own settings. Settings continue to use `chat_settings.yml` and `pvp_settings.yml`.
 
 Contestants' nametags show their strongest MCTiers rating across all modes. Strength is ordered `HT1`, `LT1`, `HT2`, `LT2`, and so on through `LT5`. Retired ratings use their peak tier when available and compete equally with active ratings; a retired HT1 beats an active HT2. An exact tie prefers the active rating. Retired tags have a light gray `(R)` immediately before the tier, while the tier keeps Tierer's original color. Directors and spectators display their configured role tag instead. Spectator allays use the same formatted names.
 
@@ -151,11 +151,9 @@ Directors receive a compass in the lobby. Players in native Spectator mode can o
 
 ## Voice chat
 
-Simple Voice Chat is optional. Directors, assigned spectators, visitors watching a match, and players who died in the current round share a private voice channel across the server. Living contestants and lobby contestants cannot hear it. After the next round starts, revived players return to normal voice routing. Contender uses roles and duel status; allays use Adventure mode with flight, and native Spectator mode is not required for this routing.
+Simple Voice Chat is optional and handles audio normally through its own proximity, group, and client settings. Contender's voice integration is disabled: it does not filter or forward voice packets, mute or deafen players, or create a private spectator voice channel. Spectators use normal Simple Voice Chat behavior too.
 
-Open `/options` → **Chat & Voice** → **Spectators**. Set **Speaking in Voice Chat** and **Hearing Voice Chat** to **Allowed** so spectators can talk together. **Hear the Match** lets them also hear the living players in the duel they are watching; it is enabled by default. Match audio and the spectator channel are not limited by proximity. Living players keep Simple Voice Chat's normal proximity/group behavior. Their saved mute settings still apply.
-
-The old defaults muted and deafened every spectator, which caused the automatic "muted by an admin" and "deafened by an admin" messages after death. On the first upgrade, configurations with both old spectator restrictions enabled switch them off for the private channel. Later manual changes are preserved. Death no longer sends those messages. **Admin Bypass** can bypass manual mute/deafen settings, but never lets spectator speech reach living players. Settings are stored in `chat_settings.yml`, including `spectators-hear-match`.
+Configure audio through Simple Voice Chat. Voice options under `/options` → **Chat & Voice** remain saved in `chat_settings.yml`, including **Hear the Match**, but have no effect. The dialogs show this notice. Game chat controls still apply to the lobby, contestants, and spectators.
 
 ## Community votes
 
@@ -170,7 +168,7 @@ The old defaults muted and deafened every spectator, which caused the automatic 
 - `/endduel`: end the match you are in or watching and record its current score.
 - `/cancelduel Alice`: immediately cancel the match Alice is in or watching without recording a result. Omit the name to cancel your own current match. Requires `contender.master`; console can use it with a player name. For tournament matches, new matches are paused and the cancelled pairing returns to the queue after cleanup. Resume through `/tournament` when you want it replayed.
 - `/contender reload`: reload settings and prepare map pools again. Wait for active duels and arena work to finish first. The tournament stays paused until resumed.
-- `/contender voice [player]`: inspect an online player's voice connection, channel, mute settings, permissions, and packet counts. Defaults to yourself; console requires a name. Speak for a few seconds, then check both the speaker and listener. Counts show what reached Contender and what it allowed or blocked; they do not prove client playback. Earlier plugins or missing speaking permissions can prevent packets from reaching Contender at all. No audio is recorded. This command only reads status and is safe during games.
+- `/contender voice [player]`: reports that Contender's voice controls are disabled and shows the player's Simple Voice Chat permissions. Defaults to yourself; console requires a name. Contender does not collect voice packet counts while its integration is disabled. The command does not change settings.
 
 Arena and tournament management require `contender.master` (operators by default). Anyone can open `/spectate`.
 
@@ -182,7 +180,7 @@ Cancellation returns participants to the lobby and resets tab and the board. Sav
 
 ## Build
 
-The prebuilt plugin is [`dist/Contender-v1.8.18.jar`](dist/Contender-v1.8.18.jar). Run `mvn verify` to build it from source; the output is `target/Contender-v1.8.18.jar`. The tests cover role migration, game modes, eligibility, offline roster lookup, tier ordering and retirement, lookup caching, nametag updates, state cleanup, spectator visibility (including self-view), full and shortened round-robin schedules, roster validation, saved results, arena reservations, and concurrent duel ownership. Lobby tests cover building permissions, saved spawn selection, missing worlds, cancelled teleports, and joining while a duel starts. Dialog tests cover button placement, navigation, preserving form edits and round limits, title previews, regular font styling, saved lobby/chat/PvP controls, and stale vote callbacks. Tab tests also cover pagination through all rounds, disconnected profiles, shared ranks, score alignment, and restoring the normal list. Tests also cover countdown cleanup, hurt-kit persistence and damage handling, sumo falls, spectator voice routing, and legacy mute settings. Live Paper testing is still needed for voice audio, knockback behavior, login behavior alongside other plugins, profile lookup against the account service, WorldEdit entity copying, Dialog layout, and the appearance of nametags and the tournament board.
+The prebuilt plugin is [`dist/Contender-v1.8.19.jar`](dist/Contender-v1.8.19.jar). Run `mvn verify` to build it from source; the output is `target/Contender-v1.8.19.jar`. The tests cover role migration, game modes, eligibility, offline roster lookup, tier ordering and retirement, lookup caching, nametag updates, state cleanup, spectator visibility (including self-view), full and shortened round-robin schedules, roster validation, saved results, arena reservations, and concurrent duel ownership. Lobby tests cover building permissions, saved spawn selection, missing worlds, cancelled teleports, and joining while a duel starts. Dialog tests cover button placement, navigation, preserving form edits and round limits, title previews, regular font styling, saved lobby/chat/PvP controls, and stale vote callbacks. Tab tests also cover pagination through all rounds, disconnected profiles, shared ranks, score alignment, and restoring the normal list. Tests also cover countdown cleanup, hurt-kit persistence and damage handling, sumo falls, spectator voice routing, and legacy mute settings. Live Paper testing is still needed for voice audio, knockback behavior, login behavior alongside other plugins, profile lookup against the account service, WorldEdit entity copying, Dialog layout, and the appearance of nametags and the tournament board.
 
 ## Hacker controls
 
@@ -250,7 +248,7 @@ Mace Race can use any saved kit that clears the previous inventory. Choose **Def
 
 Only one unfinished tournament stage can be selected at a time. A new mode requires the previous stage to finish or be cancelled. Event participants cannot be pulled into duels, votes, or another event while their inventory is owned by a minigame or waiting to be restored. Directors and spectators remain ineligible. Results, selected mode, and inventory recovery survive restarts; an interrupted game must be created again. No minigame changes player roles automatically.
 
-Minigame results use the same tab and board as round robin, including player heads, tier tags, and X ping for offline players. `/bracket` also shows the selected event's standings. Cancelling returns the tab list to normal. Dead Manhunt players and Combo viewers use the spectator voice channel; living players cannot hear them. **Hear the Match** includes the live players in the same minigame.
+Minigame results use the same tab and board as round robin, including player heads, tier tags, and X ping for offline players. `/bracket` also shows the selected event's standings. Cancelling returns the tab list to normal. Simple Voice Chat handles audio for minigame players and spectators normally; Contender does not separate their voices.
 
 ## Manhunt
 

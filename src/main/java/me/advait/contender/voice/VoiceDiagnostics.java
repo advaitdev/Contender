@@ -22,6 +22,9 @@ public final class VoiceDiagnostics {
     private final Map<UUID, Traffic> traffic = new ConcurrentHashMap<>();
     private volatile String integration = "Not registered";
     private volatile Function<UUID, String> connection = id -> "Not available";
+    private volatile boolean normalVoiceChat;
+
+    public void useNormalVoiceChat() { normalVoiceChat = true; }
 
     void update(Map<UUID, VoiceRouting.Member> members) {
         this.members = members;
@@ -62,6 +65,10 @@ public final class VoiceDiagnostics {
     }
 
     public List<String> describe(UUID player) {
+        if (normalVoiceChat) return List.of(
+                "Simple Voice Chat handles audio normally.",
+                "Contender's voice filtering and private spectator channel are disabled.",
+                "Saved Contender mute settings do not apply.");
         List<String> lines = new ArrayList<>();
         lines.add("Contender voice hook: " + integration);
         try { lines.add("Voice connection: " + connection.apply(player)); }

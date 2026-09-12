@@ -14,6 +14,18 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class VoiceDiagnosticsTest {
+    @Test void normalVoiceModeDoesNotReportInactiveMutesOrQueryTheVoiceApi() {
+        var diagnostics = new VoiceDiagnostics();
+        UUID player = UUID.randomUUID();
+        diagnostics.update(Map.of(player, new VoiceRouting.Member(null, true, true, true, false, UUID.randomUUID())));
+        diagnostics.connection(id -> { throw new AssertionError("Normal voice mode must not query the voice API"); });
+        diagnostics.useNormalVoiceChat();
+
+        assertEquals(List.of("Simple Voice Chat handles audio normally.",
+                "Contender's voice filtering and private spectator channel are disabled.",
+                "Saved Contender mute settings do not apply."), diagnostics.describe(player));
+    }
+
     @Test void reportsMicrophoneDeliveryAndUpstreamBlocksSeparatelyForEachPlayer() {
         var diagnostics = new VoiceDiagnostics();
         UUID speaker = UUID.randomUUID(), receiver = UUID.randomUUID();

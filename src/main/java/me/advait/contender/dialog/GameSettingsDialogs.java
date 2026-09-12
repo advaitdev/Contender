@@ -16,6 +16,7 @@ import static me.advait.contender.dialog.DialogPalette.*;
 
 /** Server-wide lobby, chat, voice, and PvP controls. Changes are committed only by Save. */
 public final class GameSettingsDialogs {
+    private static final String VOICE_NOTICE = "Contender's voice controls are disabled. Simple Voice Chat handles audio normally.";
     private final Contender plugin;
     private final Dialogs dialogs;
     public GameSettingsDialogs(Contender plugin) { this.plugin = plugin; dialogs = new Dialogs(plugin); }
@@ -64,7 +65,7 @@ public final class GameSettingsDialogs {
         }
         buttons.add(button(player, DialogIcon.SETTINGS, "Admin Bypass", false, 300, (p, view) -> chatBypass(p)));
         dialogs.show(player, "Chat & Voice", List.of(DialogBody.plainMessage(DialogText.muted(
-                "Choose whose chat and voice permissions to edit."), 320)), List.of(), buttons, 1, 150,
+                "Choose whose game chat permissions to edit.\n\n" + VOICE_NOTICE), 320)), List.of(), buttons, 1, 150,
                 button(player, DialogIcon.BACK, "Back", false, 150, (p, view) -> new SettingsDialogs(plugin).open(p)));
     }
     private void chatGroup(Player player, String group) {
@@ -79,9 +80,9 @@ public final class GameSettingsDialogs {
         if (!lobby) inputs.add(toggle("deafen_voice", DialogIcon.VOICE, "Hearing Voice Chat", deafen, "Deafened", "Allowed"));
         if (spectator) inputs.add(toggle("hear_match", DialogIcon.DUEL, "Hear the Match", settings.isSpectatorsHearMatch(), "Allowed", "Blocked"));
         String description = lobby ? "Applies to contestants outside a match."
-                : spectator ? "Directors and spectators share a private voice channel.\nLiving players cannot hear it.\nHear the Match adds voices from the duel you're watching."
-                : "Applies to contestants playing a duel.";
-        form(player, group + " Chat", description + "\nVoice settings use Simple Voice Chat.", inputs, this::chat, (p, view) -> {
+                : spectator ? "Applies to directors and spectators."
+                : "Applies to contestants playing a match.";
+        form(player, group + " Chat", description + "\n\n" + VOICE_NOTICE + "\nSaved voice options have no effect.", inputs, this::chat, (p, view) -> {
             boolean game = value(view, "game_chat"), muted = value(view, "mute_voice"), deafened = !lobby && value(view, "deafen_voice");
             boolean hearMatch = spectator && value(view, "hear_match");
             if (lobby) { settings.setAllowLobbyGameChat(game); settings.setMuteLobbyVoiceChat(muted); }
@@ -92,7 +93,7 @@ public final class GameSettingsDialogs {
     }
     private void chatBypass(Player player) {
         var settings = plugin.getChatSettings();
-        form(player, "Chat Admin Bypass", "Players with contender.admin can bypass chat, mute and deafen restrictions.\nSpectator voices still stay private.",
+        form(player, "Chat Admin Bypass", "Players with contender.admin can bypass game chat restrictions.\n\n" + VOICE_NOTICE,
                 List.of(toggle("override", DialogIcon.SETTINGS, "Admin Bypass", settings.isAdminsOverrideAll(), "Enabled", "Disabled")), this::chat, (p, view) -> {
                     settings.setAdminsOverrideAll(value(view, "override")); settings.save(); chat(p);
                 });

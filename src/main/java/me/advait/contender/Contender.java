@@ -28,7 +28,6 @@ import me.advait.contender.pvp.PvPListener;
 import me.advait.contender.pvp.PvPSettings;
 import me.advait.contender.runnable.ImmediateRespawnRunnable;
 import me.advait.contender.spectator.ArenaProtectionListener;
-import me.advait.contender.voice.VoiceChatManager;
 import me.advait.contender.vote.VoteListener;
 import me.advait.contender.vote.VoteManager;
 import me.advait.contender.world.LeafDecayListener;
@@ -111,7 +110,8 @@ public final class Contender extends JavaPlugin {
 
         voiceRouting = new me.advait.contender.voice.VoiceRouting(this);
         voiceRouting.enable();
-        if (getServer().getPluginManager().isPluginEnabled("voicechat")) VoiceChatManager.setup(this);
+        // Keep the role snapshot for game chat, but register no Simple Voice Chat packet handlers.
+        voiceDiagnostics.useNormalVoiceChat();
 
         getLogger().info("Contender enabled.");
     }

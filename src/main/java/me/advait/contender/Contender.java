@@ -60,6 +60,7 @@ public final class Contender extends JavaPlugin {
     private NameTagManager nameTagManager;
     private TabManager tabManager;
     private me.advait.contender.voice.VoiceRouting voiceRouting;
+    private final me.advait.contender.voice.VoiceDiagnostics voiceDiagnostics = new me.advait.contender.voice.VoiceDiagnostics();
 
     @Override
     public void onEnable() {
@@ -252,5 +253,6 @@ public final class Contender extends JavaPlugin {
     public NameTagManager getNameTagManager() { return nameTagManager; }
     public TabManager getTabManager() { return tabManager; }
     public me.advait.contender.voice.VoiceRouting getVoiceRouting() { return voiceRouting; }
+    public me.advait.contender.voice.VoiceDiagnostics getVoiceDiagnostics() { return voiceDiagnostics; }
     public void refreshVoiceRouting() { if (voiceRouting != null) voiceRouting.refresh(); }
 }

@@ -130,4 +130,33 @@ class VoiceRoutingTest {
         var reloaded = new ChatSettings(server.plugin);
         assertTrue(reloaded.isMuteSpectatorVoiceChat()); assertTrue(reloaded.isDeafenSpectatorVoiceChat());
     }
+    @Test void diagnosticsReadCurrentClientConnectionAndGroupWithoutChangingEither() {
+        var event = mock(MicrophonePacketEvent.class, RETURNS_DEEP_STUBS);
+        UUID id = alive.getUniqueId();
+        var sender = connection(alive);
+        when(event.getSenderConnection()).thenReturn(sender);
+        var builder = mock(StaticSoundPacket.Builder.class, RETURNS_SELF);
+        when(event.getPacket().staticSoundPacketBuilder()).thenReturn(builder);
+        when(builder.build()).thenReturn(mock(StaticSoundPacket.class));
+        when(event.getVoicechat().getConnectionOf(id)).thenReturn(sender);
+        when(sender.isInstalled()).thenReturn(true);
+        when(sender.isConnected()).thenReturn(true);
+        when(sender.getGroup()).thenReturn(null);
+
+        voice.onMicrophone(event);
+        assertTrue(routing.diagnostics().describe(id).contains("Voice connection: Connected; voice enabled; no group"));
+        when(sender.isDisabled()).thenReturn(true);
+        assertTrue(routing.diagnostics().describe(id).contains("Voice connection: Connected; voice disabled on client; no group"));
+        when(sender.isDisabled()).thenReturn(false);
+        var group = mock(de.maxhenkel.voicechat.api.Group.class);
+        when(group.getName()).thenReturn("Friends"); when(sender.getGroup()).thenReturn(group);
+        assertTrue(routing.diagnostics().describe(id).contains("Voice connection: Connected; voice enabled; group: Friends"));
+        when(sender.isConnected()).thenReturn(false);
+        assertTrue(routing.diagnostics().describe(id).contains("Voice connection: Disconnected"));
+        when(event.getVoicechat().getConnectionOf(id)).thenReturn(null);
+        assertTrue(routing.diagnostics().describe(id).contains("Voice connection: No voice connection"));
+        verify(sender, never()).setConnected(anyBoolean());
+        verify(sender, never()).setDisabled(anyBoolean());
+        verify(sender, never()).setGroup(any());
+    }
 }

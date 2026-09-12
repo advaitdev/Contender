@@ -51,7 +51,7 @@ commands:
   contender:
     description: Contender admin commands
     permission: contender.master
-    usage: /contender <reload>
+    usage: /contender reload | /contender voice [player]
   cancelduel:
     description: Cancel a player's duel without recording a result
     permission: contender.master

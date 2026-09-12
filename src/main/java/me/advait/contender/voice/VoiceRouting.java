@@ -6,6 +6,7 @@ import me.advait.contender.game.AbstractGameState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,10 +20,24 @@ public final class VoiceRouting extends AbstractGameState {
         }
     }
     private final Contender contender;
+    private final VoiceDiagnostics diagnostics;
+    private volatile boolean active;
     private volatile Map<UUID, Member> members = Map.of();
-    public VoiceRouting(Contender plugin) { super(plugin); contender = plugin; }
-    @Override protected void onEnable() { refresh(); runRepeating(this::refresh, 1, 1); }
-    @Override protected void onDisable() { members = Map.of(); }
+    public VoiceRouting(Contender plugin) {
+        super(plugin);
+        contender = plugin;
+        diagnostics = plugin.getVoiceDiagnostics() == null ? new VoiceDiagnostics() : plugin.getVoiceDiagnostics();
+    }
+    @Override protected void onEnable() { refresh(); active = true; runRepeating(this::refresh, 1, 1); }
+    @Override protected void onDisable() {
+        // Simple Voice Chat retains registered callbacks; they must become inert before clearing members.
+        active = false;
+        members = Map.of();
+        diagnostics.update(members);
+        diagnostics.integration("Disabled");
+    }
+    public boolean isActive() { return active; }
+    VoiceDiagnostics diagnostics() { return diagnostics; }
     public Map<UUID, Member> snapshot() { return members; }
 
     public void refresh() {
@@ -47,10 +62,13 @@ public final class VoiceRouting extends AbstractGameState {
             next.put(id, new Member(duel, spectator, muted, deafened, settings.isSpectatorsHearMatch(), channel, event));
         }
         members = Map.copyOf(next);
+        diagnostics.update(members);
     }
+    @EventHandler public void onJoin(PlayerJoinEvent event) { refresh(); }
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         Map<UUID, Member> next = new HashMap<>(members);
         next.remove(event.getPlayer().getUniqueId()); members = Map.copyOf(next);
+        diagnostics.update(members);
     }
     static UUID channelId(UUID id) {
         return UUID.nameUUIDFromBytes(("contender:voice:" + id).getBytes(StandardCharsets.UTF_8));

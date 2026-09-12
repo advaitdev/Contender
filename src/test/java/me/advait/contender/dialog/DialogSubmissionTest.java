@@ -808,6 +808,8 @@ class DialogSubmissionTest {
 
     @Test void matchPaginationUsesASeparateRowWithConsistentWidths() {
         var tournaments = mock(TournamentManager.class);
+        String failureReason = "Match 1 stopped unexpectedly. Check the server log before resuming.";
+        when(tournaments.waitingReason()).thenReturn(failureReason);
         when(server.plugin.getTournamentManager()).thenReturn(tournaments);
         when(server.plugin.getMapManager()).thenReturn(mock(MapManager.class));
         when(server.plugin.getKitManager()).thenReturn(mock(KitManager.class));
@@ -817,6 +819,7 @@ class DialogSubmissionTest {
                 false, false, 3, 10, 20);
         when(tournaments.current()).thenReturn(tournament);
         new TournamentDialogs(server.plugin).open(player);
+        assertTrue(shownBody.stream().anyMatch(part -> plain(((PlainMessageDialogBody) part).contents()).contains(failureReason)));
         actions.get("Matches").accept(mock(DialogResponseView.class), player);
         assertEquals(2, shownColumns);
         assertEquals(10, shownButtons.size(), "Eight matches and one navigation row");

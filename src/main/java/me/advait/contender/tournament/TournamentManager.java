@@ -66,15 +66,18 @@ public final class TournamentManager extends AbstractGameState {
         requireEligibleEntries(tournament);
         if (contender.getVoteManager().isVoteActive()) throw new IllegalStateException("Wait for the vote to finish.");
         tournament.resume();
+        waitingReason = "";
         save();
         tick();
     }
     public void pause() {
+        waitingReason = "";
         if (tournament != null) { tournament.pause(); save(); board.update(tournament, playing); }
     }
     public void cancel() {
         if (tournament == null) return;
         tournament.cancel();
+        waitingReason = "";
         save();
         if (contender.getTabManager() != null) contender.getTabManager().refresh();
         for (Duel duel : new ArrayList<>(playing.values())) duel.forceEnd();
@@ -124,7 +127,7 @@ public final class TournamentManager extends AbstractGameState {
         if (!tournament.isRunning() || contender.getVoteManager().isVoteActive() || contender.getRaceManager() != null && contender.getRaceManager().active()) return;
         waitingReason = contender.getArenaManager().available(tournament.mapId()) == 0
                 ? contender.getArenaManager().readiness(tournament.mapId()) : "Waiting for players or a free arena.";
-        while (contender.getArenaManager().available(tournament.mapId()) > 0) {
+        while (tournament.isRunning() && contender.getArenaManager().available(tournament.mapId()) > 0) {
             TournamentMatch match = tournament.nextMatch(this::available);
             if (match == null) break;
             DuelSetup setup = new DuelSetup(tournament.id());
@@ -143,11 +146,17 @@ public final class TournamentManager extends AbstractGameState {
                 Duel duel = contender.getDuelManager().startDuel(setup, result -> {
                     if (tournament != startedTournament) return;
                     playing.remove(match.number());
+                    if (result.reason() == DuelResult.Reason.CANCELLED && tournament.isRunning()) {
+                        tournament.pause();
+                        waitingReason = "Match " + match.number() + " stopped unexpectedly. Check the server log before resuming.";
+                        contender.getLogger().warning("Tournament paused: " + waitingReason);
+                    }
                     match.finish(result);
                     save();
                     board.update(tournament, playing);
+                    if (contender.getTabManager() != null) contender.getTabManager().refresh();
                 });
-                if (!duel.isFinished()) playing.put(match.number(), duel);
+                if (!duel.isFinished() && match.status() == TournamentMatch.Status.PLAYING) playing.put(match.number(), duel);
                 save();
             } catch (Exception | LinkageError failure) {
                 match.retry();

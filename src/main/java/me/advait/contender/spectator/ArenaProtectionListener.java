@@ -75,6 +75,7 @@ public final class ArenaProtectionListener implements Listener {
         }
         Duel duel = duels.getDuel(event.getPlayer());
         if (duel == null || duel.getArena() == null || !duel.getState().isEnabled() || duel.getState().isEnding()) return;
+        if (duel.getState().handleArenaContainment(event)) return;
         Location to = event.getTo();
         if (to == null || duel.getMap().contains(to)) return;
         Location from = event.getFrom();

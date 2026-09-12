@@ -457,14 +457,20 @@ public class Duel {
         plugin.getArenaManager().reset(arena).whenComplete((ignored, failure) -> {
             if (!plugin.isEnabled() || isFinished()) return;
             if (failure != null) {
-                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Could not reset arena " + arena.instance().slot(), failure);
-                resultReason = DuelResult.Reason.CANCELLED;
-                shutdown();
+                resetFailed(failure);
                 return;
             }
             placedBlocks.clear();
             onComplete.run();
         });
+    }
+
+    void resetFailed(Throwable failure) {
+        if (isFinished()) return;
+        plugin.getLogger().log(java.util.logging.Level.SEVERE, "Could not reset arena " + (arena == null ? map.getId() : arena.instance().slot()), failure);
+        // Cleanup failures cannot erase a result that has already been decided.
+        if (!state.isEnding()) resultReason = DuelResult.Reason.CANCELLED;
+        shutdown();
     }
 
     private void cleanupEntitiesInRegion() {

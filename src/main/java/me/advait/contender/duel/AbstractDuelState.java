@@ -5,6 +5,7 @@ import me.advait.contender.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
+import org.bukkit.Location;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -33,6 +34,9 @@ public abstract class AbstractDuelState extends AbstractGameState {
     public boolean isEnding() { return false; }
     public boolean isFinished() { return false; }
     public boolean canAddSpectator() { return true; }
+    /** Return true when this phase has handled transport or movement itself. */
+    public boolean handleArenaContainment(org.bukkit.event.player.PlayerMoveEvent event) { return false; }
+    protected Location respawnOverride(Player player) { return null; }
 
     protected final boolean owns(Player player) {
         return isEnabled() && duel.getState() == this && duel.hasParticipant(player.getUniqueId());
@@ -91,6 +95,11 @@ public abstract class AbstractDuelState extends AbstractGameState {
     public final void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
         if (!owns(player)) return;
+        Location override = respawnOverride(player);
+        if (override != null) {
+            event.setRespawnLocation(override);
+            return;
+        }
         if (duel.isSpectator(player.getUniqueId())) {
             if (duel.getMap().getSpectatorSpawn() != null) {
                 event.setRespawnLocation(duel.getMap().getSpectatorSpawn());

@@ -104,7 +104,7 @@ public final class TournamentDialogs {
                     DialogText.detail("Matches", finished + " / " + tournament.matches().size() + " finished")), DialogText.lines(
                     DialogText.detail("Map", map == null ? tournament.mapId() : map.getDisplayName()),
                     DialogText.detail("Kit", kit == null ? tournament.kitId() : kit.getDisplayName())));
-            if (tournament.isRunning() && !manager.waitingReason().isBlank()) contents = DialogText.paragraphs(contents, DialogText.muted(manager.waitingReason()));
+            if (!canCreate && !manager.waitingReason().isBlank()) contents = DialogText.paragraphs(contents, DialogText.muted(manager.waitingReason()));
             buttons.add(menuAction(player, DialogIcon.DUEL, canCreate ? "Match Results" : "Matches", TEXT,
                     "Scores, match settings, and spectating.", p -> matches(p, tournament.id(), 0)));
             buttons.add(menuAction(player, DialogIcon.BOARD, "Bracket & Standings", TEXT,

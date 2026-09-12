@@ -14,6 +14,48 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class DuelLifecycleTest {
+    @Test void cleanupFailureKeepsAnAlreadyCompletedMatchResult() {
+        try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            when(server.plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
+            DuelManager manager = mock(DuelManager.class);
+            Duel duel = duel(server, manager);
+            duel.getTeam1().incrementScore();
+            duel.endDuel();
+            var delayedCleanup = server.scheduled.getFirst();
+            duel.resetFailed(new IllegalStateException("Another player entered the copy."));
+            assertTrue(duel.isFinished());
+            assertEquals(DuelResult.Reason.FINISHED, duel.getResult().reason());
+            assertEquals(1, duel.getResult().winner());
+            assertEquals(1, duel.getResult().team1Score());
+            delayedCleanup.run();
+            verify(manager, times(1)).endDuel(duel);
+        }
+    }
+
+    @Test void cleanupFailureKeepsAForfeitAndMidMatchFailuresStayCancelled() {
+        try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            when(server.plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
+            var setup = new DuelSetup(UUID.randomUUID());
+            setup.setSelectedMap(new ArenaMap("test"));
+            UUID leaving = UUID.randomUUID();
+            setup.getTeam1().addPlayer(leaving); setup.getTeam2().addPlayer(UUID.randomUUID());
+            setup.getTeam1().setName("First"); setup.getTeam2().setName("Second");
+            Duel duel = spy(new Duel(server.plugin, mock(DuelManager.class), setup, null, true));
+            doNothing().when(duel).rollbackArena(any());
+            duel.forfeit(leaving);
+            duel.resetFailed(new IllegalStateException("Reset failed."));
+            assertTrue(duel.isFinished());
+            assertEquals(DuelResult.Reason.FORFEIT, duel.getResult().reason());
+            assertEquals(2, duel.getResult().winner());
+
+            Duel interrupted = duel(server, mock(DuelManager.class));
+            interrupted.getTeam1().incrementScore();
+            interrupted.resetFailed(new IllegalStateException("Reset failed between rounds."));
+            assertTrue(interrupted.isFinished());
+            assertEquals(DuelResult.Reason.CANCELLED, interrupted.getResult().reason());
+        }
+    }
+
     private Duel duel(StateTestServer server, DuelManager manager) {
         var setup = new DuelSetup(UUID.randomUUID());
         setup.setSelectedMap(new ArenaMap("test"));

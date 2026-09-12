@@ -22,6 +22,61 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ArenaProtectionTest {
+    @Test void aHoldingStateCanAuthorizeTransportWithoutOrdinaryArenaContainmentRewritingIt() {
+        var f = new MovementFixture();
+        World lobby = mock(World.class);
+        Location waiting = new Location(lobby, 0, 70, 0);
+        when(f.state.handleArenaContainment(any())).thenReturn(true);
+        var transport = new PlayerTeleportEvent(f.player, f.spawn, waiting, PlayerTeleportEvent.TeleportCause.PLUGIN);
+
+        f.listener.onTeleport(transport);
+
+        assertEquals(waiting, transport.getTo());
+        assertFalse(transport.isCancelled());
+        verify(f.state).handleArenaContainment(transport);
+    }
+
+    @Test void statesThatDoNotHandleContainmentKeepTheNormalArenaBoundary() {
+        var f = new MovementFixture();
+        World lobby = mock(World.class);
+        var teleport = new PlayerTeleportEvent(f.player, f.spawn, new Location(lobby, 0, 70, 0), PlayerTeleportEvent.TeleportCause.COMMAND);
+
+        f.listener.onTeleport(teleport);
+
+        verify(f.state).handleArenaContainment(teleport);
+        assertEquals(f.spawn, teleport.getTo());
+        assertFalse(teleport.isCancelled());
+    }
+
+    @Test void holdingStateCannotBypassTheGuardAgainstEnteringAnArenaDuringAPaste() {
+        var f = new MovementFixture();
+        World lobby = mock(World.class);
+        Location waiting = new Location(lobby, 0, 70, 0);
+        when(f.state.handleArenaContainment(any())).thenReturn(true);
+        when(f.arenas.isPreparingEntry(waiting, f.spawn)).thenReturn(true);
+        var transport = new PlayerTeleportEvent(f.player, waiting, f.spawn, PlayerTeleportEvent.TeleportCause.PLUGIN);
+
+        f.listener.onTeleport(transport);
+
+        assertTrue(transport.isCancelled());
+        verify(f.state, never()).handleArenaContainment(any());
+    }
+
+    @Test void holdingStateCanBlockWalkingWithoutTheArenaBoundaryMovingPlayersBackInside() {
+        var f = new MovementFixture();
+        World lobby = mock(World.class);
+        Location waiting = new Location(lobby, 0, 70, 0);
+        var movement = new PlayerMoveEvent(f.player, waiting, waiting.clone().add(1, 0, 0));
+        doAnswer(call -> {
+            ((PlayerMoveEvent) call.getArgument(0)).setTo(waiting);
+            return true;
+        }).when(f.state).handleArenaContainment(any());
+
+        f.listener.onMove(movement);
+
+        assertEquals(waiting, movement.getTo());
+    }
+
     @Test void directorsAndOtherPlayersCannotEnterAnArenaWhileItIsBeingPrepared() {
         World world = mock(World.class);
         Player director = mock(Player.class);
@@ -181,6 +236,8 @@ class ArenaProtectionTest {
         final Player player = mock(Player.class);
         final Duel duel = mock(Duel.class);
         final Kit kit = new Kit("sumo");
+        final AbstractDuelState state = mock(AbstractDuelState.class);
+        final ArenaManager arenas = mock(ArenaManager.class);
         final Location spawn = new Location(world, 0, 65, 0);
         final ArenaProtectionListener listener;
 
@@ -189,7 +246,6 @@ class ArenaProtectionTest {
             when(player.getUniqueId()).thenReturn(UUID.randomUUID());
             var duels = mock(DuelManager.class);
             when(duels.getDuel(player)).thenReturn(duel);
-            var state = mock(AbstractDuelState.class);
             when(duel.getState()).thenReturn(state); when(state.isEnabled()).thenReturn(true);
             when(duel.isCombatActive()).thenReturn(true);
             var map = spy(new ArenaMap("sumo"));
@@ -201,7 +257,7 @@ class ArenaProtectionTest {
             var instance = new ArenaInstance(0, map, new BlockBounds(-42, -64, -42, 981, 319, 981));
             when(duel.getArena()).thenReturn(new ArenaLease(instance, UUID.randomUUID()));
             when(duel.getKit()).thenReturn(kit); kit.setPvpHurt(true); kit.setPveHurt(true);
-            listener = new ArenaProtectionListener(duels, mock(ArenaManager.class));
+            listener = new ArenaProtectionListener(duels, arenas);
         }
     }
     private Block block(World world, int x) {

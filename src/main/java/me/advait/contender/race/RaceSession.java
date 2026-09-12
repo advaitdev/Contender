@@ -56,6 +56,7 @@ public final class RaceSession extends AbstractGameState {
     }
     private void prepare() {
         ArenaMap map = lease.instance().map();
+        Objects.requireNonNull(Bukkit.getWorld(map.getWorldName())).setPVP(true);
         Map<Integer, LivingEntity> found = RaceManager.scan(map, course);
         int count = found.size() - 1;
         for (var entry : found.entrySet()) {
@@ -180,12 +181,27 @@ public final class RaceSession extends AbstractGameState {
             mob.setHealth(mob.getMaxHealth());
             // Keep a real successful hit for Wind Burst's native post-attack effect.
             event.setDamage(Math.min(10, Math.max(1, event.getDamage())));
-        } else if (event.getEntity() instanceof Player player && owns(player.getUniqueId())) {
+        } else if (event.getEntity() instanceof Player player) {
+            Player attacker = attackingPlayer(event);
+            if (!owns(player.getUniqueId())) {
+                if (attacker != null && owns(attacker.getUniqueId())) event.setCancelled(true);
+                return;
+            }
+            if (!racing(player.getUniqueId()) || attacker != null && !racing(attacker.getUniqueId())) {
+                event.setCancelled(true);
+                return;
+            }
             if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); returnPlayer(player); }
-            else if (event instanceof EntityDamageByEntityEvent hit && (hit.getDamager() instanceof Player
-                    || hit.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player attacker && attacker != player)) event.setCancelled(true);
             else me.advait.contender.duel.HurtRules.removeHealthDamage(event);
         }
+    }
+    private static Player attackingPlayer(EntityDamageEvent event) {
+        if (event instanceof EntityDamageByEntityEvent hit) {
+            if (hit.getDamager() instanceof Player player) return player;
+            if (hit.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player player) return player;
+        }
+        var source = event.getDamageSource();
+        return source != null && source.getCausingEntity() instanceof Player player ? player : null;
     }
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void scored(EntityDamageByEntityEvent event) {

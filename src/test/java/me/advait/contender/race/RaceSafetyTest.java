@@ -62,6 +62,53 @@ class RaceSafetyTest {
             verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 64));
         }
     }
+    @Test void activeRacersCanHitEachOtherWithoutLosingHealthOrAbsorption() {
+        try (var f = new Fixture(false, true)) {
+            f.start(); verify(f.world).setPVP(true); clearInvocations(f.player);
+            var arrow = mock(Arrow.class); when(arrow.getShooter()).thenReturn(f.opponent);
+            for (Entity attacker : List.of(f.opponent, arrow)) {
+                var event = hurt(attacker, f.player, attacker instanceof Player
+                        ? EntityDamageEvent.DamageCause.ENTITY_ATTACK : EntityDamageEvent.DamageCause.PROJECTILE);
+                f.session.damage(event);
+                assertFalse(event.isCancelled()); assertEquals(8, event.getDamage());
+                assertEquals(0, event.getFinalDamage()); assertEquals(0, event.getDamage(EntityDamageEvent.DamageModifier.ABSORPTION));
+            }
+            var selfCharge = mock(WindCharge.class); when(selfCharge.getShooter()).thenReturn(f.player);
+            var blast = hurt(selfCharge, f.player, EntityDamageEvent.DamageCause.ENTITY_EXPLOSION);
+            f.session.damage(blast); assertFalse(blast.isCancelled()); assertEquals(0, blast.getFinalDamage());
+            verify(f.player, never()).setVelocity(any());
+            var food = mock(EntityExhaustionEvent.class); when(food.getEntity()).thenReturn(f.player);
+            f.session.exhaustion(food); verify(food).setCancelled(true);
+            assertEquals(0, f.run.racer(f.id).checkpoint()); assertEquals(0, f.run.racer(f.opponentId).checkpoint());
+        }
+    }
+    @Test void countdownFinishersAndOldProjectilesCannotHitRacers() {
+        try (var f = new Fixture(false, true)) {
+            var beforeStart = hurt(f.opponent, f.player, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+            f.session.damage(beforeStart); assertTrue(beforeStart.isCancelled());
+            f.start(); f.run.hit(f.opponentId, 2, System.nanoTime());
+            var afterFinish = hurt(f.opponent, f.player, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+            f.session.damage(afterFinish); assertTrue(afterFinish.isCancelled());
+            var targetFinisher = hurt(f.player, f.opponent, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+            f.session.damage(targetFinisher); assertTrue(targetFinisher.isCancelled());
+            var arrow = mock(Arrow.class); when(arrow.getShooter()).thenReturn(f.opponent);
+            var lateArrow = hurt(arrow, f.player, EntityDamageEvent.DamageCause.PROJECTILE);
+            f.session.damage(lateArrow); assertTrue(lateArrow.isCancelled());
+        }
+    }
+    @Test void withdrawnPlayersAndOutsidersCannotExchangeHitsWithRacers() {
+        try (var f = new Fixture(false, true)) {
+            f.start(); f.session.withdraw(f.opponentId);
+            var arrow = mock(Arrow.class); when(arrow.getShooter()).thenReturn(f.opponent);
+            var delayed = hurt(arrow, f.player, EntityDamageEvent.DamageCause.PROJECTILE);
+            f.session.damage(delayed); assertTrue(delayed.isCancelled());
+            var outsider = mock(Player.class); when(outsider.getUniqueId()).thenReturn(UUID.randomUUID());
+            var incoming = hurt(outsider, f.player, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+            var outgoing = hurt(f.player, outsider, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+            f.session.damage(incoming); f.session.damage(outgoing);
+            assertTrue(incoming.isCancelled()); assertTrue(outgoing.isCancelled());
+        }
+    }
     @Test void countdownAndFinishersDoNotTriggerGroundReturns() {
         try (var f = new Fixture(true)) {
             clearInvocations(f.player);
@@ -73,12 +120,15 @@ class RaceSafetyTest {
         }
     }
     @SuppressWarnings("deprecation")
-    private EntityDamageEvent hit(Player player, EntityDamageEvent.DamageCause cause) {
+    private EntityDamageEvent hit(Player player, EntityDamageEvent.DamageCause cause) { return hurt(null, player, cause); }
+    @SuppressWarnings("deprecation")
+    private EntityDamageEvent hurt(Entity attacker, Player player, EntityDamageEvent.DamageCause cause) {
         var values = new EnumMap<EntityDamageEvent.DamageModifier, Double>(EntityDamageEvent.DamageModifier.class);
         var functions = new EnumMap<EntityDamageEvent.DamageModifier, com.google.common.base.Function<? super Double, Double>>(EntityDamageEvent.DamageModifier.class);
         for (var modifier : EntityDamageEvent.DamageModifier.values()) { values.put(modifier, 0d); functions.put(modifier, d -> 0d); }
         values.put(EntityDamageEvent.DamageModifier.BASE, 8d); values.put(EntityDamageEvent.DamageModifier.ABSORPTION, -2d);
-        return new EntityDamageEvent(player, cause, mock(DamageSource.class), values, functions);
+        return attacker == null ? new EntityDamageEvent(player, cause, mock(DamageSource.class), values, functions)
+                : new EntityDamageByEntityEvent(attacker, player, cause, mock(DamageSource.class), values, functions, false);
     }
     @Test void onlyTheFirstAcceptedFinishLaunchesFireworks() {
         try (var f = new Fixture(true)) {
@@ -118,14 +168,16 @@ class RaceSafetyTest {
         final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
         final MockedStatic<RaceKit> kit = mockStatic(RaceKit.class);
         final Player player = mock(Player.class);
-        final UUID id = UUID.randomUUID();
+        final UUID id = UUID.randomUUID(), opponentId = UUID.randomUUID();
+        final Player opponent = mock(Player.class);
         final World world = mock(World.class);
         final RaceManager manager = mock(RaceManager.class);
         final Entity[] mobs;
         final RaceRun run;
         final RaceSession session;
         Location position;
-        Fixture(boolean returnOnGround) {
+        Fixture(boolean returnOnGround) { this(returnOnGround, false); }
+        Fixture(boolean returnOnGround, boolean multiplayer) {
             registry.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
             var attrs = new HashMap<Key, Attribute>();
             doAnswer(call -> attrs.computeIfAbsent(call.getArgument(0), key -> {
@@ -146,7 +198,15 @@ class RaceSafetyTest {
             when(player.getGameMode()).thenReturn(GameMode.SURVIVAL); when(player.getInventory()).thenReturn(mock(PlayerInventory.class)); when(player.teleport(any(Location.class))).thenReturn(true);
             when(player.getLocation()).thenAnswer(c -> position.clone()); when(player.getBoundingBox()).thenAnswer(c -> new BoundingBox(position.getX() - .3, position.getY(), position.getZ() - .3, position.getX() + .3, position.getY() + 1.8, position.getZ() + .3));
             bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
-            run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, List.of(new RaceRun.Racer(id, "Alice")));
+            var roster = new ArrayList<RaceRun.Racer>(); roster.add(new RaceRun.Racer(id, "Alice"));
+            if (multiplayer) {
+                when(opponent.getUniqueId()).thenReturn(opponentId); when(opponent.isOnline()).thenReturn(true);
+                when(opponent.getMaxHealth()).thenReturn(20d); when(opponent.getGameMode()).thenReturn(GameMode.SURVIVAL);
+                when(opponent.getInventory()).thenReturn(mock(PlayerInventory.class)); when(opponent.teleport(any(Location.class))).thenReturn(true);
+                when(opponent.getLocation()).thenAnswer(c -> position.clone()); bukkit.when(() -> Bukkit.getPlayer(opponentId)).thenReturn(opponent);
+                roster.add(new RaceRun.Racer(opponentId, "Bob"));
+            }
+            run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, roster);
             session = new RaceSession(env.plugin, manager, run, new RaceCourse("course", 15, "Finish", 3, returnOnGround), new ArenaLease(instance, UUID.randomUUID()));
             session.enable(); assertEquals(RaceRun.State.COUNTDOWN, run.state());
         }

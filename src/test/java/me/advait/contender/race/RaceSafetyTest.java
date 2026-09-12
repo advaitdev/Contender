@@ -80,6 +80,38 @@ class RaceSafetyTest {
         values.put(EntityDamageEvent.DamageModifier.BASE, 8d); values.put(EntityDamageEvent.DamageModifier.ABSORPTION, -2d);
         return new EntityDamageEvent(player, cause, mock(DamageSource.class), values, functions);
     }
+    @Test void onlyTheFirstAcceptedFinishLaunchesFireworks() {
+        try (var f = new Fixture(true)) {
+            f.kit.when(() -> RaceKit.isWeapon(any())).thenReturn(true);
+            var names = mock(me.advait.contender.nametag.NameTagManager.class);
+            when(f.env.plugin.getNameTagManager()).thenReturn(names);
+            when(names.displayName(f.id, "Alice")).thenReturn(Component.text("Alice"));
+            var finish = attack(f.player, f.mobs[1]);
+            f.session.scored(finish); verify(f.manager, never()).celebrate(any());
+            f.start(); f.session.scored(attack(f.player, f.mobs[0]));
+            verify(f.manager, never()).celebrate(any());
+            clearInvocations(f.manager);
+            f.session.scored(finish); f.session.scored(finish);
+            var order = inOrder(f.manager);
+            order.verify(f.manager).save(); order.verify(f.manager).celebrate(f.position);
+            verify(f.manager, times(1)).celebrate(any());
+            assertTrue(f.run.racer(f.id).done());
+        }
+    }
+    @Test void failingToSaveTheFinishDoesNotLaunchFireworks() {
+        try (var f = new Fixture(true)) {
+            f.kit.when(() -> RaceKit.isWeapon(any())).thenReturn(true); f.start();
+            doThrow(new IllegalStateException("Save failed")).when(f.manager).save();
+            f.session.scored(attack(f.player, f.mobs[1]));
+            verify(f.manager, never()).celebrate(any());
+        }
+    }
+    private static EntityDamageByEntityEvent attack(Player player, Entity target) {
+        var hit = mock(EntityDamageByEntityEvent.class);
+        when(hit.getEntity()).thenReturn(target); when(hit.getDamager()).thenReturn(player);
+        when(hit.getFinalDamage()).thenReturn(1d); when(hit.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+        return hit;
+    }
     private static class Fixture implements AutoCloseable {
         final StateTestServer env = new StateTestServer();
         final MockedStatic<RegistryAccess> registry = mockStatic(RegistryAccess.class);
@@ -88,6 +120,8 @@ class RaceSafetyTest {
         final Player player = mock(Player.class);
         final UUID id = UUID.randomUUID();
         final World world = mock(World.class);
+        final RaceManager manager = mock(RaceManager.class);
+        final Entity[] mobs;
         final RaceRun run;
         final RaceSession session;
         Location position;
@@ -104,7 +138,7 @@ class RaceSafetyTest {
             when(solid.getCollisionShape()).thenReturn(shape); when(air.getCollisionShape()).thenReturn(empty);
             when(world.getBlockAt(anyInt(), anyInt(), anyInt())).thenAnswer(c -> ((int) c.getArgument(1)) == 63 ? solid : air);
             Chunk chunk = mock(Chunk.class); when(world.getChunkAtAsync(0, 0)).thenReturn(CompletableFuture.completedFuture(chunk)); when(world.getChunkAt(0, 0)).thenReturn(chunk);
-            Entity[] mobs = {mob("#1", 3), mob("Finish", 6)}; when(chunk.getEntities()).thenReturn(mobs);
+            mobs = new Entity[]{mob("#1", 3), mob("Finish", 6)}; when(chunk.getEntities()).thenReturn(mobs);
             ArenaMap map = new ArenaMap("course"); map.setWorldName("arena"); map.setRollbackRegion(0, 60, 0, 10, 80, 10);
             map.setTeam1Spawn(1, 64, 1, 0, 0); map.setTeam2Spawn(1, 64, 1, 0, 0);
             ArenaInstance instance = mock(ArenaInstance.class); when(instance.map()).thenReturn(map); when(instance.cell()).thenReturn(new BlockBounds(0, -64, 0, 100, 319, 100));
@@ -113,7 +147,7 @@ class RaceSafetyTest {
             when(player.getLocation()).thenAnswer(c -> position.clone()); when(player.getBoundingBox()).thenAnswer(c -> new BoundingBox(position.getX() - .3, position.getY(), position.getZ() - .3, position.getX() + .3, position.getY() + 1.8, position.getZ() + .3));
             bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
             run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, List.of(new RaceRun.Racer(id, "Alice")));
-            session = new RaceSession(env.plugin, mock(RaceManager.class), run, new RaceCourse("course", 15, "Finish", 3, returnOnGround), new ArenaLease(instance, UUID.randomUUID()));
+            session = new RaceSession(env.plugin, manager, run, new RaceCourse("course", 15, "Finish", 3, returnOnGround), new ArenaLease(instance, UUID.randomUUID()));
             session.enable(); assertEquals(RaceRun.State.COUNTDOWN, run.state());
         }
         void at(double x, double y, double z) { position = new Location(world, x, y, z); }

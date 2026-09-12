@@ -23,6 +23,7 @@ public final class RaceManager extends AbstractGameState {
     private final Contender contender;
     private final RaceStore store;
     private final RaceReturns returns;
+    private final RaceFinishFireworks fireworks;
     private final Map<String, RaceCourse> courses = new LinkedHashMap<>();
     private final Map<UUID, String> numbering = new HashMap<>(), markingFinish = new HashMap<>();
     private final Map<me.advait.contender.arena.ArenaLease, RaceSession> stranded = new HashMap<>();
@@ -30,10 +31,11 @@ public final class RaceManager extends AbstractGameState {
     private RaceSession session;
     private boolean selected, resetting;
     public RaceManager(Contender plugin) {
-        super(plugin); contender = plugin; store = new RaceStore(plugin.getDataFolder()); returns = new RaceReturns(plugin);
+        super(plugin); contender = plugin; store = new RaceStore(plugin.getDataFolder()); returns = new RaceReturns(plugin); fireworks = new RaceFinishFireworks(plugin);
     }
     @Override protected void onEnable() {
         var saved = store.load(); courses.putAll(saved.courses()); current = saved.run(); selected = saved.selected(); save();
+        fireworks.enable();
         runRepeating(() -> {
             for (Player player : Bukkit.getOnlinePlayers()) if (!owns(player.getUniqueId()) && returns.pending(player.getUniqueId())) {
                 try { restore(player); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not restore race inventory", failure); }
@@ -44,9 +46,14 @@ public final class RaceManager extends AbstractGameState {
         }, 20, 100);
     }
     @Override protected void onDisable() {
+        fireworks.disable();
         if (session != null) { current.end(RaceRun.State.INTERRUPTED); try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save interrupted race", failure); } RaceSession old = session; session = null; old.disable(); contender.getArenaManager().discard(old.lease()); contender.getArenaManager().release(old.lease()); }
         stranded.keySet().forEach(contender.getArenaManager()::release); stranded.clear();
         numbering.clear(); markingFinish.clear();
+    }
+    void celebrate(Location finish) {
+        try { fireworks.launch(finish); }
+        catch (RuntimeException failure) { contender.getLogger().log(Level.WARNING, "Could not launch race finish fireworks", failure); }
     }
     public RaceRun current() { return current; }
     public RaceRun displayed() { return selected ? current : null; }
@@ -124,6 +131,7 @@ public final class RaceManager extends AbstractGameState {
     public void end(RaceRun.State state) {
         if (current == null || current.terminal()) return;
         current.end(state);
+        fireworks.clear();
         try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save race results", failure); }
         RaceSession previous = session; session = null;
         if (previous != null) {

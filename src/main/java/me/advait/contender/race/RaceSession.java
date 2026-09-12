@@ -197,6 +197,7 @@ public final class RaceSession extends AbstractGameState {
         if (result != RaceRun.Hit.CHECKPOINT && result != RaceRun.Hit.FINISH) return;
         try { manager.save(); } catch (RuntimeException failure) { runLater(() -> manager.failed(failure), 1); return; }
         if (result == RaceRun.Hit.FINISH) {
+            manager.celebrate(player.getLocation());
             var racer = run.racer(player.getUniqueId());
             Component message = Component.text("#" + racer.place() + " ", NamedTextColor.GOLD)
                     .append(contender.getNameTagManager().displayName(racer.id(), racer.name()))

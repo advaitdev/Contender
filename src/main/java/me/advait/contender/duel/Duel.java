@@ -454,7 +454,16 @@ public class Duel {
             onComplete.run();
             return;
         }
-        plugin.getArenaManager().reset(arena).whenComplete((ignored, failure) -> {
+        completeRollback(plugin.getArenaManager().reset(arena), onComplete);
+    }
+
+    void rollbackRoundArena(Runnable onComplete) {
+        if (arena == null) { rollbackArena(onComplete); return; }
+        completeRollback(plugin.getArenaManager().resetRound(arena, getAllParticipants()), onComplete);
+    }
+
+    private void completeRollback(java.util.concurrent.CompletableFuture<Void> reset, Runnable onComplete) {
+        reset.whenComplete((ignored, failure) -> {
             if (!plugin.isEnabled() || isFinished()) return;
             if (failure != null) {
                 resetFailed(failure);
@@ -522,11 +531,13 @@ public class Duel {
 
     public void disconnectSpectator(Player player) {
         spectators.remove(player.getUniqueId());
+        state.participantLeaving(player);
         removeSpectatorMode(player);
     }
 
     public void removeSpectator(Player player) {
         if (!spectators.remove(player.getUniqueId())) return;
+        state.participantLeaving(player);
         removeSpectatorMode(player);
         updateSpectatorVisibility();
         plugin.getLobbyManager().sendToLobby(player);

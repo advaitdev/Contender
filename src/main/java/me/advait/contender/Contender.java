@@ -7,6 +7,7 @@ import me.advait.contender.chat.ChatManager;
 import me.advait.contender.chat.ChatSettings;
 import me.advait.contender.command.*;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.duel.RoundResetProtection;
 import me.advait.contender.arena.ArenaManager;
 import me.advait.contender.tournament.TournamentManager;
 import me.advait.contender.dialog.ArenaDialogs;
@@ -62,6 +63,10 @@ public final class Contender extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        for (var player : getServer().getOnlinePlayers()) {
+            try { RoundResetProtection.recover(player); }
+            catch (RuntimeException failure) { getLogger().log(java.util.logging.Level.SEVERE, "Could not restore round-reset gravity for " + player.getName(), failure); }
+        }
         roleManager = new RoleManager(this);
         tierService = new TierService(this);
         nameTagManager = new NameTagManager(this);
@@ -133,6 +138,7 @@ public final class Contender extends JavaPlugin {
     }
 
     private void registerListeners() {
+        getServer().getPluginManager().registerEvents(new RoundResetProtection.RecoveryListener(), this);
         getServer().getPluginManager().registerEvents(managedWorlds, this);
         getServer().getPluginManager().registerEvents(new LeafDecayListener(), this);
         getServer().getPluginManager().registerEvents(new ChatListener(), this);

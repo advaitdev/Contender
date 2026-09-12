@@ -10,6 +10,7 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.util.Vector;
 
@@ -19,13 +20,12 @@ import java.util.UUID;
 
 public final class RoundEndState extends AbstractDuelState {
     private final DuelTeam winner;
-    private final Set<UUID> parked = new HashSet<>();
-    private Location holdingLocation;
+    private final RoundResetProtection protection = new RoundResetProtection();
+    private final Set<UUID> positioned = new HashSet<>();
     private UUID transporting;
     private Location transportDestination;
-    private boolean holding;
+    private boolean resetting;
     private boolean resetComplete;
-    private int respawnWait;
 
     public RoundEndState(Duel duel, DuelTeam winner) {
         super(duel);
@@ -48,54 +48,52 @@ public final class RoundEndState extends AbstractDuelState {
             }
         }
         if (duel.getArena() == null) duel.rollbackArena(guard(this::startCountdown));
-        // Leave the damage/death callback before moving players or clearing its effects.
+        // Leave the damage/death callback before restoring blocks and clearing its effects.
         else runLater(() -> checked(this::beginReset), 1L);
     }
 
     @Override public boolean canAddSpectator() { return duel.getArena() == null || resetComplete; }
 
     private void beginReset() {
-        holdingLocation = duel.getPlugin().getLobbyManager().getLobbyLocation();
-        if (holdingLocation == null || holdingLocation.getWorld() == null
-                || duel.getPlugin().getArenaManager().isArenaWorld(holdingLocation.getWorld())) {
-            throw new IllegalStateException("Set a lobby outside the arena world before resetting this match.");
-        }
-        holding = true;
-        evacuate();
+        resetting = true;
+        protectParticipants();
+        runRepeating(() -> checked(this::protectParticipants), 1L, 1L);
+        duel.rollbackRoundArena(guard(() -> checked(this::returnForCountdown)));
     }
 
-    private void evacuate() {
-        boolean waitingForRespawn = false;
+    private void protectParticipants() {
+        if (!resetting) return;
         for (UUID id : duel.getAllParticipants()) {
             Player player = Bukkit.getPlayer(id);
-            if (player == null || parked.contains(id)) continue;
-            if (player.isDead()) { waitingForRespawn = true; continue; }
-            transport(player, holdingLocation);
-            if (!isEnabled()) return;
-            parked.add(id);
+            if (player != null && player.isOnline()) protection.freeze(player);
         }
-        if (waitingForRespawn) {
-            if (++respawnWait >= 600) throw new IllegalStateException("A player did not respawn before the arena reset.");
-            runLater(() -> checked(this::evacuate), 1L);
-            return;
-        }
-        duel.rollbackArena(guard(() -> checked(this::returnForCountdown)));
+    }
+
+    private Location roundSpawn(UUID id) {
+        Location spawn = duel.isInDuel(id)
+                ? duel.getTeam(id) == duel.getTeam1() ? duel.getMap().getTeam1Spawn() : duel.getMap().getTeam2Spawn()
+                : duel.getMap().getSpectatorSpawn();
+        return spawn == null ? duel.getMap().getTeam1Spawn() : spawn;
     }
 
     private void returnForCountdown() {
+        boolean waitingForRespawn = false;
         for (UUID id : duel.getAllParticipants()) {
             Player player = Bukkit.getPlayer(id);
-            if (player == null) continue;
-            Location destination = duel.isInDuel(id)
-                    ? duel.getTeam(id) == duel.getTeam1() ? duel.getMap().getTeam1Spawn() : duel.getMap().getTeam2Spawn()
-                    : duel.getMap().getSpectatorSpawn();
-            if (destination == null) destination = duel.getMap().getTeam1Spawn();
-            transport(player, destination);
+            if (player == null || positioned.contains(id)) continue;
+            if (player.isDead()) { waitingForRespawn = true; continue; }
+            transport(player, roundSpawn(id));
             if (!isEnabled()) return;
+            positioned.add(id);
         }
-        holding = false;
+        if (waitingForRespawn) {
+            runLater(() -> checked(this::returnForCountdown), 1L);
+            return;
+        }
+        protection.close();
+        resetting = false;
         resetComplete = true;
-        parked.clear();
+        positioned.clear();
         startCountdown();
     }
 
@@ -117,7 +115,7 @@ public final class RoundEndState extends AbstractDuelState {
     }
 
     @Override public boolean handleArenaContainment(PlayerMoveEvent event) {
-        if (!holding) return false;
+        if (!resetting) return false;
         if (event instanceof PlayerTeleportEvent && event.getPlayer().getUniqueId().equals(transporting)
                 && transportDestination.equals(event.getTo())) return true;
         if (event instanceof PlayerTeleportEvent) event.setCancelled(true);
@@ -129,13 +127,30 @@ public final class RoundEndState extends AbstractDuelState {
         return true;
     }
 
-    @Override protected Location respawnOverride(Player player) { return holding ? holdingLocation.clone() : null; }
+    @Override protected Location respawnOverride(Player player) {
+        if (!resetting) return null;
+        protection.freeze(player);
+        positioned.remove(player.getUniqueId());
+        runLater(() -> {
+            if (!owns(player)) return;
+            if (resetting) protection.freeze(player);
+            if (duel.isSpectator(player.getUniqueId())) duel.applyDeadSpectatorMode(player);
+        }, 1L);
+        Location spawn = roundSpawn(player.getUniqueId());
+        return spawn == null ? null : spawn.clone();
+    }
 
-    @EventHandler public void holdInteraction(PlayerInteractEvent event) { if (holding && owns(event.getPlayer())) event.setCancelled(true); }
-    @EventHandler public void holdEntityInteraction(PlayerInteractEntityEvent event) { if (holding && owns(event.getPlayer())) event.setCancelled(true); }
-    @EventHandler public void holdDrop(PlayerDropItemEvent event) { if (holding && owns(event.getPlayer())) event.setCancelled(true); }
-    @EventHandler public void holdPickup(EntityPickupItemEvent event) {
-        if (holding && event.getEntity() instanceof Player player && owns(player)) event.setCancelled(true);
+    @Override protected void participantLeaving(Player player) {
+        protection.release(player);
+        positioned.remove(player.getUniqueId());
+    }
+    @EventHandler public void releaseOnQuit(PlayerQuitEvent event) { participantLeaving(event.getPlayer()); }
+
+    @EventHandler public void resetInteraction(PlayerInteractEvent event) { if (resetting && owns(event.getPlayer())) event.setCancelled(true); }
+    @EventHandler public void resetEntityInteraction(PlayerInteractEntityEvent event) { if (resetting && owns(event.getPlayer())) event.setCancelled(true); }
+    @EventHandler public void resetDrop(PlayerDropItemEvent event) { if (resetting && owns(event.getPlayer())) event.setCancelled(true); }
+    @EventHandler public void resetPickup(EntityPickupItemEvent event) {
+        if (resetting && event.getEntity() instanceof Player player && owns(player)) event.setCancelled(true);
     }
 
     private void checked(Runnable action) {
@@ -154,5 +169,9 @@ public final class RoundEndState extends AbstractDuelState {
         runLater(() -> duel.setState(new ActiveState(duel)), 80L);
     }
 
-    @Override protected void onDisable() { duel.clearCountdown(); }
+    @Override protected void onDisable() {
+        resetting = false;
+        try { protection.close(); }
+        finally { duel.clearCountdown(); }
+    }
 }

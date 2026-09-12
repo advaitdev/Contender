@@ -37,6 +37,7 @@ public abstract class AbstractDuelState extends AbstractGameState {
     /** Return true when this phase has handled transport or movement itself. */
     public boolean handleArenaContainment(org.bukkit.event.player.PlayerMoveEvent event) { return false; }
     protected Location respawnOverride(Player player) { return null; }
+    protected void participantLeaving(Player player) { }
 
     protected final boolean owns(Player player) {
         return isEnabled() && duel.getState() == this && duel.hasParticipant(player.getUniqueId());

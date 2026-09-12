@@ -44,6 +44,8 @@ public final class ArenaManager {
     private final Set<CompletableFuture<?>> pending = new HashSet<>();
     private final Map<String, CompletableFuture<Void>> preparing = new HashMap<>();
     private final Map<ArenaInstance, CompletableFuture<Void>> restoring = new IdentityHashMap<>();
+    private final Map<ArenaInstance, ResetPermission> resetPermissions = new IdentityHashMap<>();
+    private record ResetPermission(ArenaLease lease, Set<UUID> participants) { }
     private final Map<Object, Retry> retries = new HashMap<>();
     private final Map<String, String> failures = new HashMap<>();
     private final Set<String> scheduledPreparation = new HashSet<>();
@@ -520,31 +522,62 @@ public final class ArenaManager {
     }
 
     public CompletableFuture<Void> reset(ArenaLease lease) {
+        return reset(lease, Set.of());
+    }
+
+    /** The duel freezes these participants until the paste finishes and returns them to their spawns. */
+    public CompletableFuture<Void> resetRound(ArenaLease lease, Set<UUID> participants) {
+        if (participants == null || participants.isEmpty()) return CompletableFuture.failedFuture(
+                new IllegalArgumentException("A round reset needs its participants."));
+        final Set<UUID> allowed;
+        try { allowed = Set.copyOf(participants); }
+        catch (NullPointerException invalid) { return CompletableFuture.failedFuture(
+                new IllegalArgumentException("Round reset participants must have player IDs.", invalid)); }
+        return reset(lease, allowed);
+    }
+
+    private CompletableFuture<Void> reset(ArenaLease lease, Set<UUID> participants) {
         if (closed || lease == null || !lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
         if (lease.instance().status() == ArenaInstance.Status.FAILED) return CompletableFuture.failedFuture(
                 new IllegalStateException("This arena copy is waiting for an automatic reset."));
         Clipboard clipboard = clipboards.get(lease.instance().map().getId());
         if (clipboard == null) return CompletableFuture.failedFuture(new IllegalStateException("Map template is not loaded."));
-        return restore(lease.instance(), clipboard, false);
+        return restore(lease.instance(), clipboard, false, new ResetPermission(lease, participants));
     }
 
     private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard, boolean repair) {
+        return restore(instance, clipboard, repair, null);
+    }
+
+    private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard, boolean repair, ResetPermission permission) {
         CompletableFuture<Void> active = restoring.get(instance);
-        if (active != null) return active;
+        if (active != null) {
+            if (Objects.equals(permission, resetPermissions.get(instance))) return active;
+            // A normal reset cannot borrow the permission of an occupied round reset.
+            // The completed paste already restored this template, so validate rather than paste twice.
+            return active.thenRun(() -> {
+                if (closed || !instances(instance.map().getId()).contains(instance)
+                        || permission != null && !instance.owns(permission.lease())) {
+                    throw new IllegalStateException("Arena reservation expired.");
+                }
+                requireOccupants(instance, permission);
+            });
+        }
         if (repair && instance.status() == ArenaInstance.Status.FAILED) instance.beginRepair();
         long revision = instance.beginReset();
         CompletableFuture<Void> result = new CompletableFuture<>();
         restoring.put(instance, result);
+        resetPermissions.put(instance, permission);
         List<ArenaInstance> pool = instances(instance.map().getId());
         String copy = "copy " + (pool.indexOf(instance) + 1) + " of " + pool.size();
         Progress status = new Progress(instance.map().getId(), "Waiting to prepare " + copy);
         progress.put(instance, status);
         enqueue(() -> {
-            requireReset(instance, revision);
+            requireReset(instance, revision, permission);
             status.phase("Loading chunks and entities for " + copy, false);
             return chunks.run(world, instance.map().getBounds(), () -> {
-                requireReset(instance, revision);
-                requireEmpty(instance);
+                requireReset(instance, revision, permission);
+                requireOccupants(instance, permission);
                 // Remove entities across this slot, including those that wandered beyond the selection.
                 for (var entity : world.getEntities()) {
                     if (entity instanceof Player) continue;
@@ -567,12 +600,13 @@ public final class ArenaManager {
                 });
             });
         }).<Void>thenApply(ignored -> {
-            requireReset(instance, revision);
+            requireReset(instance, revision, permission);
             instance.restored(revision);
             return null;
         }).whenComplete((ignored, failure) -> {
             progress.remove(instance, status);
             restoring.remove(instance, result);
+            resetPermissions.remove(instance, permission);
             if (failure != null) {
                 instance.failed(revision);
                 retryLater(instance);
@@ -589,6 +623,26 @@ public final class ArenaManager {
     private void requireReset(ArenaInstance instance, long revision) {
         if (closed || !instance.isReset(revision) || !instances(instance.map().getId()).contains(instance)) {
             throw new IllegalStateException("Arena reset was cancelled.");
+        }
+    }
+
+    private void requireReset(ArenaInstance instance, long revision, ResetPermission permission) {
+        requireReset(instance, revision);
+        if (permission != null && !instance.owns(permission.lease())) throw new IllegalStateException("Arena reservation expired.");
+    }
+
+    private void requireOccupants(ArenaInstance instance, ResetPermission permission) {
+        if (permission == null || permission.participants().isEmpty()) {
+            requireEmpty(instance);
+            return;
+        }
+        if (world == null) return;
+        for (Player player : world.getPlayers()) {
+            Location location = player.getLocation();
+            if (instance.cell().containsColumn(location.getX(), location.getZ())
+                    && !permission.participants().contains(player.getUniqueId())) {
+                throw new IllegalStateException("Move other players out of this arena copy before resetting the round.");
+            }
         }
     }
 

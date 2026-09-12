@@ -25,6 +25,7 @@ public final class RaceManager extends AbstractGameState {
     private final RaceReturns returns;
     private final RaceFinishFireworks fireworks;
     private final RaceSetupMobs setupMobs;
+    private final RaceEditorTools editorTools;
     private final Map<String, RaceCourse> courses = new LinkedHashMap<>();
     private final Map<UUID, String> numbering = new HashMap<>(), markingFinish = new HashMap<>();
     private final Map<me.advait.contender.arena.ArenaLease, RaceSession> stranded = new HashMap<>();
@@ -34,11 +35,13 @@ public final class RaceManager extends AbstractGameState {
     public RaceManager(Contender plugin) {
         super(plugin); contender = plugin; store = new RaceStore(plugin.getDataFolder()); returns = new RaceReturns(plugin); fireworks = new RaceFinishFireworks(plugin);
         setupMobs = new RaceSetupMobs(plugin, this::courses);
+        editorTools = new RaceEditorTools(plugin, this);
     }
     @Override protected void onEnable() {
         var saved = store.load(); courses.putAll(saved.courses()); current = saved.run(); selected = saved.selected(); save();
         fireworks.enable();
         setupMobs.enable();
+        editorTools.enable();
         runRepeating(() -> {
             for (Player player : Bukkit.getOnlinePlayers()) if (!owns(player.getUniqueId()) && returns.pending(player.getUniqueId())) {
                 try { restore(player); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not restore race inventory", failure); }
@@ -51,6 +54,7 @@ public final class RaceManager extends AbstractGameState {
     @Override protected void onDisable() {
         fireworks.disable();
         setupMobs.disable();
+        editorTools.disable();
         if (session != null) { current.end(RaceRun.State.INTERRUPTED); try { save(); } catch (RuntimeException failure) { contender.getLogger().log(Level.SEVERE, "Could not save interrupted race", failure); } RaceSession old = session; session = null; old.disable(); contender.getArenaManager().discard(old.lease()); contender.getArenaManager().release(old.lease()); }
         stranded.keySet().forEach(contender.getArenaManager()::release); stranded.clear();
         numbering.clear(); markingFinish.clear();
@@ -184,7 +188,7 @@ public final class RaceManager extends AbstractGameState {
         ArenaMap map = requireMap(mapId);
         if (busy()) throw new IllegalStateException("Wait for the race and arena reset to finish.");
         RaceCourse course = course(mapId); Set<Chunk> tickets = new HashSet<>();
-        return loadChunks(contender, map, tickets, this::isEnabled).thenCompose(ignored -> {
+        return setupMobs.settled(mapId).thenCompose(ignored -> loadChunks(contender, map, tickets, this::isEnabled)).thenCompose(ignored -> {
             var mobs = scan(map, course); configure(course);
             mobs.values().forEach(mob -> setupMobs.protect(mob, mapId));
             return contender.getArenaManager().saveBlocks(map).thenCompose(done -> contender.getArenaManager().prepare(map));
@@ -200,6 +204,7 @@ public final class RaceManager extends AbstractGameState {
         Dialogs.tell(player, "Spawn mobs inside the selection to number them. Reopen this menu to stop.");
     }
     public boolean numbering(Player player, String mapId) { return mapId.equals(numbering.get(player.getUniqueId())); }
+    boolean markingFinish(Player player) { return markingFinish.containsKey(player.getUniqueId()); }
     public void markFinish(Player player, String mapId) {
         requireMap(mapId); markingFinish.put(player.getUniqueId(), mapId); numbering.remove(player.getUniqueId());
         setupMobs.watch(mapId);
@@ -208,6 +213,33 @@ public final class RaceManager extends AbstractGameState {
     public void protectCourseMobs(String mapId) {
         requireMap(mapId);
         setupMobs.watch(mapId);
+    }
+    public boolean isCourseMob(Entity entity) { return setupMobs.checkpointMap(entity) != null; }
+    public void giveRemovalTool(Player player, String mapId) {
+        requireCourseEditor(player, mapId);
+        ArenaMap map = requireMap(mapId);
+        setupMobs.watch(mapId);
+        markingFinish.remove(player.getUniqueId());
+        editorTools.give(player, mapId, map.getDisplayName());
+    }
+    public CompletableFuture<Void> removeCourseMob(Player player, String mapId, Entity entity) {
+        requireCourseEditor(player, mapId);
+        if (!(entity instanceof LivingEntity mob) || entity instanceof Player || !mapId.equals(setupMobs.checkpointMap(entity))) {
+            throw new IllegalArgumentException("Click a checkpoint or finish mob in this tool's original map.");
+        }
+        if (!setupMobs.remove(mob, mapId)) throw new IllegalStateException("That checkpoint has already been removed.");
+        return setupMobs.settled(mapId);
+    }
+    private void requireCourseEditor(Player player, String mapId) {
+        if (!player.hasPermission("contender.master")) throw new IllegalStateException("You don't have permission to edit courses.");
+        requireMap(mapId);
+        if (busy() || current != null && !current.terminal() && current.mapId().equals(mapId)) {
+            throw new IllegalStateException("Finish or cancel the race before editing this course.");
+        }
+        if (contender.getDuelManager().getDuel(player) != null
+                || contender.getMinigameManager() != null && contender.getMinigameManager().owns(player.getUniqueId())) {
+            throw new IllegalStateException("Leave your game before editing a course.");
+        }
     }
     private ArenaMap requireMap(String id) {
         ArenaMap map = contender.getMapManager().getMap(id);
@@ -238,6 +270,10 @@ public final class RaceManager extends AbstractGameState {
         }
         mob.customName(Component.text(course(mapId).finishName(), NamedTextColor.GOLD)); mob.setCustomNameVisible(true);
         setupMobs.protect(mob, mapId); markingFinish.remove(event.getPlayer().getUniqueId());
+        setupMobs.repairOrder(mapId).exceptionally(failure -> {
+            if (isEnabled() && event.getPlayer().isOnline()) Dialogs.error(event.getPlayer(), rootMessage(failure));
+            return null;
+        });
         Dialogs.tell(event.getPlayer(), "Finish mob set. Save the course to update its copies.");
     }
     @EventHandler public void quit(PlayerQuitEvent e) { numbering.remove(e.getPlayer().getUniqueId()); markingFinish.remove(e.getPlayer().getUniqueId()); }
@@ -250,7 +286,8 @@ public final class RaceManager extends AbstractGameState {
         if (world == null) throw new IllegalArgumentException("Load the map world first.");
         List<LivingEntity> entities = new ArrayList<>(); var b = map.getBounds();
         for (int x = b.minX() >> 4; x <= b.maxX() >> 4; x++) for (int z = b.minZ() >> 4; z <= b.maxZ() >> 4; z++) {
-            for (Entity entity : world.getChunkAt(x, z).getEntities()) if (entity instanceof LivingEntity living && !(entity instanceof Player) && map.contains(entity.getLocation())) entities.add(living);
+            for (Entity entity : world.getChunkAt(x, z).getEntities()) if (entity instanceof LivingEntity living && !(entity instanceof Player)
+                    && entity.isValid() && !entity.isDead() && map.contains(entity.getLocation())) entities.add(living);
         }
         return entities;
     }

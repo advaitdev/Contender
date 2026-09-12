@@ -241,6 +241,7 @@ class RaceSetupMobsTest {
         final RaceSetupMobs setup = new RaceSetupMobs(env.plugin, () -> courses);
 
         Fixture() {
+            when(env.plugin.getDataFolder()).thenReturn(new java.io.File("/private/tmp/contender-source-mobs-" + UUID.randomUUID()));
             when(source.getName()).thenReturn("source");
             when(arena.getName()).thenReturn("arenas");
             when(source.getLivingEntities()).thenAnswer(ignored -> List.copyOf(sourceMobs));

@@ -161,7 +161,7 @@ public final class RaceDialogs {
         menu(player, mapName(id), DialogText.paragraphs(DialogText.lines(DialogText.detail("Map ID", id),
                         DialogText.detail("Checkpoint Jump", String.valueOf(course.maxAdvance())), DialogText.detail("Finish Mob", course.finishName()),
                         groundReturnDetail(id)),
-                DialogText.muted("Name mobs #1, #2, #3, and so on, inside the selection.\nUse the numbering tool to name new mobs as you spawn them.\n\nSave the course after changing its mobs or blocks.")), List.of(
+                DialogText.muted("Name mobs #1, #2, #3, and so on, inside the selection.\nUse the numbering tool to name new mobs as you spawn them.\n\nThe removal tool deletes the mob you click.\nRemaining checkpoints renumber automatically.\n\nSave the course after changing its mobs or blocks.")), List.of(
                 action(player, DialogIcon.SAVE, "Save Course & Rebuild Copies", ACCENT, p -> {
                     p.closeDialog(); Dialogs.tell(p, "Checking the course and rebuilding its copies…");
                     manager.saveCourse(id).whenComplete((ignored, error) -> {
@@ -171,6 +171,7 @@ public final class RaceDialogs {
                 }),
                 action(player, DialogIcon.SPAWN, "Set Start Here", TEXT, p -> { manager.setStart(id, p); course(p, id); }),
                 action(player, DialogIcon.NAME, manager.numbering(player, id) ? "Stop Numbering Mobs" : "Number New Mobs", TEXT, p -> { manager.numberSpawns(p, id); p.closeDialog(); }),
+                action(player, DialogIcon.REMOVE, "Get Removal Tool", TEXT, p -> manager.giveRemovalTool(p, id)),
                 action(player, DialogIcon.SAVE, "Mark Finish Mob", TEXT, p -> { manager.markFinish(p, id); p.closeDialog(); }),
                 action(player, DialogIcon.SETTINGS, "Course Rules", TEXT, p -> courseRules(p, id)),
                 action(player, DialogIcon.MACE, "Race Kits", TEXT, this::kits)), p -> courses(p, 0));

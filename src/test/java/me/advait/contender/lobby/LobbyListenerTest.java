@@ -3,13 +3,19 @@ package me.advait.contender.lobby;
 import io.papermc.paper.event.player.AsyncPlayerSpawnLocationEvent;
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
+import me.advait.contender.race.RaceManager;
 import me.advait.contender.role.RoleManager;
 import me.advait.contender.testutil.StateTestServer;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.damage.DamageSource;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Pig;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.*;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.*;
 import org.junit.jupiter.api.*;
 
@@ -117,6 +123,51 @@ class LobbyListenerTest {
         when(event.isCancelled()).thenReturn(true);
         listener.onBlockBreak(event);
         assertTrue(event.isCancelled()); verify(event, never()).setCancelled(false);
+    }
+
+    @Test void killOnlyBypassesLobbyProtectionForSourceCourseMobs() {
+        var races = mock(RaceManager.class);
+        when(server.plugin.getRaceManager()).thenReturn(races);
+        for (Entity checkpoint : new Entity[]{mock(Pig.class), mock(ArmorStand.class)}) {
+            when(checkpoint.getWorld()).thenReturn(world);
+            when(races.isCourseMob(checkpoint)).thenReturn(true);
+            var kill = damage(checkpoint, EntityDamageEvent.DamageCause.KILL);
+            listener.onEntityDamage(kill);
+            assertFalse(kill.isCancelled());
+        }
+        for (Entity other : new Entity[]{mock(Pig.class), player}) {
+            when(other.getWorld()).thenReturn(world);
+            var kill = damage(other, EntityDamageEvent.DamageCause.KILL);
+            listener.onEntityDamage(kill);
+            assertTrue(kill.isCancelled());
+        }
+    }
+
+    @Test void courseMobsRemainProtectedFromOrdinaryDamageInTheLobby() {
+        var races = mock(RaceManager.class);
+        when(server.plugin.getRaceManager()).thenReturn(races);
+        var checkpoint = mock(Pig.class);
+        when(checkpoint.getWorld()).thenReturn(world);
+        when(races.isCourseMob(checkpoint)).thenReturn(true);
+        var hit = damage(checkpoint, EntityDamageEvent.DamageCause.FALL);
+        listener.onEntityDamage(hit);
+        assertTrue(hit.isCancelled());
+    }
+
+    @Test void sourceCourseKillDoesNotUncancelAnotherPluginsProtection() {
+        var races = mock(RaceManager.class);
+        when(server.plugin.getRaceManager()).thenReturn(races);
+        var checkpoint = mock(Pig.class);
+        when(checkpoint.getWorld()).thenReturn(world);
+        when(races.isCourseMob(checkpoint)).thenReturn(true);
+        var kill = damage(checkpoint, EntityDamageEvent.DamageCause.KILL);
+        kill.setCancelled(true);
+        listener.onEntityDamage(kill);
+        assertTrue(kill.isCancelled());
+    }
+
+    private EntityDamageEvent damage(Entity entity, EntityDamageEvent.DamageCause cause) {
+        return new EntityDamageEvent(entity, cause, mock(DamageSource.class), 10);
     }
 
     @Test void configurationSelectsSavedLocationForBothNewAndReturningPlayers() throws Exception {

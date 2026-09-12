@@ -37,7 +37,8 @@ public enum DialogIcon {
     ANCHOR("items", "item/netherite_ingot"),
     BOOTS("items", "item/diamond_boots"),
     JUMP("items", "item/rabbit_foot"),
-    STEP("items", "item/feather");
+    STEP("items", "item/feather"),
+    REMOVE("items", "item/shears");
 
     private final String atlas;
     private final String texture;

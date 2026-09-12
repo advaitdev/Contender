@@ -145,6 +145,8 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!lobbyManager.isLobbyWorld(event.getEntity().getWorld())) return;
+        if (event.getCause() == EntityDamageEvent.DamageCause.KILL && plugin.getRaceManager() != null
+                && plugin.getRaceManager().isCourseMob(event.getEntity())) return;
         if (event.getEntity() instanceof ArmorStand || event.getEntity() instanceof ItemFrame) {
             if (event instanceof EntityDamageByEntityEvent attack && attack.getDamager() instanceof Player player
                     && lobbyManager.canBreak(player)) return;

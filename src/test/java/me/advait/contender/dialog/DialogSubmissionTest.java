@@ -284,6 +284,26 @@ class DialogSubmissionTest {
         assertEquals(List.of("Back", "Next: Players"), shownButtons.stream().map(b -> plain(b.label())).toList());
     }
 
+    @Test void raceCourseProvidesAMapSpecificRemovalTool() {
+        var races = mock(me.advait.contender.race.RaceManager.class);
+        when(server.plugin.getRaceManager()).thenReturn(races);
+        var maps = mock(MapManager.class); when(server.plugin.getMapManager()).thenReturn(maps);
+        var map = new ArenaMap("race"); map.setDisplayName("Sky Course");
+        when(maps.getMap("race")).thenReturn(map); when(maps.getMaps()).thenReturn(List.of(map));
+        when(races.course("race")).thenReturn(me.advait.contender.race.RaceCourse.defaults("race"));
+        new RaceDialogs(server.plugin).courses(player, 0);
+        actions.get("Sky Course").accept(mock(DialogResponseView.class), player);
+
+        assertEquals(1, shownColumns);
+        assertTrue(messages.stream().anyMatch(message -> message.contains("Remaining checkpoints renumber automatically")));
+        ActionButton tool = shownButtons.stream().filter(button -> plain(button.label()).equals("Get Removal Tool")).findFirst().orElseThrow();
+        assertEquals(300, tool.width());
+        assertInstanceOf(ObjectComponent.class, tool.label().children().getFirst());
+        assertRegular(tool.label());
+        click(tool);
+        verify(races).giveRemovalTool(player, "race");
+    }
+
     @Test void maceRaceCourseRulesSaveGroundReturnWithPairedNavigation() {
         var races = mock(me.advait.contender.race.RaceManager.class);
         when(server.plugin.getRaceManager()).thenReturn(races);

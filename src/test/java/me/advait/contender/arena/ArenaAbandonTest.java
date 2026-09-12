@@ -78,6 +78,7 @@ class ArenaAbandonTest {
     @Test void abandonmentWhileChunksLoadStopsEntityRemovalAndPaste() throws Exception {
         Fixture f = new Fixture();
         Chunk chunk = mock(Chunk.class);
+        when(chunk.isEntitiesLoaded()).thenReturn(true);
         when(chunk.addPluginChunkTicket(f.plugin)).thenReturn(true);
         CompletableFuture<Chunk> load = new CompletableFuture<>();
         when(f.world.getChunkAtAsync(0, 0)).thenReturn(load);
@@ -191,6 +192,7 @@ class ArenaAbandonTest {
         Fixture f = new Fixture();
         CompletableFuture<Chunk> load = new CompletableFuture<>();
         Chunk chunk = mock(Chunk.class);
+        when(chunk.isEntitiesLoaded()).thenReturn(true);
         when(f.world.getChunkAtAsync(0, 0)).thenReturn(load);
         var reset = f.manager.reset(f.instance.acquire());
         Player player = mock(Player.class);

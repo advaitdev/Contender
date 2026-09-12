@@ -50,6 +50,26 @@ public final class ArenaManager {
     private long maintenanceTick;
     private BukkitTask maintenance;
     private CompletableFuture<Void> work = CompletableFuture.completedFuture(null);
+    private CompletableFuture<Void> templateWork = CompletableFuture.completedFuture(null);
+    private final Map<Object, Progress> progress = new LinkedHashMap<>();
+    private static final class Progress {
+        final String mapId;
+        String stage;
+        long since;
+        long lastReport;
+        boolean waiting;
+        volatile Thread worker;
+        Progress(String mapId, String stage) { this.mapId = mapId; phase(stage, true); }
+        void phase(String stage, boolean waiting) {
+            this.stage = stage;
+            this.waiting = waiting;
+            since = lastReport = System.nanoTime();
+        }
+        String description() {
+            long seconds = java.util.concurrent.TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - since);
+            return stage + " (" + seconds + "s).";
+        }
+    }
     private World world;
     private boolean closed;
     private int spacing;
@@ -90,7 +110,7 @@ public final class ArenaManager {
     public World getWorld() { return world; }
     public boolean isArenaWorld(World candidate) { return world != null && world.equals(candidate); }
     public boolean isEditing(String mapId) { return editing.contains(mapId); }
-    public boolean hasPendingWork() { return !work.isDone() || !editing.isEmpty() || pools.keySet().stream().anyMatch(this::isBusy); }
+    public boolean hasPendingWork() { return !work.isDone() || !templateWork.isDone() || !editing.isEmpty() || pools.keySet().stream().anyMatch(this::isBusy); }
     public void reloadTemplates() {
         if (hasPendingWork()) throw new IllegalStateException("Wait for matches and arena preparation to finish.");
         pools.clear();
@@ -281,15 +301,19 @@ public final class ArenaManager {
             loadTemplate(map).thenCompose(clipboard -> {
                 if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
                 clipboards.put(map.getId(), clipboard);
-                List<CompletableFuture<Void>> attempts = new ArrayList<>();
+                CompletableFuture<Void> attempts = CompletableFuture.completedFuture(null);
                 for (ArenaInstance instance : candidates) {
-                    CompletableFuture<Void> current = restoring.get(instance);
-                    if (current != null) attempts.add(current);
-                    else if (!instance.isReserved() && needsRepair(instance) && empty(instance)) {
-                        attempts.add(restore(instance, clipboard, true));
-                    }
+                    // Queue one copy per map at a time, allowing other maps to make progress.
+                    // A failure ends this attempt immediately instead of hiding behind the rest of the pool.
+                    attempts = attempts.thenCompose(ignored -> {
+                        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
+                        CompletableFuture<Void> current = restoring.get(instance);
+                        if (current != null) return current;
+                        if (!instance.isReserved() && needsRepair(instance) && empty(instance)) return restore(instance, clipboard, true);
+                        return CompletableFuture.completedFuture(null);
+                    });
                 }
-                return CompletableFuture.allOf(attempts.toArray(CompletableFuture[]::new));
+                return attempts;
             }).whenComplete((ignored, failure) -> {
                 preparing.remove(map.getId(), result);
                 if (failure == null) {
@@ -322,12 +346,17 @@ public final class ArenaManager {
         Clipboard cached = clipboards.get(map.getId());
         if (cached != null) return CompletableFuture.completedFuture(cached);
         if (map.getSchematic() == null) return capture(map).thenApply(clipboard -> { maps.save(map); return clipboard; });
-        return enqueue(() -> async(() -> {
-            try (var input = Files.newInputStream(schematicPath(map.getSchematic()));
-                 var reader = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getReader(input)) {
-                return reader.read();
-            }
-        }));
+        Progress status = new Progress(map.getId(), "Waiting to read the saved template");
+        progress.put(map.getId(), status);
+        return enqueueTemplate(() -> {
+            status.phase("Reading the saved template", false);
+            return async(status, () -> {
+                try (var input = Files.newInputStream(schematicPath(map.getSchematic()));
+                     var reader = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getReader(input)) {
+                    return reader.read();
+                }
+            });
+        }).whenComplete((ignored, failure) -> progress.remove(map.getId(), status));
     }
 
     private boolean needsRepair(ArenaInstance instance) {
@@ -343,6 +372,7 @@ public final class ArenaManager {
     void maintain() {
         if (closed) return;
         maintenanceTick += 100;
+        reportSlowOperations();
         for (ArenaMap map : maps.getMaps()) {
             if (!map.isComplete() || isEditing(map.getId()) || preparing.containsKey(map.getId()) || !retryDue(map.getId())) continue;
             List<ArenaInstance> pool = pools.get(map.getId());
@@ -395,6 +425,8 @@ public final class ArenaManager {
         int ready = available(mapId);
         String count = ready + " of " + map.getCopies() + " arena copies ready.";
         if (ready == map.getCopies()) return count;
+        String operation = operationStatus(mapId);
+        if (progress.values().stream().anyMatch(status -> status.mapId.equals(mapId))) return count + " " + operation;
         if (isEditing(mapId)) return count + " Saving the map.";
         if (preparing.containsKey(mapId) || instances(mapId).stream().anyMatch(restoring::containsKey)) {
             return count + " Preparing the remaining copies automatically.";
@@ -405,6 +437,30 @@ public final class ArenaManager {
         String failure = failures.get(mapId);
         if (failure != null) return count + " Retrying automatically: " + failure;
         return count + " The remaining copies will prepare automatically.";
+    }
+
+    public String operationStatus(String mapId) {
+        Progress current = progress.values().stream().filter(status -> status.mapId.equals(mapId))
+                .min(Comparator.comparing(status -> status.waiting)).orElse(null);
+        String failure = failures.get(mapId);
+        String status = current != null ? current.description()
+                : failure != null ? "Waiting to retry automatically." : isEditing(mapId) ? "Saving the map." : "No arena work is running for this map.";
+        return failure == null ? status : status + " Last attempt: " + failure;
+    }
+
+    private void reportSlowOperations() {
+        long now = System.nanoTime();
+        for (Progress status : progress.values()) {
+            if (now - status.lastReport < java.util.concurrent.TimeUnit.SECONDS.toNanos(60)) continue;
+            status.lastReport = now;
+            plugin.getLogger().info("Arena " + status.mapId + ": " + status.description());
+            Thread worker = status.worker;
+            if (worker != null) {
+                String trace = Arrays.stream(worker.getStackTrace()).limit(12).map(frame -> "    at " + frame)
+                        .collect(java.util.stream.Collectors.joining("\n"));
+                plugin.getLogger().info("Arena worker for " + status.mapId + " (" + worker.getState() + "):\n" + trace);
+            }
+        }
     }
 
     public CompletableFuture<Void> reset(ArenaLease lease) {
@@ -423,8 +479,13 @@ public final class ArenaManager {
         long revision = instance.beginReset();
         CompletableFuture<Void> result = new CompletableFuture<>();
         restoring.put(instance, result);
+        List<ArenaInstance> pool = instances(instance.map().getId());
+        String copy = "copy " + (pool.indexOf(instance) + 1) + " of " + pool.size();
+        Progress status = new Progress(instance.map().getId(), "Waiting to prepare " + copy);
+        progress.put(instance, status);
         enqueue(() -> {
             requireReset(instance, revision);
+            status.phase("Loading chunks and entities for " + copy, false);
             return chunks.run(world, instance.map().getBounds(), () -> {
                 requireReset(instance, revision);
                 requireEmpty(instance);
@@ -436,10 +497,12 @@ public final class ArenaManager {
                 }
                 var targetWorld = BukkitAdapter.adapt(world);
                 BlockBounds bounds = instance.map().getBounds();
-                return async(() -> {
+                status.phase("Pasting " + copy + " (" + String.format(Locale.ROOT, "%,d", bounds.volume()) + " blocks)", false);
+                return async(status, () -> {
                     // This may have waited for a worker after the main-thread checks above.
                     if (!instance.isReset(revision)) throw new IllegalStateException("Arena reset was cancelled.");
-                    try (EditSession session = WorldEdit.getInstance().newEditSession(targetWorld)) {
+                    // Saved schematics provide rollback; FAWE undo history duplicates every pasted block.
+                    try (EditSession session = WorldEdit.getInstance().newEditSessionBuilder().world(targetWorld).changeSetNull().build()) {
                         Operations.complete(new ClipboardHolder(clipboard).createPaste(session)
                                 .to(BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()))
                                 .ignoreAirBlocks(false).copyEntities(true).copyBiomes(true).build());
@@ -452,6 +515,7 @@ public final class ArenaManager {
             instance.restored(revision);
             return null;
         }).whenComplete((ignored, failure) -> {
+            progress.remove(instance, status);
             restoring.remove(instance, result);
             if (failure != null) {
                 instance.failed(revision);
@@ -480,34 +544,43 @@ public final class ArenaManager {
         } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
         if (source == null) return CompletableFuture.failedFuture(new IllegalArgumentException("Could not load the source world."));
         final World loadedSource = source;
-        var sourceWorld = BukkitAdapter.adapt(source);
         BlockBounds bounds = map.getBounds();
         String fileName = map.getId() + "-" + UUID.randomUUID() + ".schem";
-        return enqueue(() -> chunks.run(loadedSource, bounds, () -> async(() -> {
-            CuboidRegion region = new CuboidRegion(sourceWorld,
-                    BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()),
-                    BlockVector3.at(bounds.maxX(), bounds.maxY(), bounds.maxZ()));
-            Clipboard clipboard = new BlockArrayClipboard(region);
-            clipboard.setOrigin(region.getMinimumPoint());
-            try (EditSession session = WorldEdit.getInstance().newEditSession(sourceWorld)) {
-                ForwardExtentCopy copy = new ForwardExtentCopy(session, region, clipboard, region.getMinimumPoint());
-                copy.setCopyingEntities(true);
-                copy.setCopyingBiomes(true);
-                Operations.complete(copy);
-            }
-            for (var entity : new ArrayList<>(clipboard.getEntities())) {
-                if (entity.getState() != null && entity.getState().getType().getId().equals("minecraft:player")) {
-                    clipboard.removeEntity(entity);
-                }
-            }
-            Path path = schematicPath(fileName);
-            Files.createDirectories(path.getParent());
-            try (var output = Files.newOutputStream(path);
-                 var writer = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getWriter(output)) {
-                writer.write(clipboard);
-            }
-            return clipboard;
-        }))).thenApply(clipboard -> { map.setSchematic(fileName); return clipboard; });
+        Progress status = new Progress(map.getId(), "Waiting to save the map selection");
+        progress.put(map.getId(), status);
+        return enqueueTemplate(() -> {
+            status.phase("Loading the source map's chunks and entities", false);
+            return chunks.run(loadedSource, bounds, () -> {
+                var sourceWorld = BukkitAdapter.adapt(loadedSource);
+                status.phase("Saving " + String.format(Locale.ROOT, "%,d", bounds.volume()) + " selected blocks and entities", false);
+                return async(status, () -> {
+                    CuboidRegion region = new CuboidRegion(sourceWorld,
+                            BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()),
+                            BlockVector3.at(bounds.maxX(), bounds.maxY(), bounds.maxZ()));
+                    Clipboard clipboard = new BlockArrayClipboard(region);
+                    clipboard.setOrigin(region.getMinimumPoint());
+                    try (EditSession session = WorldEdit.getInstance().newEditSessionBuilder().world(sourceWorld).changeSetNull().build()) {
+                        ForwardExtentCopy copy = new ForwardExtentCopy(session, region, clipboard, region.getMinimumPoint());
+                        copy.setCopyingEntities(true);
+                        copy.setCopyingBiomes(true);
+                        Operations.complete(copy);
+                    }
+                    for (var entity : new ArrayList<>(clipboard.getEntities())) {
+                        if (entity.getState() != null && entity.getState().getType().getId().equals("minecraft:player")) {
+                            clipboard.removeEntity(entity);
+                        }
+                    }
+                    Path path = schematicPath(fileName);
+                    Files.createDirectories(path.getParent());
+                    try (var output = Files.newOutputStream(path);
+                         var writer = BuiltInClipboardFormat.SPONGE_V3_SCHEMATIC.getWriter(output)) {
+                        writer.write(clipboard);
+                    }
+                    return clipboard;
+                });
+            });
+        }).thenApply(clipboard -> { map.setSchematic(fileName); return clipboard; })
+                .whenComplete((ignored, failure) -> progress.remove(map.getId(), status));
     }
 
     private Path schematicPath(String name) {
@@ -534,10 +607,17 @@ public final class ArenaManager {
     }
 
     private <T> CompletableFuture<T> enqueue(Supplier<CompletableFuture<T>> operation) {
-        CompletableFuture<Void> previous = work;
+        return enqueue(operation, false);
+    }
+    private <T> CompletableFuture<T> enqueueTemplate(Supplier<CompletableFuture<T>> operation) {
+        return enqueue(operation, true);
+    }
+    private <T> CompletableFuture<T> enqueue(Supplier<CompletableFuture<T>> operation, boolean template) {
+        CompletableFuture<Void> previous = template ? templateWork : work;
         CompletableFuture<Void> tail = new CompletableFuture<>();
         // Publish the new tail before running code that may complete inline and enqueue more work.
-        work = tail;
+        if (template) templateWork = tail;
+        else work = tail;
         CompletableFuture<T> next = previous.handle((ignored, failure) -> null).thenCompose(ignored -> {
             if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Arena preparation stopped."));
             return operation.get();
@@ -546,16 +626,17 @@ public final class ArenaManager {
         return next;
     }
     @FunctionalInterface private interface Job<T> { T run() throws Exception; }
-    private <T> CompletableFuture<T> async(Job<T> job) {
+    private <T> CompletableFuture<T> async(Progress progress, Job<T> job) {
         CompletableFuture<T> future = new CompletableFuture<>();
         pending.add(future);
         try { plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            progress.worker = Thread.currentThread();
             try {
                 T value = job.run();
                 completeOnMain(future, value, null);
             } catch (Throwable failure) {
                 completeOnMain(future, null, failure);
-            }
+            } finally { progress.worker = null; }
         }); } catch (RuntimeException failure) {
             pending.remove(future);
             future.completeExceptionally(failure);

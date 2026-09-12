@@ -464,6 +464,57 @@ class DialogSubmissionTest {
 
         verify(arenas).create(player, "mines", "The Mines", 20);
         verify(player).closeDialog();
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Saving map selection. Large selections can take a while.")));
+        assertEquals(200L, server.scheduled.getLast().delay());
+    }
+
+    @Test void pendingMapCreationReportsItsActualQueueStatusWithoutOpeningAnotherDialog() {
+        new ArenaDialogs(server.plugin).create(player);
+        var response = mock(DialogResponseView.class);
+        when(response.getText("map_id")).thenReturn("mines");
+        when(response.getText("name")).thenReturn("The Mines");
+        when(response.getFloat("copies")).thenReturn(20f);
+        when(arenas.create(player, "mines", "The Mines", 20)).thenReturn(new CompletableFuture<>());
+        when(arenas.operationStatus("mines")).thenReturn("Waiting for the current arena copy to finish. 10 seconds elapsed.");
+
+        actions.get("Save Selection").accept(response, player);
+        server.scheduled.getLast().run();
+
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Waiting for the current arena copy to finish. 10 seconds elapsed.")));
+        verify(player, times(1)).showDialog(any(Dialog.class));
+    }
+
+    @Test void rejectedMapCreationDoesNotClaimItIsSavingOrScheduleAStatusMessage() {
+        new ArenaDialogs(server.plugin).create(player);
+        var response = mock(DialogResponseView.class);
+        when(response.getText("map_id")).thenReturn("mines");
+        when(response.getText("name")).thenReturn("The Mines");
+        when(response.getFloat("copies")).thenReturn(20f);
+        when(arenas.create(player, "mines", "The Mines", 20)).thenReturn(
+                CompletableFuture.failedFuture(new IllegalArgumentException("Select both corners with the WorldEdit wand first.")));
+
+        actions.get("Save Selection").accept(response, player);
+
+        assertTrue(server.scheduled.isEmpty());
+        verify(player, times(1)).sendMessage(any(Component.class));
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Select both corners with the WorldEdit wand first.")));
+    }
+
+    @Test void pendingMapSaveDoesNotSendProgressAfterThePlayerLeaves() {
+        ArenaMap map = arenaMap();
+        when(arenas.saveBlocks(map)).thenReturn(new CompletableFuture<>());
+        when(arenas.readiness("mines")).thenReturn("20 / 20 ready.");
+        new ArenaDialogs(server.plugin).edit(player, "mines");
+
+        actions.get("Save Current Blocks").accept(mock(DialogResponseView.class), player);
+        when(player.isOnline()).thenReturn(false);
+        server.scheduled.getLast().run();
+
+        verify(player, times(1)).sendMessage(any(Component.class));
+        verify(arenas, never()).operationStatus(anyString());
     }
 
     @Test void arenaStatusCanBeCheckedDuringPreparationWithoutSavingTheSource() {
@@ -519,11 +570,18 @@ class DialogSubmissionTest {
         verify(arenas, never()).saveBlocks(any());
 
         actions.get("Save Current Blocks").accept(mock(DialogResponseView.class), player);
+        verify(player).sendMessage(argThat((Component message) -> plain(message)
+                .equals("Saving map selection. Large selections can take a while.")));
+        var reminder = server.scheduled.getLast();
         saving.complete(null);
+        reminder.run();
 
         verify(arenas).saveBlocks(map);
         verify(player).sendMessage(argThat((Component message) -> plain(message)
                 .equals("Template saved. Arena copies are updating automatically.")));
+        verify(reminder.task()).cancel();
+        verify(arenas, never()).operationStatus(anyString());
+        verify(player, times(2)).sendMessage(any(Component.class));
     }
 
     private ArenaMap arenaMap() {

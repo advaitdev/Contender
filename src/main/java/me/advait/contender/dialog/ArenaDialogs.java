@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class ArenaDialogs {
     private static final String MAP_ID_INPUT = "map_id";
@@ -45,8 +46,10 @@ public final class ArenaDialogs {
                 Dialogs.text(MAP_ID_INPUT, "Map ID", "", 40), Dialogs.text("name", "Map name", "", 64),
                 Dialogs.number("copies", "Arena copies", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100), 1, 100, 1)),
                 List.of(dialogs.button(player, DialogIcon.SAVE, "Save Selection", (p, view) -> {
-                    var result = plugin.getArenaManager().create(p, Dialogs.text(view, MAP_ID_INPUT), Dialogs.text(view, "name"), Dialogs.number(view, "copies", 1, 100));
+                    String id = Dialogs.text(view, MAP_ID_INPUT);
+                    var result = plugin.getArenaManager().create(p, id, Dialogs.text(view, "name"), Dialogs.number(view, "copies", 1, 100));
                     p.closeDialog();
+                    acknowledgeSave(p, id, result);
                     result.whenComplete((map, failure) -> {
                         if (!p.isOnline()) return;
                         if (failure != null) Dialogs.error(p, Dialogs.message(failure));
@@ -81,8 +84,10 @@ public final class ArenaDialogs {
         }
         buttons.add(dialogs.button(player, DialogIcon.NAME, "Name and Copy Count", (p, view) -> settings(p, id)));
         buttons.add(dialogs.button(player, DialogIcon.SAVE, "Save Current Blocks", (p, view) -> {
+            var result = plugin.getArenaManager().saveBlocks(map(id));
             p.closeDialog();
-            plugin.getArenaManager().saveBlocks(map(id)).whenComplete((ignored, failure) -> {
+            acknowledgeSave(p, id, result);
+            result.whenComplete((ignored, failure) -> {
                 if (p.isOnline()) {
                     if (failure != null) Dialogs.error(p, Dialogs.message(failure));
                     else Dialogs.tell(p, "Template saved. Arena copies are updating automatically.");
@@ -101,6 +106,15 @@ public final class ArenaDialogs {
                     });
                 }));
         dialogs.show(player, map.getDisplayName(), body, List.of(), buttons);
+    }
+    private void acknowledgeSave(Player player, String mapId, CompletableFuture<?> result) {
+        if (result.isDone()) return;
+        player.sendMessage(DialogPalette.text("Saving map selection. Large selections can take a while.", DialogPalette.ACCENT));
+        var reminder = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!plugin.isEnabled() || !player.isOnline() || result.isDone()) return;
+            player.sendMessage(DialogPalette.text(plugin.getArenaManager().operationStatus(mapId), DialogPalette.MUTED));
+        }, 200L);
+        result.whenComplete((ignored, failure) -> reminder.cancel());
     }
     private void settings(Player player, String id) {
         ArenaMap map = map(id);

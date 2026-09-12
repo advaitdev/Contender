@@ -82,8 +82,8 @@ class ArenaMaintenanceTest {
     @Test void oneFailedCopyDoesNotDiscardSuccessfulCopiesAndMaintenanceRepairsIt() throws Exception {
         try (Fixture f = new Fixture()) {
             var preparation = f.manager.prepare(f.map);
-            f.pastes.getFirst().completeExceptionally(new IllegalStateException("Temporary chunk error"));
-            f.pastes.getLast().complete(null);
+            f.pastes.getFirst().complete(null);
+            f.pastes.getLast().completeExceptionally(new IllegalStateException("Temporary chunk error"));
             assertThrows(CompletionException.class, preparation::join);
             assertEquals(1, f.manager.available("course"));
             ArenaLease working = f.manager.acquire("course");
@@ -96,6 +96,49 @@ class ArenaMaintenanceTest {
             assertTrue(working.instance().owns(working));
             assertEquals(ArenaInstance.Status.IN_USE, working.instance().status());
             assertEquals(1, f.manager.available("course"));
+        }
+    }
+
+    @Test void failedFirstCopyStopsTheAttemptAndReportsItsErrorImmediately() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.map.setCopies(20);
+            var preparation = f.manager.prepare(f.map);
+            f.pastes.getFirst().completeExceptionally(new IllegalStateException("Chunk loading timed out"));
+
+            assertThrows(CompletionException.class, preparation::join);
+            assertEquals(1, f.pastes.size(), "Do not queue nineteen more failing copies before reporting the first failure");
+            assertFalse(f.manager.isBusy("course"));
+            assertTrue(f.manager.readiness("course").contains("Chunk loading timed out"));
+            assertFalse(f.manager.readiness("course").contains("Preparing the remaining"));
+
+            f.manager.maintain();
+            assertEquals(2, f.pastes.size());
+            assertTrue(f.manager.readiness("course").contains("Loading chunks and entities for copy 1 of 20"));
+            assertTrue(f.manager.readiness("course").contains("Last attempt: Chunk loading timed out"));
+        }
+    }
+
+    @Test void savingANewSourceMapDoesNotWaitForAnActiveArenaPaste() throws Exception {
+        try (Fixture f = new Fixture(); var bukkit = mockStatic(org.bukkit.Bukkit.class)) {
+            var preparation = f.manager.prepare(f.map);
+            ArenaMap sourceMap = new ArenaMap("new_map");
+            sourceMap.setWorldName("source");
+            sourceMap.setRollbackRegion(0, 0, 0, 15, 10, 15);
+            World source = mock(World.class);
+            bukkit.when(() -> org.bukkit.Bukkit.getWorld("source")).thenReturn(source);
+            var capture = ArenaManager.class.getDeclaredMethod("capture", ArenaMap.class);
+            capture.setAccessible(true);
+
+            var saving = (CompletableFuture<?>) capture.invoke(f.manager, sourceMap);
+
+            assertEquals(2, f.pastes.size(), "Source capture starts while the first arena copy is still pending");
+            assertTrue(f.manager.operationStatus("new_map").contains("Loading the source map"));
+            assertTrue(f.manager.readiness("course").contains("copy 1 of 2"));
+            f.pastes.getLast().complete(null);
+            assertDoesNotThrow(saving::join);
+            assertNotNull(sourceMap.getSchematic());
+            assertFalse(preparation.isDone());
+            assertFalse(f.pastes.getFirst().isDone());
         }
     }
 

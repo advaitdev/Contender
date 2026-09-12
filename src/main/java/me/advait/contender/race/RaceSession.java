@@ -11,8 +11,8 @@ import org.bukkit.event.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.*;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.util.Vector;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -69,7 +69,7 @@ public final class RaceSession extends AbstractGameState {
             LivingEntity entity = entry.getValue();
             mobs.put(entity.getUniqueId(), index); targets.put(entity.getUniqueId(), entity);
             targetAnchors.put(entity.getUniqueId(), entity.getLocation().clone());
-            checkpoints.put(index, entity.getLocation().add(0, course.returnHeight(), 0));
+            checkpoints.put(index, entity.getLocation().clone());
             var health = entity.getAttribute(Attribute.MAX_HEALTH);
             if (health == null) throw new IllegalArgumentException("Checkpoint mobs must have health.");
             health.setBaseValue(1024); entity.setHealth(1024); entity.setInvulnerable(false);
@@ -186,7 +186,8 @@ public final class RaceSession extends AbstractGameState {
     }
     private Location returnPoint(Player player) {
         var racer = run.racer(player.getUniqueId());
-        Location location = checkpoints.getOrDefault(racer.checkpoint(), lease.instance().map().getTeam1Spawn()).clone();
+        Location location = checkpoints.getOrDefault(racer.checkpoint(), lease.instance().map().getTeam1Spawn())
+                .clone().add(0, course.returnHeight(), 0);
         location.setYaw(player.getYaw()); location.setPitch(player.getPitch()); return location;
     }
     private boolean teleport(Player player, Location location) {
@@ -280,7 +281,7 @@ public final class RaceSession extends AbstractGameState {
         Player player = event.getPlayer(); if (!owns(player.getUniqueId())) return;
         if (RaceKit.isReturn(event.getItem())) {
             event.setCancelled(true);
-            if (event.getHand() == EquipmentSlot.HAND && event.getAction().isRightClick() && run.state() == RaceRun.State.RUNNING) {
+            if (event.getAction().isRightClick() && run.state() == RaceRun.State.RUNNING) {
                 long now = System.nanoTime();
                 if (now - bedCooldown.getOrDefault(player.getUniqueId(), 0L) > 500_000_000) { bedCooldown.put(player.getUniqueId(), now); returnPlayer(player); }
             }
@@ -297,9 +298,31 @@ public final class RaceSession extends AbstractGameState {
     @EventHandler public void combust(EntityCombustEvent e) { if (mobs.containsKey(e.getEntity().getUniqueId()) || owns(e.getEntity().getUniqueId())) e.setCancelled(true); }
     @EventHandler public void drop(PlayerDropItemEvent e) { if (owns(e.getPlayer().getUniqueId())) e.setCancelled(true); }
     @EventHandler public void pickup(EntityPickupItemEvent e) { if (owns(e.getEntity().getUniqueId())) e.setCancelled(true); }
-    @EventHandler public void inventory(InventoryClickEvent e) { if (owns(e.getWhoClicked().getUniqueId())) e.setCancelled(true); }
-    @EventHandler public void inventory(InventoryDragEvent e) { if (owns(e.getWhoClicked().getUniqueId())) e.setCancelled(true); }
-    @EventHandler public void swap(PlayerSwapHandItemsEvent e) { if (owns(e.getPlayer().getUniqueId())) e.setCancelled(true); }
+    @EventHandler public void inventory(InventoryClickEvent event) {
+        if (!owns(event.getWhoClicked().getUniqueId())) return;
+        if (!canArrange(event.getWhoClicked().getUniqueId()) || event.getView().getType() != InventoryType.CRAFTING
+                || event.getClickedInventory() != event.getWhoClicked().getInventory()) {
+            event.setCancelled(true);
+            return;
+        }
+        switch (event.getAction()) {
+            case DROP_ALL_CURSOR, DROP_ONE_CURSOR, DROP_ALL_SLOT, DROP_ONE_SLOT, CLONE_STACK, UNKNOWN -> event.setCancelled(true);
+            default -> { }
+        }
+    }
+    @EventHandler public void inventory(InventoryDragEvent event) {
+        if (!owns(event.getWhoClicked().getUniqueId())) return;
+        if (!canArrange(event.getWhoClicked().getUniqueId()) || event.getView().getType() != InventoryType.CRAFTING
+                || event.getRawSlots().stream().anyMatch(slot -> event.getView().getInventory(slot) != event.getWhoClicked().getInventory())) {
+            event.setCancelled(true);
+        }
+    }
+    @EventHandler public void swap(PlayerSwapHandItemsEvent event) {
+        if (owns(event.getPlayer().getUniqueId()) && !canArrange(event.getPlayer().getUniqueId())) event.setCancelled(true);
+    }
+    private boolean canArrange(UUID id) {
+        return !run.racer(id).done() && (run.state() == RaceRun.State.COUNTDOWN || run.state() == RaceRun.State.RUNNING);
+    }
     @EventHandler public void portal(EntityPortalEvent e) { if (mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
     @EventHandler(priority = EventPriority.HIGHEST) public void mobTeleport(EntityTeleportEvent e) { if (!internalTargetTeleport && mobs.containsKey(e.getEntity().getUniqueId())) e.setCancelled(true); }
     @EventHandler(priority = EventPriority.HIGHEST) public void mobMove(io.papermc.paper.event.entity.EntityMoveEvent e) {

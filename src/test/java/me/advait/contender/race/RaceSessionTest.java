@@ -9,6 +9,10 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.player.*;
+import org.bukkit.event.inventory.*;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.util.Vector;
@@ -20,6 +24,99 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RaceSessionTest {
+    @Test void racersCanArrangeTheirInventoryDuringCountdownAndTheRace() {
+        try (var f = new TargetFixture()) {
+            var view = inventoryView(f);
+            for (boolean started : List.of(false, true)) {
+                if (started) for (int i = 0; i < 10; i++) f.env.scheduled.getFirst().run();
+                for (InventoryAction action : List.of(InventoryAction.PICKUP_ALL, InventoryAction.PLACE_ALL,
+                        InventoryAction.SWAP_WITH_CURSOR, InventoryAction.HOTBAR_SWAP,
+                        InventoryAction.MOVE_TO_OTHER_INVENTORY, InventoryAction.COLLECT_TO_CURSOR)) {
+                    var event = new InventoryClickEvent(view, InventoryType.SlotType.QUICKBAR, 36,
+                            action == InventoryAction.HOTBAR_SWAP ? ClickType.NUMBER_KEY : ClickType.LEFT, action, 1);
+                    f.session.inventory(event); assertFalse(event.isCancelled(), action.name());
+                }
+                var drag = new InventoryDragEvent(view, null, mock(ItemStack.class), false,
+                        Map.of(36, mock(ItemStack.class), 37, mock(ItemStack.class)));
+                f.session.inventory(drag); assertFalse(drag.isCancelled());
+                var swap = new PlayerSwapHandItemsEvent(f.player, null, null);
+                f.session.swap(swap); assertFalse(swap.isCancelled());
+            }
+        }
+    }
+    @Test void inventoryReorderingCannotMoveKitItemsIntoCraftingOrContainersOrDropThem() {
+        try (var f = new TargetFixture()) {
+            var view = inventoryView(f);
+            for (int rawSlot : List.of(-999, 0, 1, 4)) {
+                var event = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, rawSlot,
+                        ClickType.LEFT, InventoryAction.PLACE_ALL);
+                f.session.inventory(event); assertTrue(event.isCancelled());
+            }
+            for (InventoryAction action : List.of(InventoryAction.DROP_ALL_CURSOR, InventoryAction.DROP_ONE_CURSOR,
+                    InventoryAction.DROP_ALL_SLOT, InventoryAction.DROP_ONE_SLOT, InventoryAction.CLONE_STACK, InventoryAction.UNKNOWN)) {
+                var event = new InventoryClickEvent(view, InventoryType.SlotType.QUICKBAR, 36, ClickType.LEFT, action);
+                f.session.inventory(event); assertTrue(event.isCancelled(), action.name());
+            }
+            var mixedDrag = new InventoryDragEvent(view, null, mock(ItemStack.class), false,
+                    Map.of(36, mock(ItemStack.class), 1, mock(ItemStack.class)));
+            f.session.inventory(mixedDrag); assertTrue(mixedDrag.isCancelled());
+            when(view.getType()).thenReturn(InventoryType.CHEST);
+            for (InventoryAction action : List.of(InventoryAction.MOVE_TO_OTHER_INVENTORY, InventoryAction.COLLECT_TO_CURSOR,
+                    InventoryAction.HOTBAR_SWAP, InventoryAction.PICKUP_ALL)) {
+                var event = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, 36, ClickType.LEFT, action);
+                f.session.inventory(event); assertTrue(event.isCancelled(), action.name());
+            }
+            var drag = new InventoryDragEvent(view, null, mock(ItemStack.class), false, Map.of(36, mock(ItemStack.class)));
+            f.session.inventory(drag); assertTrue(drag.isCancelled());
+        }
+    }
+    @Test void finishersCannotRearrangeAndExistingCancellationsAreRespected() {
+        try (var f = new TargetFixture()) {
+            var view = inventoryView(f);
+            var alreadyCancelled = new InventoryClickEvent(view, InventoryType.SlotType.QUICKBAR, 36, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+            alreadyCancelled.setCancelled(true); f.session.inventory(alreadyCancelled); assertTrue(alreadyCancelled.isCancelled());
+            for (int i = 0; i < 10; i++) f.env.scheduled.getFirst().run();
+            f.run.hit(f.player.getUniqueId(), 2, System.nanoTime());
+            var event = new InventoryClickEvent(view, InventoryType.SlotType.QUICKBAR, 36, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+            f.session.inventory(event); assertTrue(event.isCancelled());
+            var drag = new InventoryDragEvent(view, null, mock(ItemStack.class), false, Map.of(36, mock(ItemStack.class)));
+            f.session.inventory(drag); assertTrue(drag.isCancelled());
+            var swap = new PlayerSwapHandItemsEvent(f.player, null, null);
+            f.session.swap(swap); assertTrue(swap.isCancelled());
+            Player outsider = mock(Player.class); when(outsider.getUniqueId()).thenReturn(UUID.randomUUID());
+            when(view.getPlayer()).thenReturn(outsider);
+            var outside = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, 0, ClickType.LEFT, InventoryAction.PLACE_ALL);
+            f.session.inventory(outside); assertFalse(outside.isCancelled());
+        }
+    }
+    @Test void bedWorksFromEitherHandAndUsesTheReturnHeightBeforeAnyCheckpoint() {
+        try (var f = new TargetFixture()) {
+            f.kit.when(() -> RaceKit.isReturn(any())).thenReturn(true);
+            for (int i = 0; i < 10; i++) f.env.scheduled.getFirst().run();
+            clearInvocations(f.player);
+            var bed = new PlayerInteractEvent(f.player, org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
+                    mock(ItemStack.class), null, null, EquipmentSlot.OFF_HAND);
+            f.session.bed(bed); assertTrue(bed.isCancelled());
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 67));
+            f.session.bed(new PlayerInteractEvent(f.player, org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
+                    mock(ItemStack.class), null, null, EquipmentSlot.HAND));
+            verify(f.player, times(1)).teleport(any(Location.class));
+            verify(f.player).setVelocity(new Vector()); verify(f.player).setFallDistance(0);
+        }
+    }
+    private InventoryView inventoryView(TargetFixture f) {
+        var menus = Registry.MENU;
+        doAnswer(call -> mock(org.bukkit.inventory.MenuType.Typed.class)).when(menus).getOrThrow(any(net.kyori.adventure.key.Key.class));
+        var view = mock(InventoryView.class);
+        var crafting = mock(Inventory.class);
+        var type = InventoryType.CRAFTING;
+        when(view.getPlayer()).thenReturn(f.player); when(view.getType()).thenReturn(type);
+        when(view.getInventory(anyInt())).thenAnswer(call -> {
+            int slot = call.getArgument(0);
+            return slot < 0 ? null : slot < 5 ? crafting : f.player.getInventory();
+        });
+        return view;
+    }
     @Test void checkpointMobsStayFixedWhileRacerKnockbackAndUnrelatedMobsStillWork() {
         try (var f = new TargetFixture()) {
             var moved = new io.papermc.paper.event.entity.EntityMoveEvent(f.target, f.target.getLocation(), f.target.getLocation().add(3, -1, 2));
@@ -128,7 +225,7 @@ class RaceSessionTest {
             run.hit(id, 2, System.nanoTime());
             Location from = new Location(world, 4, 64, 4), to = new Location(world, 4, 50, 4);
             var fall = new PlayerMoveEvent(player, from, to); session.move(fall);
-            assertEquals(67, fall.getTo().getY()); assertEquals(4, fall.getTo().getX());
+            assertEquals(70, fall.getTo().getY()); assertEquals(4, fall.getTo().getX());
             var escape = new PlayerTeleportEvent(player, from, new Location(world, 150, 70, 4), PlayerTeleportEvent.TeleportCause.ENDER_PEARL);
             session.teleport(escape); assertTrue(escape.isCancelled());
             var wind = new PlayerMoveEvent(player, from, new Location(world, 50, 150, 4)); session.move(wind);

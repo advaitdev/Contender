@@ -8,6 +8,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RaceStoreTest {
     @TempDir Path folder;
+    @Test void olderDefaultHeightIsRaisedWhileCustomHeightsStayUnchanged() throws Exception {
+        java.nio.file.Files.writeString(folder.resolve("mace-race.yml"), """
+                courses:
+                  old-default:
+                    return-height: 3
+                  custom:
+                    return-height: 5
+                  missing:
+                    max-advance: 15
+                """);
+        var store = new RaceStore(folder.toFile());
+        var saved = store.load();
+        assertEquals(6, saved.courses().get("old-default").returnHeight());
+        assertEquals(6, saved.courses().get("missing").returnHeight());
+        assertEquals(5, saved.courses().get("custom").returnHeight());
+        assertEquals(6, RaceCourse.defaults("new").returnHeight());
+        store.save(saved.courses(), null, false);
+        assertEquals(saved.courses(), store.load().courses());
+    }
+    @Test void choosingThreeBlocksAfterTheUpgradeSurvivesReload() {
+        var store = new RaceStore(folder.toFile());
+        var course = new RaceCourse("custom", 15, "Finish", 3);
+        store.save(Map.of("custom", course), null, false);
+        assertEquals(course, store.load().courses().get("custom"));
+    }
     @Test void restartKeepsFinishTimesAndMarksAnActiveRaceInterrupted() {
         var a = new RaceRun.Racer(UUID.randomUUID(), "Alice"); var b = new RaceRun.Racer(UUID.randomUUID(), "Bob");
         var run = new RaceRun(UUID.randomUUID(), "Mace", "course", 15, 1200, List.of(a, b), "custom_race_kit");

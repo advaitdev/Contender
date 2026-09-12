@@ -30,7 +30,7 @@ class RaceSafetyTest {
             f.session.monitorRacers(); verify(f.player, never()).teleport(any(Location.class));
             f.at(2, 67, 2); f.session.monitorRacers();
             f.at(2, 64, 2); f.session.monitorRacers();
-            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 64));
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 67));
             clearInvocations(f.player);
             f.at(1, 64, 1); f.session.monitorRacers(); f.session.monitorRacers();
             verify(f.player, never()).teleport(any(Location.class));
@@ -59,7 +59,7 @@ class RaceSafetyTest {
             var attack = mock(EntityDamageByEntityEvent.class); when(attack.getEntity()).thenReturn(f.player); when(attack.getDamager()).thenReturn(mock(Player.class));
             f.session.damage(attack); verify(attack).setCancelled(true);
             var voidHit = hit(f.player, EntityDamageEvent.DamageCause.VOID); f.session.damage(voidHit); assertTrue(voidHit.isCancelled());
-            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 64));
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 67));
         }
     }
     @Test void activeRacersCanHitEachOtherWithoutLosingHealthOrAbsorption() {
@@ -180,9 +180,10 @@ class RaceSafetyTest {
         Fixture(boolean returnOnGround, boolean multiplayer) {
             registry.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
             var attrs = new HashMap<Key, Attribute>();
+            var attributeRegistry = Registry.ATTRIBUTE;
             doAnswer(call -> attrs.computeIfAbsent(call.getArgument(0), key -> {
                 Attribute a = mock(Attribute.class); when(a.getKey()).thenReturn(new NamespacedKey(key.namespace(), key.value())); return a;
-            })).when(Registry.ATTRIBUTE).getOrThrow(any(Key.class));
+            })).when(attributeRegistry).getOrThrow(any(Key.class));
             when(world.getName()).thenReturn("arena"); when(world.getMinHeight()).thenReturn(-64); when(world.getMaxHeight()).thenReturn(320);
             when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true); bukkit.when(() -> Bukkit.getWorld("arena")).thenReturn(world);
             Block solid = mock(Block.class), air = mock(Block.class); VoxelShape shape = mock(VoxelShape.class), empty = mock(VoxelShape.class);

@@ -3,8 +3,29 @@ version: '${project.version}'
 main: me.advait.contender.Contender
 api-version: '26.2'
 depend: [FastAsyncWorldEdit]
-softdepend: [LibsDisguises, voicechat]
+softdepend: [voicechat]
 commands:
+  votetimer:
+    description: Place or remove the vote timer
+    usage: /votetimer [remove]
+    permission: contender.master
+  hacks:
+    description: Configure your hacker abilities
+    usage: /hacks
+  pickhacker:
+    description: Select the hackers and announce their teammates privately
+    permission: contender.master
+    usage: /pickhacker <name> [name ...] or /pickhacker --clear
+  setlobby:
+    description: Set the lobby return location
+    permission: contender.master
+    usage: /setlobby
+  lobby:
+    description: Return to the lobby
+    usage: /lobby
+  bracket:
+    description: Choose tab rounds, pages and standings
+    usage: /bracket
   role:
     description: Assign director, spectator, or contestant roles
     permission: contender.master
@@ -31,6 +52,10 @@ commands:
     description: Contender admin commands
     permission: contender.master
     usage: /contender <reload>
+  cancelduel:
+    description: Cancel a player's duel without recording a result
+    permission: contender.master
+    usage: /cancelduel [player]
   endduel:
     description: End the duel you are currently in
     permission: contender.master
@@ -46,17 +71,13 @@ commands:
   vote:
     description: Open the voting GUI
     usage: /vote
-  deceased:
-    description: Manage deceased players
-    permission: contender.master
-    usage: /deceased <add|remove|list> [player]
-  settings:
+  options:
     description: Open settings and configure role nametags
-    usage: /settings
+    usage: /options
 permissions:
   contender.master:
     description: Allows access to duel management
     default: op
   contender.admin:
-    description: Allows access to admin settings (chat/voice configuration)
+    description: Allows lobby, chat, voice and PvP settings, and configured admin bypasses
     default: op

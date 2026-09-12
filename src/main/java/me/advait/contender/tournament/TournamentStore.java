@@ -19,10 +19,13 @@ public final class TournamentStore {
         yaml.set("wait-for-round", tournament.waitForRound());
         yaml.set("sorting-seconds", tournament.sortingSeconds());
         yaml.set("max-parallel", tournament.maxParallel());
+        yaml.set("bracket-rounds", tournament.rounds());
         yaml.set("cancelled", tournament.isCancelled());
         List<Map<String, Object>> entries = new ArrayList<>();
         for (TournamentEntry entry : tournament.entries()) {
-            entries.add(Map.of("name", entry.name(), "players", entry.players().stream().map(UUID::toString).toList()));
+            Map<String, String> names = new LinkedHashMap<>();
+            entry.playerNames().forEach((id, name) -> names.put(id.toString(), name));
+            entries.add(Map.of("name", entry.name(), "players", entry.players().stream().map(UUID::toString).toList(), "player-names", names));
         }
         yaml.set("entries", entries);
         for (TournamentMatch match : tournament.matches()) {
@@ -42,11 +45,16 @@ public final class TournamentStore {
         List<TournamentEntry> entries = new ArrayList<>();
         for (Map<?, ?> entry : yaml.getMapList("entries")) {
             List<UUID> players = ((List<?>) entry.get("players")).stream().map(value -> UUID.fromString(value.toString())).toList();
-            entries.add(new TournamentEntry((String) entry.get("name"), players));
+            Map<UUID, String> names = new LinkedHashMap<>();
+            if (entry.get("player-names") instanceof Map<?, ?> storedNames) {
+                storedNames.forEach((id, name) -> names.put(UUID.fromString(id.toString()), name.toString()));
+            }
+            entries.add(new TournamentEntry((String) entry.get("name"), players, names));
         }
         Tournament tournament = new Tournament(UUID.fromString(yaml.getString("id")), yaml.getString("name"),
                 yaml.getString("map"), yaml.getString("kit"), entries, yaml.getBoolean("teams"),
-                yaml.getBoolean("wait-for-round"), 3, yaml.getInt("sorting-seconds", 10), yaml.getInt("max-parallel", 20));
+                yaml.getBoolean("wait-for-round"), 3, yaml.getInt("sorting-seconds", 10), yaml.getInt("max-parallel", 20),
+                yaml.getInt("bracket-rounds", RoundRobinSchedule.fullRounds(entries.size())));
         for (TournamentMatch match : tournament.matches()) {
             String path = "matches." + match.number();
             match.setBestOf(yaml.getInt(path + ".best-of", 3));

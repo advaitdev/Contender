@@ -36,9 +36,11 @@ public final class KitEditorGUI {
     public static final int BLOCK_BREAK_SLOT = 43;
     public static final int NATURAL_REGEN_SLOT = 44;
     public static final int SPECTATOR_INVISIBLE_SLOT = 45;
-    public static final int DELETE_SLOT = 46;
-    public static final int CANCEL_SLOT = 48;
-    public static final int SAVE_SLOT = 50;
+    public static final int DELETE_SLOT = 53;
+    public static final int PVP_HURT_SLOT = 46;
+    public static final int CANCEL_SLOT = 51;
+    public static final int PVE_HURT_SLOT = 47;
+    public static final int SAVE_SLOT = 49;
     public static final int ICON_SLOT = 52;
 
     private KitEditorGUI() {
@@ -66,24 +68,23 @@ public final class KitEditorGUI {
         inv.setItem(BOOTS_SLOT, getSlotPlaceholder(BOOTS_SLOT));
         inv.setItem(OFFHAND_SLOT, getSlotPlaceholder(OFFHAND_SLOT));
 
-        if (!isNew) {
-            ItemStack[] contents = kit.getContents();
-            if (contents != null) {
-                for (int i = 0; i < Math.min(contents.length, 36); i++) {
-                    if (contents[i] != null) inv.setItem(i, contents[i].clone());
-                }
+        // New kits also hold a draft after a rule or icon changes.
+        ItemStack[] contents = kit.getContents();
+        if (contents != null) {
+            for (int i = 0; i < Math.min(contents.length, 36); i++) {
+                if (contents[i] != null) inv.setItem(i, contents[i].clone());
             }
-
-            ItemStack[] armor = kit.getArmor();
-            if (armor != null) {
-                if (armor.length > 3 && armor[3] != null) inv.setItem(HELMET_SLOT, armor[3].clone());
-                if (armor.length > 2 && armor[2] != null) inv.setItem(CHESTPLATE_SLOT, armor[2].clone());
-                if (armor.length > 1 && armor[1] != null) inv.setItem(LEGGINGS_SLOT, armor[1].clone());
-                if (armor.length > 0 && armor[0] != null) inv.setItem(BOOTS_SLOT, armor[0].clone());
-            }
-
-            if (kit.getOffhand() != null) inv.setItem(OFFHAND_SLOT, kit.getOffhand().clone());
         }
+
+        ItemStack[] armor = kit.getArmor();
+        if (armor != null) {
+            if (armor.length > 3 && armor[3] != null) inv.setItem(HELMET_SLOT, armor[3].clone());
+            if (armor.length > 2 && armor[2] != null) inv.setItem(CHESTPLATE_SLOT, armor[2].clone());
+            if (armor.length > 1 && armor[1] != null) inv.setItem(LEGGINGS_SLOT, armor[1].clone());
+            if (armor.length > 0 && armor[0] != null) inv.setItem(BOOTS_SLOT, armor[0].clone());
+        }
+
+        if (kit.getOffhand() != null) inv.setItem(OFFHAND_SLOT, kit.getOffhand().clone());
 
         boolean nc = kit.isNoClear();
         inv.setItem(NO_CLEAR_SLOT, controlItem(nc ? Material.LIME_DYE : Material.RED_DYE,
@@ -129,9 +130,12 @@ public final class KitEditorGUI {
                         ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
                 "<color:" + MessageUtil.MUTED + ">Enabled: always hidden from contestants</color>",
-                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within 20 blocks</color>",
+                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within " + me.advait.contender.spectator.SpectatorVisibility.HIDE_DISTANCE_BLOCKS + " blocks</color>",
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
+
+        inv.setItem(PVP_HURT_SLOT, hurtControl(Material.DIAMOND_CHESTPLATE, "PvP Hurt", kit.isPvpHurt(), "Hits from players deal no damage."));
+        inv.setItem(PVE_HURT_SLOT, hurtControl(Material.FEATHER, "PvE Hurt", kit.isPveHurt(), "Other damage is ignored, except the void."));
 
         if (!isNew) {
             inv.setItem(DELETE_SLOT, controlItem(Material.TNT,
@@ -154,6 +158,15 @@ public final class KitEditorGUI {
 
     public static boolean isItemSlot(int slot) {
         return slot >= 0 && slot <= 40;
+    }
+
+    private static ItemStack hurtControl(Material icon, String name, boolean enabled, String description) {
+        return controlItem(icon, "<color:" + MessageUtil.PRIMARY + ">" + name,
+                "<color:" + MessageUtil.MUTED + ">" + (enabled ? "Enabled" : "Disabled"),
+                "<color:" + MessageUtil.MUTED + ">When enabled: " + description,
+                "<color:" + MessageUtil.MUTED + ">Hit reactions and knockback still work.",
+                "<color:" + MessageUtil.MUTED + ">Hunger stays full.",
+                "", "<color:" + MessageUtil.ACCENT + ">Click to toggle");
     }
 
     /** Returns the empty-state placeholder for armor/offhand slots. */
@@ -181,7 +194,7 @@ public final class KitEditorGUI {
     private static ItemStack controlItem(Material material, String name, String... lore) {
         ItemStack is = new ItemStack(material);
         ItemMeta meta = is.getItemMeta();
-        meta.displayName(MM.deserialize(MessageUtil.FONT_OPEN + name + MessageUtil.FONT_CLOSE).decoration(TextDecoration.ITALIC, false));
+        meta.displayName(MM.deserialize(name).decoration(TextDecoration.ITALIC, false));
         if (lore.length > 0) {
             List<Component> loreList = new ArrayList<>();
             for (String l : lore) {

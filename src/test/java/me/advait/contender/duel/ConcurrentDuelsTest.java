@@ -6,7 +6,6 @@ import me.advait.contender.arena.ArenaLease;
 import me.advait.contender.arena.ArenaManager;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
-import me.advait.contender.spectator.SpectatorManager;
 import me.advait.contender.vote.VoteManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -35,7 +34,7 @@ class ConcurrentDuelsTest {
         var roles = mock(me.advait.contender.role.RoleManager.class);
         when(roles.isContestant(any())).thenReturn(true);
         when(plugin.getRoleManager()).thenReturn(roles);
-        DuelManager manager = new DuelManager(plugin, mock(SpectatorManager.class));
+        DuelManager manager = new DuelManager(plugin);
         List<UUID> ids = new ArrayList<>();
         Map<UUID, Player> online = new HashMap<>();
         for (int i = 0; i < 5; i++) {

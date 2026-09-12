@@ -15,11 +15,17 @@ public final class Tournament {
     private final boolean waitForRound;
     private final int sortingSeconds;
     private final int maxParallel;
+    private final int rounds;
     private boolean running;
     private boolean cancelled;
 
     public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
                       boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel) {
+        this(id, name, mapId, kitId, entries, teams, waitForRound, bestOf, sortingSeconds, maxParallel,
+                RoundRobinSchedule.fullRounds(entries.size()));
+    }
+    public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
+                      boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel, int rounds) {
         if (name == null || name.isBlank() || name.length() > 64) throw new IllegalArgumentException("Choose a tournament name between 1 and 64 characters.");
         if (sortingSeconds < 5 || sortingSeconds > 60 || maxParallel < 1 || maxParallel > 100) throw new IllegalArgumentException("Invalid tournament settings.");
         Set<UUID> players = new HashSet<>();
@@ -38,8 +44,9 @@ public final class Tournament {
         this.waitForRound = waitForRound;
         this.sortingSeconds = sortingSeconds;
         this.maxParallel = maxParallel;
+        this.rounds = rounds;
         List<TournamentMatch> scheduled = new ArrayList<>();
-        for (var pairing : RoundRobinSchedule.create(entries.size())) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
+        for (var pairing : RoundRobinSchedule.create(entries.size(), rounds)) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
         matches = List.copyOf(scheduled);
     }
     public UUID id() { return id; }
@@ -52,6 +59,7 @@ public final class Tournament {
     public boolean waitForRound() { return waitForRound; }
     public int sortingSeconds() { return sortingSeconds; }
     public int maxParallel() { return maxParallel; }
+    public int rounds() { return rounds; }
     public boolean isRunning() { return running && !isComplete() && !cancelled; }
     public boolean isCancelled() { return cancelled; }
     public boolean isComplete() { return matches.stream().allMatch(m -> m.status() == TournamentMatch.Status.FINISHED); }

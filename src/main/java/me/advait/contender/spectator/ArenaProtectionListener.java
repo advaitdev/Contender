@@ -15,11 +15,14 @@ import org.bukkit.event.player.*;
 import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 
-/** Keeps each match's edits and movement inside its own copy. */
+/** Keeps edits inside the template and contestants inside their arena's reserved space. */
 public final class ArenaProtectionListener implements Listener {
     private final DuelManager duels;
     private final ArenaManager arenas;
-    public ArenaProtectionListener(DuelManager duels, ArenaManager arenas) { this.duels = duels; this.arenas = arenas; }
+    private final me.advait.contender.race.RaceManager races;
+    public ArenaProtectionListener(DuelManager duels, ArenaManager arenas) { this(duels, arenas, null); }
+
+    public ArenaProtectionListener(DuelManager duels, ArenaManager arenas, me.advait.contender.race.RaceManager races) { this.duels = duels; this.arenas = arenas; this.races = races; }
 
     private boolean combat(Location location) {
         ArenaInstance instance = arenas.at(location);
@@ -68,12 +71,30 @@ public final class ArenaProtectionListener implements Listener {
     private void contain(PlayerMoveEvent event) {
         Duel duel = duels.getDuel(event.getPlayer());
         if (duel == null || duel.getArena() == null || !duel.getState().isEnabled() || duel.getState().isEnding()) return;
-        if (event.getTo() != null && !duel.getMap().contains(event.getTo())) {
-            Location safe = duel.getMap().contains(event.getFrom()) ? event.getFrom()
-                    : duel.isSpectator(event.getPlayer().getUniqueId()) ? duel.getMap().getSpectatorSpawn()
-                    : duel.getTeam(event.getPlayer().getUniqueId()) == duel.getTeam1() ? duel.getMap().getTeam1Spawn() : duel.getMap().getTeam2Spawn();
-            if (safe != null) event.setTo(safe);
+        Location to = event.getTo();
+        if (to == null || duel.getMap().contains(to)) return;
+        Location from = event.getFrom();
+        var cell = duel.getArena().instance().cell();
+        if (!(event instanceof PlayerTeleportEvent) && duel.isCombatActive()
+                && !duel.isSpectator(event.getPlayer().getUniqueId())
+                && to.getWorld().equals(from.getWorld())
+                && to.getWorld().getName().equals(duel.getMap().getWorldName())
+                && cell.containsColumn(from.getX(), from.getZ())) {
+            if ((duel.getKit().isPvpHurt() || duel.getKit().isPveHurt())
+                    && duel.getMap().getBounds() != null && to.getY() < duel.getMap().getBounds().minY()) {
+                var spawn = duel.getMap().getSpectatorSpawn();
+                event.setTo(spawn == null ? duel.getMap().getTeam1Spawn() : spawn);
+                duel.handleDeath(event.getPlayer(), null);
+                return;
+            }
+            // The empty margin lets knockback carry players off the platform. The cell has
+            // no movement floor, so ordinary kits can also fall all the way into the void.
+            if (cell.containsColumn(to.getX(), to.getZ())) return;
         }
+        Location safe = duel.getMap().contains(from) ? from
+                : duel.isSpectator(event.getPlayer().getUniqueId()) ? duel.getMap().getSpectatorSpawn()
+                : duel.getTeam(event.getPlayer().getUniqueId()) == duel.getTeam1() ? duel.getMap().getTeam1Spawn() : duel.getMap().getTeam2Spawn();
+        if (safe != null) event.setTo(safe);
     }
     @EventHandler(ignoreCancelled = true)
     public void onFlow(BlockFromToEvent event) {
@@ -116,7 +137,8 @@ public final class ArenaProtectionListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
         if (arenas.isArenaWorld(event.getLocation().getWorld())) {
-            if (!combat(event.getLocation())) event.setCancelled(true);
+            if (races != null && races.inArena(event.getLocation())) event.blockList().clear();
+            else if (!combat(event.getLocation())) event.setCancelled(true);
             else event.blockList().removeIf(b -> !sameArena(event.getLocation(), b.getLocation()));
         }
     }

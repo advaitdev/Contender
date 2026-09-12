@@ -28,8 +28,17 @@ class OfflineRosterTest {
             Tournament loaded = store.load();
 
             assertEquals(entries, loaded.entries());
+            for (var entry : loaded.entries()) {
+                for (UUID id : entry.players()) assertNotNull(entry.playerNames().get(id), "Offline team members keep their names across restart");
+            }
             assertFalse(loaded.isRunning());
-            assertTrue(TournamentBoard.render(loaded, Map.of(), 0).contains(teams ? "Red vs Blue" : "Alice vs Carol"));
+            var layout = me.advait.contender.tab.BracketLayout.render(loaded, Map.of(), id -> {
+                String name = loaded.entries().stream().map(e -> e.playerNames().get(id)).filter(Objects::nonNull).findFirst().orElseThrow();
+                return new me.advait.contender.tab.BracketLayout.Presence(name, net.kyori.adventure.text.Component.text(name), -1, null, null);
+            }, loaded.entries().stream().flatMap(e -> e.players().stream()).toList(), me.advait.contender.tab.BracketLayout.View.following());
+            String board = layout.rows().stream().map(row -> net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(row.boardText())).collect(java.util.stream.Collectors.joining("\n"));
+            assertTrue(board.contains("Alice") && board.contains("Carol"));
+            if (teams) assertTrue(board.contains("Bob") && board.contains("Dana"));
             loaded.resume();
             assertNull(loaded.nextMatch(id -> false));
             UUID missing = identities.get(teams ? "Bob" : "Carol").id();

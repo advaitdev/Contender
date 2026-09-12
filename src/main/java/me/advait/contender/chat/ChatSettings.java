@@ -12,8 +12,9 @@ public class ChatSettings {
     private final File file;
 
     private boolean allowSpectatorGameChat = false;
-    private boolean muteSpectatorVoiceChat = true;
-    private boolean deafenSpectatorVoiceChat = true;
+    private boolean muteSpectatorVoiceChat = false;
+    private boolean deafenSpectatorVoiceChat = false;
+    private boolean spectatorsHearMatch = true;
     private boolean allowContestantGameChat = true;
     private boolean muteContestantVoiceChat = false;
     private boolean deafenContestantVoiceChat = false;
@@ -34,18 +35,29 @@ public class ChatSettings {
         }
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         allowSpectatorGameChat = config.getBoolean("allow-spectator-game-chat", false);
-        muteSpectatorVoiceChat = config.getBoolean("mute-spectator-voice-chat", true);
-        deafenSpectatorVoiceChat = config.getBoolean("deafen-spectator-voice-chat", true);
+        muteSpectatorVoiceChat = config.getBoolean("mute-spectator-voice-chat", false);
+        deafenSpectatorVoiceChat = config.getBoolean("deafen-spectator-voice-chat", false);
+        spectatorsHearMatch = config.getBoolean("spectators-hear-match", true);
         allowContestantGameChat = config.getBoolean("allow-contestant-game-chat", true);
         muteContestantVoiceChat = config.getBoolean("mute-contestant-voice-chat", false);
         deafenContestantVoiceChat = config.getBoolean("deafen-contestant-voice-chat", false);
         adminsOverrideAll = config.getBoolean("admins-override-all", true);
         allowLobbyGameChat = config.getBoolean("allow-lobby-game-chat", true);
         muteLobbyVoiceChat = config.getBoolean("mute-lobby-voice-chat", false);
+        if (config.getInt("spectator-routing-version", 0) < 1) {
+            // Replace the old blanket isolation defaults with the private spectator channel.
+            if (muteSpectatorVoiceChat && deafenSpectatorVoiceChat) {
+                muteSpectatorVoiceChat = false;
+                deafenSpectatorVoiceChat = false;
+            }
+            save();
+        }
     }
 
     public void save() {
         YamlConfiguration config = new YamlConfiguration();
+        config.set("spectator-routing-version", 1);
+        config.set("spectators-hear-match", spectatorsHearMatch);
         config.set("allow-spectator-game-chat", allowSpectatorGameChat);
         config.set("mute-spectator-voice-chat", muteSpectatorVoiceChat);
         config.set("deafen-spectator-voice-chat", deafenSpectatorVoiceChat);
@@ -57,6 +69,7 @@ public class ChatSettings {
         config.set("mute-lobby-voice-chat", muteLobbyVoiceChat);
         try {
             config.save(file);
+            plugin.refreshVoiceRouting();
         } catch (IOException e) {
             plugin.getLogger().warning("Could not save chat_settings.yml: " + e.getMessage());
         }
@@ -65,6 +78,8 @@ public class ChatSettings {
     // Getters
     public boolean isAllowSpectatorGameChat() { return allowSpectatorGameChat; }
     public boolean isMuteSpectatorVoiceChat() { return muteSpectatorVoiceChat; }
+    public boolean isSpectatorsHearMatch() { return spectatorsHearMatch; }
+    public void setSpectatorsHearMatch(boolean value) { spectatorsHearMatch = value; }
     public boolean isDeafenSpectatorVoiceChat() { return deafenSpectatorVoiceChat; }
     public boolean isAllowContestantGameChat() { return allowContestantGameChat; }
     public boolean isMuteContestantVoiceChat() { return muteContestantVoiceChat; }

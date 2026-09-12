@@ -30,12 +30,13 @@ public final class TournamentManager extends AbstractGameState {
     @Override protected void onEnable() {
         try { tournament = store.load(); }
         catch (Exception failure) { contender.getLogger().log(Level.SEVERE, "Could not load tournament.yml", failure); }
-        board.load();
+        board.enable();
+        board.update(tournament, playing);
         runRepeating(this::tick, 20L, 20L);
     }
     @Override protected void onDisable() {
         if (tournament != null) { tournament.pause(); save(); }
-        board.close();
+        board.disable();
     }
     public Tournament current() { return tournament; }
     public TournamentBoard board() { return board; }
@@ -51,12 +52,16 @@ public final class TournamentManager extends AbstractGameState {
             throw new IllegalArgumentException("Choose a saved map and kit.");
         }
         requireEligibleEntries(tournament);
+        if (contender.getMinigameManager() != null) contender.getMinigameManager().selectRoundRobin();
+        else if (contender.getRaceManager() != null) contender.getRaceManager().selectRoundRobin();
         this.tournament = tournament;
         waitingReason = "";
         save();
         board.update(tournament, playing);
     }
     public void resume() {
+        if (contender.getMinigameManager() != null && contender.getMinigameManager().active()) throw new IllegalStateException("Finish the minigame first.");
+        if (contender.getRaceManager() != null && contender.getRaceManager().active()) throw new IllegalStateException("Finish the race first.");
         if (tournament == null) throw new IllegalStateException("Create a tournament first.");
         requireEligibleEntries(tournament);
         if (contender.getVoteManager().isVoteActive()) throw new IllegalStateException("Wait for the vote to finish.");
@@ -74,8 +79,19 @@ public final class TournamentManager extends AbstractGameState {
         if (tournament == null) return;
         tournament.cancel();
         save();
+        if (contender.getTabManager() != null) contender.getTabManager().refresh();
         for (Duel duel : new ArrayList<>(playing.values())) duel.forceEnd();
         board.update(tournament, playing);
+        if (contender.getTabManager() != null) contender.getTabManager().refresh();
+    }
+    /** Pause before cancelling so the scheduler cannot immediately restart this pairing. */
+    public boolean cancelDuel(Duel duel) {
+        boolean tournamentMatch = playing.containsValue(duel);
+        if (tournamentMatch) pause();
+        duel.forceEnd();
+        board.update(tournament, playing);
+        if (contender.getTabManager() != null) contender.getTabManager().refresh();
+        return tournamentMatch;
     }
     public void setBestOf(TournamentMatch match, int rounds) {
         requireMatch(match);
@@ -96,9 +112,10 @@ public final class TournamentManager extends AbstractGameState {
     public void save() { if (tournament != null) store.save(tournament); }
 
     private void tick() {
-        if (tournament == null) return;
         board.update(tournament, playing);
-        if (!tournament.isRunning() || contender.getVoteManager().isVoteActive()) return;
+        if (tournament == null) return;
+        if (contender.getMinigameManager() != null && contender.getMinigameManager().active()) return;
+        if (!tournament.isRunning() || contender.getVoteManager().isVoteActive() || contender.getRaceManager() != null && contender.getRaceManager().active()) return;
         waitingReason = "Waiting for players or a free arena.";
         while (contender.getArenaManager().available(tournament.mapId()) > 0) {
             TournamentMatch match = tournament.nextMatch(this::available);
@@ -110,7 +127,7 @@ public final class TournamentManager extends AbstractGameState {
             setup.setPreRoundDelay(tournament.sortingSeconds());
             tournament.entries().get(match.first()).players().forEach(setup.getTeam1()::addPlayer);
             tournament.entries().get(match.second()).players().forEach(setup.getTeam2()::addPlayer);
-            // Team labels survive into boss bars and match results.
+            // Team labels survive into match messages and results.
             setup.getTeam1().setName(tournament.entries().get(match.first()).name());
             setup.getTeam2().setName(tournament.entries().get(match.second()).name());
             Tournament startedTournament = tournament;
@@ -125,7 +142,7 @@ public final class TournamentManager extends AbstractGameState {
                 });
                 if (!duel.isFinished()) playing.put(match.number(), duel);
                 save();
-            } catch (Exception failure) {
+            } catch (Exception | LinkageError failure) {
                 match.retry();
                 waitingReason = failure.getMessage() == null ? "Could not start the next match." : failure.getMessage();
                 tournament.pause();

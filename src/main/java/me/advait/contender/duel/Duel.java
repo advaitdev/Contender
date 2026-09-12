@@ -2,16 +2,11 @@ package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
 import me.advait.contender.arena.ArenaLease;
-import me.advait.contender.player.PlayerSettingsManager;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.spectator.SpectatorVisibility;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
-import me.libraryaddict.disguise.DisguiseAPI;
-import me.libraryaddict.disguise.disguisetypes.DisguiseType;
-import me.libraryaddict.disguise.disguisetypes.MobDisguise;
-import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -58,7 +53,6 @@ public class Duel {
     private int currentRound;
     private BukkitTask spectatorVisibilityTask;
     private boolean firstRound;
-    private BossBar bossBar;
     private final Map<Entity, BukkitTask> deathEffects = new HashMap<>();
 
 
@@ -130,6 +124,8 @@ public class Duel {
         state.disable();
         state = next;
         if (!next.isFinished()) enableState();
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
     }
 
     private void enableState() {
@@ -157,6 +153,10 @@ public class Duel {
             }
             return false;
         }
+
+        var world = map.getTeam1Spawn().getWorld();
+        world.setGameRule(org.bukkit.GameRules.LOCATOR_BAR, false);
+        world.setGameRule(org.bukkit.GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
 
         // Capture pre-duel inventories for No Clear kit before any changes
         if (kit.isNoClear()) {
@@ -199,7 +199,7 @@ public class Duel {
                 if (specSpawn != null) {
                     player.teleport(specSpawn);
                 }
-                applySpectatorDisguise(player);
+                applySpectatorMode(player);
             }
         }
 
@@ -210,19 +210,15 @@ public class Duel {
         String team2Names = buildTeamNames(team2);
         Component vsMessage = mm.deserialize(
                 "<color:gray>Starting duel: " +
-                MessageUtil.FONT_OPEN +
-                        "<color:" + MessageUtil.ERROR + ">" + team1Names + "</color>" +
+                "<color:" + MessageUtil.ERROR + ">" + team1Names + "</color>" +
                         " <color:gray>vs</color> " +
-                        "<color:" + MessageUtil.SECONDARY + ">" + team2Names + "</color>" +
-                        MessageUtil.FONT_CLOSE
+                        "<color:" + MessageUtil.SECONDARY + ">" + team2Names + "</color>"
         );
-        bossBar = BossBar.bossBar(buildBossBarTitle(), 1.0f, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS);
 
         for (UUID uuid : getAllParticipants()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 p.sendMessage(vsMessage);
-                p.showBossBar(bossBar);
             }
         }
 
@@ -241,35 +237,6 @@ public class Duel {
             }
         }
         return sb.toString();
-    }
-
-    private Component buildBossBarTitle() {
-        if (mode == DuelMode.FFA) {
-            return MiniMessage.miniMessage().deserialize(
-                    "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>Free For All</shadow></color></font>");
-        }
-        MiniMessage mm = MiniMessage.miniMessage();
-        String team1Names = buildTeamNames(team1);
-        String team2Names = buildTeamNames(team2);
-
-        List<UUID> t1Players = team1.getPlayers();
-        List<UUID> t2Players = team2.getPlayers();
-
-        Player first1 = t1Players.isEmpty() ? null : Bukkit.getPlayer(t1Players.getFirst());
-        Player first2 = t2Players.isEmpty() ? null : Bukkit.getPlayer(t2Players.getFirst());
-        Component head1 = first1 == null ? Component.empty() : StringUtil.getPlayerHead(first1);
-        Component head2 = first2 == null ? Component.empty() : StringUtil.getPlayerHead(first2);
-
-        Component part1 = mm.deserialize(
-                "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>" + team1Names + " vs </shadow></color></font>");
-        Component part2 = mm.deserialize(
-                "<font:minecraft:ranyth><color:#FFFFFF><shadow:#2F2C2C:1>" + team2Names + "</shadow></color></font>");
-
-        return Component.empty()
-                .append(head1).appendSpace()
-                .append(part1)
-                .append(head2).appendSpace()
-                .append(part2);
     }
 
     void captureInventories() {
@@ -316,10 +283,10 @@ public class Duel {
     void prepareRound() {
         currentRound++;
 
-        // Remove disguises from any dead players spectating before resetting them
+        // Restore players who watched the rest of the previous round.
         for (UUID deadSpec : new HashSet<>(deadPlayerSpectators)) {
             Player p = Bukkit.getPlayer(deadSpec);
-            if (p != null) removeSpectatorDisguise(p);
+            if (p != null) removeSpectatorMode(p);
         }
         deadPlayerSpectators.clear();
 
@@ -360,12 +327,6 @@ public class Duel {
         updateSpectatorVisibility();
     }
 
-    void announceRound() {
-        broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">Round " + currentRound + "/" + totalRounds
-                + " <color:" + MessageUtil.SECONDARY + ">(" + team1.getScore() + " - "
-                + team2.getScore() + ")</color></color>");
-    }
-
     public void handleDeath(Player deadPlayer, Player killer) {
         if (!isCombatActive()) return;
 
@@ -377,11 +338,13 @@ public class Duel {
         if (!deadTeam.getAlivePlayers().contains(deadUuid)) return;
         deadTeam.markDead(deadUuid);
 
-        // Put the dead player into flying-disguise spectator mode
+        // Let the eliminated player watch the rest of this round.
         deadPlayerSpectators.add(deadUuid);
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
         deadPlayer.getInventory().clear();
         deadPlayer.setGameMode(GameMode.ADVENTURE);
-        applySpectatorDisguise(deadPlayer);
+        applySpectatorMode(deadPlayer);
 
         Component killMsg;
         if (killer != null) {
@@ -390,19 +353,19 @@ public class Duel {
             killMsg = Component.empty()
                     .append(deadHead).appendSpace()
                     .append(MiniMessage.miniMessage().deserialize(
-                            MessageUtil.FONT_OPEN + "<color:" + MessageUtil.MUTED + ">" +
-                                    deadPlayer.getName() + " was slain by </color>" + MessageUtil.FONT_CLOSE))
+                            "<color:" + MessageUtil.MUTED + ">" +
+                                    deadPlayer.getName() + " was slain by </color>"))
                     .append(killerHead).appendSpace()
                     .append(MiniMessage.miniMessage().deserialize(
-                            MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">" +
-                                    killer.getName() + "</color>" + MessageUtil.FONT_CLOSE));
+                            "<color:" + MessageUtil.PRIMARY + ">" +
+                                    killer.getName() + "</color>"));
         } else {
             Component deadHead = StringUtil.getPlayerHead(deadPlayer);
             killMsg = Component.empty()
                     .append(deadHead).appendSpace()
                     .append(MiniMessage.miniMessage().deserialize(
-                            MessageUtil.FONT_OPEN + "<color:" + MessageUtil.MUTED + ">" +
-                                    deadPlayer.getName() + " has been eliminated!</color>" + MessageUtil.FONT_CLOSE));
+                            "<color:" + MessageUtil.MUTED + ">" +
+                                    deadPlayer.getName() + " has been eliminated!</color>"));
         }
 
         for (UUID uuid : getAllParticipants()) {
@@ -443,18 +406,14 @@ public class Duel {
         boolean tie = team1.getScore() == team2.getScore();
 
         if (tie) {
-            String msg = MessageUtil.FONT_OPEN + "<color:" + MessageUtil.WARNING + ">The duel ended in a tie! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>" + MessageUtil.FONT_CLOSE;
-            broadcastActionBar("<color:" + MessageUtil.WARNING + ">Tie! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
+            String msg = "<color:" + MessageUtil.WARNING + ">The duel ended in a tie! " +
+                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>";
             broadcastMessage(mm.deserialize(msg));
         } else {
             DuelTeam winner = team1.getScore() > team2.getScore() ? team1 : team2;
             String winnerName = mm.escapeTags(winner.getName());
-            String msg = MessageUtil.FONT_OPEN + "<color:" + MessageUtil.PRIMARY + ">" + winnerName + " wins the duel! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>" + MessageUtil.FONT_CLOSE;
-            broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">" + winnerName + " wins the duel! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>");
+            String msg = "<color:" + MessageUtil.PRIMARY + ">" + winnerName + " wins the duel! " +
+                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>";
             broadcastMessage(mm.deserialize(msg));
 
             for (UUID uuid : winner.getPlayers()) {
@@ -473,13 +432,11 @@ public class Duel {
         for (UUID uuid : getAllParticipants()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                if (bossBar != null) player.hideBossBar(bossBar);
-                if (isSpectator(uuid)) removeSpectatorDisguise(player);
+                if (isSpectator(uuid)) removeSpectatorMode(player);
                 plugin.getLobbyManager().sendToLobby(player);
                 restorePreDuelInventory(uuid, player);
             }
         }
-        bossBar = null;
         clearDeathEffects();
     }
 
@@ -543,26 +500,28 @@ public class Duel {
 
     public void addSpectator(UUID uuid) {
         spectators.add(uuid);
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) {
-            if (bossBar != null) {
-                player.showBossBar(bossBar);
-            }
-            // Disguise and fly are applied in start() once the duel begins;
-            // if added mid-duel (future-proof), apply immediately.
+            // Joining spectators receive an avatar immediately.
             if (state.canAddSpectator()) {
                 if (map.getSpectatorSpawn() != null) {
                     player.teleport(map.getSpectatorSpawn());
                 }
-                applySpectatorDisguise(player);
+                applySpectatorMode(player);
             }
         }
     }
 
+    public void disconnectSpectator(Player player) {
+        spectators.remove(player.getUniqueId());
+        removeSpectatorMode(player);
+    }
+
     public void removeSpectator(Player player) {
         if (!spectators.remove(player.getUniqueId())) return;
-        removeSpectatorDisguise(player);
-        if (bossBar != null) player.hideBossBar(bossBar);
+        removeSpectatorMode(player);
         updateSpectatorVisibility();
         plugin.getLobbyManager().sendToLobby(player);
     }
@@ -601,51 +560,25 @@ public class Duel {
         player.updateInventory();
     }
 
-    /** Called after a real respawn (vanilla death path) to re-apply the disguise-spectator state. */
+    /** Called after a real respawn (vanilla death path) to re-apply the spectator state. */
     public void applyDeadSpectatorMode(Player player) {
-        applySpectatorDisguise(player);
+        applySpectatorMode(player);
     }
 
-    private void applySpectatorDisguise(Player player) {
-        player.setAllowFlight(true);
-        player.setFlying(true);
-
-        player.setCollidable(!kit.isSpectatorInvisible());
-
-        if (Bukkit.getPluginManager().isPluginEnabled("LibsDisguises")) {
-            PlayerSettingsManager.SpectatorDisguise pref =
-                    plugin.getPlayerSettingsManager().getDisguise(player.getUniqueId());
-            DisguiseType libsType = switch (pref) {
-                case ALLAY -> DisguiseType.ALLAY;
-                case BEE -> DisguiseType.BEE;
-                case PARROT -> DisguiseType.PARROT;
-                case BAT -> DisguiseType.BAT;
-                case VEX -> DisguiseType.VEX;
-                case HAPPY_GHAST -> DisguiseType.HAPPY_GHAST;
-            };
-            // Baby happy ghast: pass false for isAdult
-            MobDisguise disguise = pref == PlayerSettingsManager.SpectatorDisguise.HAPPY_GHAST
-                    ? new MobDisguise(libsType, false)
-                    : new MobDisguise(libsType);
-            me.advait.contender.nametag.DisguiseNameTags.apply(disguise, plugin.getNameTagManager().displayName(player));
-            DisguiseAPI.disguiseToAll(player, disguise);
-        }
+    private void applySpectatorMode(Player player) {
+        player.setGameMode(GameMode.ADVENTURE);
+        spectatorVisibility.enter(player);
+        if (plugin.getSpectatorControls() != null) plugin.getSpectatorControls().giveCompass(player);
         updateSpectatorVisibility();
     }
 
-    private void removeSpectatorDisguise(Player player) {
-        player.setFlying(false);
-        player.setAllowFlight(false);
-        player.setCollidable(true);
-
-        if (Bukkit.getPluginManager().isPluginEnabled("LibsDisguises")) {
-            DisguiseAPI.undisguiseToAll(player);
-        }
+    private void removeSpectatorMode(Player player) {
+        spectatorVisibility.remove(player);
     }
 
     private void startSpectatorVisibilityTask() {
         spectatorVisibilityTask = plugin.getServer().getScheduler()
-                .runTaskTimer(plugin, this::updateSpectatorVisibility, 0L, 5L);
+                .runTaskTimer(plugin, this::updateSpectatorVisibility, 0L, 2L);
     }
 
     private void updateSpectatorVisibility() {
@@ -691,21 +624,28 @@ public class Duel {
         return spectators.contains(uuid) || deadPlayerSpectators.contains(uuid);
     }
 
-    void broadcastActionBar(String message) {
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                MessageUtil.sendActionBar(p, message);
-            }
-        }
-    }
-
     void broadcastMessage(Component message) {
         for (UUID uuid : getAllParticipants()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 p.sendMessage(message);
             }
+        }
+    }
+
+    void broadcastCountdown(int seconds) {
+        Component message = Component.text("Starts in ", NamedTextColor.GRAY)
+                .append(Component.text(seconds, NamedTextColor.GOLD));
+        for (UUID uuid : getAllParticipants()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) player.sendActionBar(message);
+        }
+    }
+
+    void clearCountdown() {
+        for (UUID uuid : getAllParticipants()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) player.sendActionBar(Component.empty());
         }
     }
 

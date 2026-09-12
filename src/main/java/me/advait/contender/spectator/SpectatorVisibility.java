@@ -1,57 +1,85 @@
 package me.advait.contender.spectator;
 
+import me.advait.contender.Contender;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
+import net.kyori.adventure.text.Component;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
-/** Per-viewer spectator visibility for one duel. Call from the server thread. */
+/** Client-only allays, including a self-view. Each duel restores its own avatars and hide entries. */
 public final class SpectatorVisibility {
-    private static final double HIDE_DISTANCE_SQUARED = 20.0 * 20.0;
-
-    private final Plugin plugin;
-    private final Set<HiddenPlayer> hiddenPlayers = new HashSet<>();
-
-    private record HiddenPlayer(Player viewer, Player spectator) { }
-
-    public SpectatorVisibility(Plugin plugin) {
-        this.plugin = plugin;
+    public static final int HIDE_DISTANCE_BLOCKS = 10;
+    private final Contender plugin;
+    private final Map<UUID, Watching> watching = new HashMap<>();
+    private static final class Watching {
+        final Player player;
+        final AllayAvatar avatar;
+        final boolean collision, pickup, spawning, silent, invisible, flight, flying;
+        final Set<Player> hidden = new HashSet<>(), visible = new HashSet<>();
+        org.bukkit.World world;
+        Watching(Player player, AllayAvatar avatar) {
+            this.player = player; this.avatar = avatar; world = player.getWorld();
+            collision = player.isCollidable(); pickup = player.getCanPickupItems(); spawning = player.getAffectsSpawning();
+            silent = player.isSilent(); invisible = player.isInvisible(); flight = player.getAllowFlight(); flying = player.isFlying();
+        }
+        void apply() {
+            player.setCollidable(false); player.setCanPickupItems(false); player.setAffectsSpawning(false);
+            player.setSilent(true); player.setInvisible(true); player.setAllowFlight(true); player.setFlying(true);
+        }
+        void restore() {
+            player.setCollidable(collision); player.setCanPickupItems(pickup); player.setAffectsSpawning(spawning);
+            player.setSilent(silent); player.setInvisible(invisible); player.setFlying(false);
+            player.setAllowFlight(flight); if (flight && flying) player.setFlying(true);
+        }
     }
-
-    /** Call with the duel's online contestants and spectators, including eliminated players. */
+    public SpectatorVisibility(Contender plugin) { this.plugin = plugin; }
+    public void enter(Player player) {
+        Watching state = watching.computeIfAbsent(player.getUniqueId(), ignored -> new Watching(player, plugin.createSpectatorAvatar(player)));
+        state.apply();
+    }
+    public static boolean canSeeAvatar(Location owner, Location viewer, boolean viewerSpectating, boolean alwaysInvisible) {
+        return owner.getWorld().equals(viewer.getWorld()) && (viewerSpectating || !alwaysInvisible
+                && owner.distanceSquared(viewer) >= HIDE_DISTANCE_BLOCKS * HIDE_DISTANCE_BLOCKS);
+    }
     public void update(Collection<Player> contestants, Collection<Player> spectators, boolean alwaysInvisible) {
-        Set<HiddenPlayer> desired = new HashSet<>();
-        for (Player spectator : spectators) {
-            Location location = spectator.getLocation();
-            for (Player viewer : contestants) {
-                if (viewer.equals(spectator)) continue;
-                Location viewerLocation = viewer.getLocation();
-                if (alwaysInvisible || location.getWorld().equals(viewerLocation.getWorld())
-                        && location.distanceSquared(viewerLocation) < HIDE_DISTANCE_SQUARED) {
-                    desired.add(new HiddenPlayer(viewer, spectator));
-                }
+        Set<UUID> present = new HashSet<>();
+        for (Player player : spectators) { present.add(player.getUniqueId()); enter(player); }
+        for (Watching state : List.copyOf(watching.values())) {
+            if (!present.contains(state.player.getUniqueId()) || !state.player.isOnline()) { remove(state.player); continue; }
+            Player owner = state.player;
+            if (!owner.getWorld().equals(state.world)) {
+                for (Player viewer : state.visible) if (viewer.isOnline()) state.avatar.destroy(viewer);
+                state.visible.clear(); state.world = owner.getWorld();
+            }
+            state.hidden.removeIf(viewer -> !viewer.isOnline());
+            state.visible.removeIf(viewer -> !viewer.isOnline());
+            Component name = plugin.getNameTagManager().displayName(owner);
+            Location avatarLocation = owner.getLocation().clone().add(0, 2, 0);
+            for (Player viewer : plugin.getServer().getOnlinePlayers()) {
+                boolean self = viewer.equals(owner);
+                if (!self && state.hidden.add(viewer)) viewer.hidePlayer(plugin, owner);
+                var duel = plugin.getDuelManager().getDuel(viewer);
+                boolean viewerSpectating = self || spectators.contains(viewer)
+                        || !contestants.contains(viewer) && (duel == null || duel.isSpectator(viewer.getUniqueId()))
+                        && plugin.getRoleManager().getRole(viewer.getUniqueId()) != me.advait.contender.role.PlayerRole.CONTESTANT;
+                boolean show = canSeeAvatar(owner.getLocation(), viewer.getLocation(), viewerSpectating, alwaysInvisible);
+                if (show) {
+                    if (state.visible.add(viewer)) state.avatar.spawn(viewer, avatarLocation, name);
+                    else state.avatar.move(viewer, avatarLocation, name);
+                } else if (state.visible.remove(viewer)) state.avatar.destroy(viewer);
             }
         }
-
-        // Only send updates when a pair's visibility changes. Retaining the Player
-        // reference also lets us clear a viewer's hide entry if a spectator logs out.
-        hiddenPlayers.removeIf(hidden -> {
-            if (desired.contains(hidden)) return false;
-            hidden.viewer().showPlayer(plugin, hidden.spectator());
-            return true;
-        });
-        for (HiddenPlayer hidden : desired) {
-            if (hiddenPlayers.add(hidden)) hidden.viewer().hidePlayer(plugin, hidden.spectator());
+    }
+    public void remove(Player player) {
+        Watching state = watching.remove(player.getUniqueId());
+        if (state == null) return;
+        try {
+            for (Player viewer : state.visible) if (viewer.isOnline()) state.avatar.destroy(viewer);
+        } finally {
+            state.restore();
+            for (Player viewer : state.hidden) if (viewer.isOnline()) viewer.showPlayer(plugin, state.player);
         }
     }
-
-    public void clear() {
-        for (HiddenPlayer hidden : hiddenPlayers) {
-            hidden.viewer().showPlayer(plugin, hidden.spectator());
-        }
-        hiddenPlayers.clear();
-    }
+    public void clear() { for (Watching state : List.copyOf(watching.values())) remove(state.player); }
 }

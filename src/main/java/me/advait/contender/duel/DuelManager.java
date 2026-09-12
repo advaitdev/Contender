@@ -2,7 +2,6 @@ package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
 import me.advait.contender.arena.ArenaLease;
-import me.advait.contender.spectator.SpectatorManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -12,16 +11,14 @@ import java.util.function.Consumer;
 
 public class DuelManager {
     private final Contender plugin;
-    private final SpectatorManager spectatorManager;
     private final Map<UUID, DuelSetup> activeSetups = new HashMap<>();
     private final Map<UUID, Duel> playerDuelMap = new ConcurrentHashMap<>();
     private final List<Duel> activeDuels = new ArrayList<>();
     private final Map<Duel, Consumer<DuelResult>> completions = new HashMap<>();
     private boolean stopping;
 
-    public DuelManager(Contender plugin, SpectatorManager spectatorManager) {
+    public DuelManager(Contender plugin) {
         this.plugin = plugin;
-        this.spectatorManager = spectatorManager;
     }
     public DuelSetup createSetup(UUID creator) {
         DuelSetup setup = new DuelSetup(creator);
@@ -56,6 +53,7 @@ public class DuelManager {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null) throw new IllegalStateException("All selected players must be online.");
             requireEligible(uuid);
+            if (minigameReserved(uuid)) throw new IllegalStateException(player.getName() + " is entered in a minigame or waiting to return to the lobby.");
             if (setup.getTeam1().hasPlayer(uuid) && setup.getTeam2().hasPlayer(uuid)) {
                 throw new IllegalArgumentException("A player cannot be on both teams.");
             }
@@ -89,27 +87,38 @@ public class DuelManager {
         }
     }
 
+    private boolean minigameReserved(UUID uuid) {
+        if (plugin.getMinigameManager() != null) return plugin.getMinigameManager().isReserved(uuid) || plugin.getMinigameManager().pendingReturn(uuid);
+        return plugin.getRaceManager() != null && (plugin.getRaceManager().isReserved(uuid) || plugin.getRaceManager().pendingReturn(uuid));
+    }
+    private boolean minigameOwns(UUID uuid) {
+        if (plugin.getMinigameManager() != null) return plugin.getMinigameManager().owns(uuid) || plugin.getMinigameManager().pendingReturn(uuid);
+        return plugin.getRaceManager() != null && (plugin.getRaceManager().owns(uuid) || plugin.getRaceManager().pendingReturn(uuid));
+    }
     private boolean reservedForTournament(UUID uuid) {
-        return plugin.getTournamentManager() != null && plugin.getTournamentManager().isReserved(uuid);
+        return plugin.getTournamentManager() != null && plugin.getTournamentManager().isReserved(uuid)
+                || minigameReserved(uuid);
     }
     public boolean isEligible(UUID uuid) {
-        return plugin.getRoleManager().isContestant(uuid) && !spectatorManager.isDeceased(uuid);
+        return plugin.getRoleManager().isContestant(uuid);
     }
     public void requireEligible(UUID uuid) {
         Player player = Bukkit.getPlayer(uuid);
         String name = player == null ? uuid.toString() : player.getName();
         if (!plugin.getRoleManager().isContestant(uuid)) throw new IllegalArgumentException(name + " must be a contestant to play.");
-        if (spectatorManager.isDeceased(uuid)) throw new IllegalArgumentException(name + " is marked as deceased.");
     }
     public void endDuel(Duel duel) {
         if (!activeDuels.remove(duel)) return;
         for (UUID uuid : duel.getAllParticipants()) playerDuelMap.remove(uuid, duel);
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
         if (duel.getArena() != null) plugin.getArenaManager().release(duel.getArena());
         Consumer<DuelResult> completion = completions.remove(duel);
         if (completion != null && !stopping) completion.accept(duel.getResult());
     }
     public void spectate(Player player, Duel duel) {
         UUID uuid = player.getUniqueId();
+        if (minigameOwns(uuid)) throw new IllegalStateException("Leave the minigame before spectating a duel.");
         if (!activeDuels.contains(duel) || !duel.getState().canAddSpectator()) throw new IllegalStateException("That match has ended.");
         Duel current = getDuel(uuid);
         if (current == duel) return;
@@ -117,13 +126,26 @@ public class DuelManager {
         if (current != null) leaveSpectating(player);
         player.getInventory().clear();
         playerDuelMap.put(uuid, duel);
-        duel.addSpectator(uuid);
+        try { duel.addSpectator(uuid); }
+        catch (RuntimeException failure) {
+            playerDuelMap.remove(uuid, duel);
+            duel.removeSpectator(player);
+            throw failure;
+        }
+    }
+    public void disconnectSpectator(Player player) {
+        Duel duel = getDuel(player);
+        if (duel == null) return;
+        duel.disconnectSpectator(player);
+        if (!duel.isInDuel(player.getUniqueId())) playerDuelMap.remove(player.getUniqueId(), duel);
     }
     public void leaveSpectating(Player player) {
         Duel duel = getDuel(player);
         if (duel == null) return;
         if (duel.isInDuel(player.getUniqueId())) throw new IllegalStateException("You are still in a match.");
         playerDuelMap.remove(player.getUniqueId(), duel);
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
         duel.removeSpectator(player);
     }
     public Duel getDuel(UUID playerUuid) { return playerDuelMap.get(playerUuid); }

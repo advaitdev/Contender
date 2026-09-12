@@ -3,7 +3,7 @@ package me.advait.contender.chat;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
-import me.advait.contender.spectator.SpectatorManager;
+import me.advait.contender.role.RoleManager;
 import me.advait.contender.util.MessageUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -24,22 +24,32 @@ public class ChatManager implements Listener {
 
     private final ChatSettings chatSettings;
     private final DuelManager duelManager;
-    private final SpectatorManager spectatorManager;
+    private final RoleManager roleManager;
+    private final java.util.function.Supplier<me.advait.contender.voice.VoiceRouting> routing;
 
-    public ChatManager(ChatSettings chatSettings, DuelManager duelManager, SpectatorManager spectatorManager) {
+    public ChatManager(ChatSettings chatSettings, DuelManager duelManager, RoleManager roleManager) {
+        this(chatSettings, duelManager, roleManager, () -> null);
+    }
+    public ChatManager(ChatSettings chatSettings, DuelManager duelManager, RoleManager roleManager,
+                       java.util.function.Supplier<me.advait.contender.voice.VoiceRouting> routing) {
+        this.routing = routing;
         this.chatSettings = chatSettings;
         this.duelManager = duelManager;
-        this.spectatorManager = spectatorManager;
+        this.roleManager = roleManager;
     }
 
     enum PlayerCategory { CONTESTANT, SPECTATOR, LOBBY }
 
     private PlayerCategory getCategory(UUID uuid) {
+        // Async chat reads the immutable voice snapshot, never live minigame state.
+        var voice = routing.get();
+        var member = voice == null ? null : voice.snapshot().get(uuid);
+        if (member != null && member.event() != null) return member.spectator() ? PlayerCategory.SPECTATOR : PlayerCategory.CONTESTANT;
         Duel duel = duelManager.getDuel(uuid);
         if (duel != null) {
             return duel.isSpectator(uuid) ? PlayerCategory.SPECTATOR : PlayerCategory.CONTESTANT;
         }
-        if (spectatorManager.isDeceased(uuid)) return PlayerCategory.SPECTATOR;
+        if (!roleManager.isContestant(uuid)) return PlayerCategory.SPECTATOR;
         return PlayerCategory.LOBBY;
     }
 
@@ -66,9 +76,9 @@ public class ChatManager implements Listener {
         Player player = event.getPlayer();
         if (shouldBlockChat(player)) {
             event.setCancelled(true);
-            player.sendActionBar(
+            player.sendMessage(
                     net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(
-                            MessageUtil.FONT_OPEN + "<color:#FF4444>You cannot chat right now.</color>" + MessageUtil.FONT_CLOSE
+                            "<color:#FF4444>You cannot chat right now.</color>"
                     )
             );
         }
@@ -84,9 +94,9 @@ public class ChatManager implements Listener {
 
         if (shouldBlockChat(player)) {
             event.setCancelled(true);
-            player.sendActionBar(
+            player.sendMessage(
                     net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(
-                            MessageUtil.FONT_OPEN + "<color:#FF4444>You cannot chat right now.</color>" + MessageUtil.FONT_CLOSE
+                            "<color:#FF4444>You cannot chat right now.</color>"
                     )
             );
         }

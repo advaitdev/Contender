@@ -5,7 +5,6 @@ import me.advait.contender.arena.ArenaManager;
 import me.advait.contender.duel.*;
 import me.advait.contender.kit.*;
 import me.advait.contender.map.*;
-import me.advait.contender.spectator.SpectatorManager;
 import me.advait.contender.tournament.*;
 import me.advait.contender.vote.VoteManager;
 import org.bukkit.Bukkit;
@@ -23,7 +22,6 @@ class RoleEligibilityTest {
     private final Contender plugin = mock(Contender.class);
     private final RoleManager roles = mock(RoleManager.class);
     private final ArenaManager arenas = mock(ArenaManager.class);
-    private final SpectatorManager spectators = mock(SpectatorManager.class);
     private final List<Player> players = new ArrayList<>();
     private DuelManager manager() {
         when(plugin.getRoleManager()).thenReturn(roles);
@@ -37,7 +35,7 @@ class RoleEligibilityTest {
             when(roles.isContestant(player.getUniqueId())).thenReturn(i < 2);
             players.add(player);
         }
-        DuelManager manager = new DuelManager(plugin, spectators);
+        DuelManager manager = new DuelManager(plugin);
         when(plugin.getDuelManager()).thenReturn(manager);
         return manager;
     }
@@ -120,7 +118,7 @@ class RoleEligibilityTest {
             verify(arenas, never()).acquire(anyString());
 
             tournaments.pause();
-            when(spectators.isDeceased(players.get(0).getUniqueId())).thenReturn(true);
+            when(roles.isContestant(players.get(0).getUniqueId())).thenReturn(false);
             assertThrows(IllegalArgumentException.class, tournaments::resume);
             assertFalse(tournament.isRunning());
         }

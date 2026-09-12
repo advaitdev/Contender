@@ -92,22 +92,18 @@ public final class NameTagManager extends AbstractGameState {
                 if (!entry.team().hasColor() || !tag.color().equals(entry.team().color())) entry.team().color(tag.color());
             }
         }
-        if (plugin.getServer().getPluginManager().isPluginEnabled("LibsDisguises")) {
-            for (Player player : online) {
-                var duel = contender.getDuelManager().getDuel(player);
-                if (duel != null && duel.isSpectator(player.getUniqueId())) {
-                    DisguiseNameTags.update(player, tags.get(player.getUniqueId()).name(player.getName()));
-                }
-            }
-        }
     }
     private Tag tag(Player player) {
-        PlayerRole role = contender.getRoleManager().getRole(player.getUniqueId());
-        if (role == PlayerRole.CONTESTANT) return new Tag(TierFormatter.prefix(contender.getTierService().cached(player.getUniqueId())), NamedTextColor.WHITE);
+        return tag(player.getUniqueId());
+    }
+    private Tag tag(UUID id) {
+        PlayerRole role = contender.getRoleManager().getRole(id);
+        if (role == PlayerRole.CONTESTANT) return new Tag(TierFormatter.prefix(contender.getTierService().cached(id)), NamedTextColor.WHITE);
         RoleStyle style = RoleStyle.read(contender.getConfig(), role);
         return new Tag(style.prefixComponent(), style.color());
     }
-    public Component displayName(Player player) { return tag(player).name(player.getName()); }
+    public Component displayName(Player player) { return displayName(player.getUniqueId(), player.getName()); }
+    public Component displayName(UUID id, String name) { return tag(id).name(name); }
     private void remove(Scoreboard board, Entry entry) {
         boolean restore = entry.team().equals(board.getEntryTeam(entry.name()));
         if (entry.team().getScoreboard() != null) entry.team().unregister();

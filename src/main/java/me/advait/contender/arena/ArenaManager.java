@@ -69,7 +69,8 @@ public final class ArenaManager {
         world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
         world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
-        world.setGameRule(GameRule.LOCATOR_BAR, false);
+        world.setGameRule(org.bukkit.GameRules.LOCATOR_BAR, false);
+        world.setGameRule(org.bukkit.GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
         world.setStorm(false);
         world.setThundering(false);
         for (ArenaMap map : maps.getMaps()) {
@@ -307,7 +308,7 @@ public final class ArenaManager {
     private void validateBounds(ArenaMap map) {
         BlockBounds b = map.getBounds();
         if (b == null) throw new IllegalArgumentException("Select the map region first.");
-        if (b.volume() > plugin.getConfig().getLong("arenas.max-template-blocks", 5_000_000L)) {
+        if (b.volume() > plugin.getConfig().getLong("arenas.max-template-blocks", 100_000_000L)) {
             throw new IllegalArgumentException("The selection exceeds max-template-blocks in config.yml.");
         }
         if (b.width() > spacing - 64 || b.length() > spacing - 64) {

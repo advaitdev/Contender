@@ -38,7 +38,7 @@ public abstract class AbstractDuelState extends AbstractGameState {
         return isEnabled() && duel.getState() == this && duel.hasParticipant(player.getUniqueId());
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public final void onDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player) || !owns(player)) return;
         if (duel.isSpectator(player.getUniqueId())) {
@@ -50,6 +50,23 @@ public abstract class AbstractDuelState extends AbstractGameState {
 
     protected void handleDamage(EntityDamageEvent event, Player player) {
         event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public final void onAdvancement(org.bukkit.event.player.PlayerAdvancementDoneEvent event) {
+        if (owns(event.getPlayer())) event.message(null);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public final void onHunger(org.bukkit.event.entity.FoodLevelChangeEvent event) {
+        if (event.getEntity() instanceof Player player && owns(player) && duel.getKit().keepsHungerFull()) {
+            event.setFoodLevel(20);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public final void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent event) {
+        if (event.getEntity() instanceof Player player && owns(player) && duel.getKit().keepsHungerFull()) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -94,8 +111,8 @@ public abstract class AbstractDuelState extends AbstractGameState {
         Player player = event.getPlayer();
         if (!owns(player) || !duel.isInDuel(player.getUniqueId()) || isEnding()) return;
         Component message = MiniMessage.miniMessage().deserialize(
-                MessageUtil.FONT_OPEN + "<color:" + MessageUtil.ERROR + ">" + player.getName()
-                        + " disconnected.</color>" + MessageUtil.FONT_CLOSE);
+                "<color:" + MessageUtil.ERROR + ">" + player.getName()
+                        + " disconnected.</color>");
         duel.broadcastMessage(message);
         duel.forfeit(player.getUniqueId());
     }
@@ -133,8 +150,6 @@ public abstract class AbstractDuelState extends AbstractGameState {
 
         if (!duel.getKit().isAllowBlockPlace()) {
             event.setCancelled(true);
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">Block placement is disabled for this kit!</color>");
             return;
         }
 
@@ -158,15 +173,11 @@ public abstract class AbstractDuelState extends AbstractGameState {
 
         if (!duel.getKit().isAllowBlockBreak()) {
             event.setCancelled(true);
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">Block breaking is disabled for this kit!</color>");
             return;
         }
 
         if (!duel.isPlacedBlock(event.getBlock().getLocation())) {
             event.setCancelled(true);
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">You can only break player-placed blocks!</color>");
             return;
         }
 
@@ -190,8 +201,6 @@ public abstract class AbstractDuelState extends AbstractGameState {
 
         if (!duel.getKit().isAllowBlockPlace()) {
             event.setCancelled(true);
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">Block placement is disabled for this kit!</color>");
         }
     }
 }

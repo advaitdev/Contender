@@ -55,6 +55,8 @@ public class KitManager {
             kit.setNaturalRegen(section.getBoolean("natural-regen", true));
             kit.setSpectatorInvisible(section.getBoolean("spectator-invisible", false));
             kit.setNoClear(section.getBoolean("no-clear", false));
+            kit.setPvpHurt(section.getBoolean("pvp-hurt", false));
+            kit.setPveHurt(section.getBoolean("pve-hurt", false));
 
             if (section.contains("contents")) {
                 @SuppressWarnings("unchecked")
@@ -100,6 +102,8 @@ public class KitManager {
             config.set(path + ".natural-regen", kit.isNaturalRegen());
             config.set(path + ".spectator-invisible", kit.isSpectatorInvisible());
             config.set(path + ".no-clear", kit.isNoClear());
+            config.set(path + ".pvp-hurt", kit.isPvpHurt());
+            config.set(path + ".pve-hurt", kit.isPveHurt());
             config.set(path + ".contents", Arrays.asList(kit.getContents()));
             config.set(path + ".armor", Arrays.asList(kit.getArmor()));
             if (kit.getOffhand() != null) {

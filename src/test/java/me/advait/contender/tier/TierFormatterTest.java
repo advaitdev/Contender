@@ -38,9 +38,9 @@ class TierFormatterTest {
     }
     @Test void onlyRetirementMarkerIsLightGrayAndTierRetainsItsOriginalColor() {
         var rank = new TierFormatter.RankedTier("sword", new Ranking.Tier(2, 0), true);
-        assertEquals(Component.empty().append(Component.text("🗡 ", NamedTextColor.AQUA))
+        assertEquals(Component.empty().append(me.advait.contender.dialog.DialogIcon.DUEL.sprite()).append(Component.space())
                 .append(Component.text("(R) ", NamedTextColor.GRAY)).append(Component.text("HT2", NamedTextColor.AQUA)), TierFormatter.format(rank));
-        assertEquals(Component.empty().append(Component.text("🗡 ", NamedTextColor.AQUA))
+        assertEquals(Component.empty().append(me.advait.contender.dialog.DialogIcon.DUEL.sprite()).append(Component.space())
                 .append(Component.text("HT2", NamedTextColor.AQUA)), TierFormatter.format(new TierFormatter.RankedTier("sword", rank.tier(), false)));
     }
     @Test void invalidOrMissingRankingsDoNotProduceTags() {

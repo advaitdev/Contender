@@ -1,0 +1,69 @@
+package me.advait.contender.race;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class RaceStoreTest {
+    @TempDir Path folder;
+    @Test void restartKeepsFinishTimesAndMarksAnActiveRaceInterrupted() {
+        var a = new RaceRun.Racer(UUID.randomUUID(), "Alice"); var b = new RaceRun.Racer(UUID.randomUUID(), "Bob");
+        var run = new RaceRun(UUID.randomUUID(), "Mace", "course", 15, 1200, List.of(a, b), "custom_race_kit");
+        run.countdown(20); run.start(100); run.hit(a.id(), 15, 200); run.hit(a.id(), 21, 300); run.hit(b.id(), 2, 400);
+        var store = new RaceStore(folder.toFile()); var course = new RaceCourse("course", 10, "Finish Line", 4);
+        store.save(Map.of("course", course), run, true);
+        var saved = store.load(); assertTrue(saved.selected()); assertEquals(course, saved.courses().get("course"));
+        var restored = saved.run(); assertEquals(run.id(), restored.id()); assertEquals(RaceRun.State.INTERRUPTED, restored.state());
+        assertEquals(200, restored.racer(a.id()).finishNanos()); assertEquals(1, restored.racer(a.id()).place());
+        assertTrue(restored.racer(b.id()).withdrawn()); assertEquals(2, restored.racer(b.id()).checkpoint());
+        assertEquals(1200, restored.timeLimitSeconds());
+        assertEquals("custom_race_kit", restored.kitId());
+    }
+    @Test void preparedOfflineRosterSurvivesRestartWithoutBeingCancelled() {
+        var racer = new RaceRun.Racer(UUID.randomUUID(), "OfflinePlayer");
+        var run = new RaceRun(UUID.randomUUID(), "Race", "map", 15, 0, List.of(racer));
+        var store = new RaceStore(folder.toFile()); store.save(Map.of(), run, false);
+        var saved = store.load(); assertFalse(saved.selected()); assertEquals(RaceRun.State.READY, saved.run().state());
+        assertEquals(racer.name(), saved.run().racers().getFirst().name()); assertFalse(saved.run().racers().getFirst().withdrawn());
+    }
+    @Test void racesSavedBeforeKitSelectionKeepTheBuiltInLoadout() throws Exception {
+        var run = new RaceRun(UUID.randomUUID(), "Race", "map", 15, 0,
+                List.of(new RaceRun.Racer(UUID.randomUUID(), "Alice")));
+        var store = new RaceStore(folder.toFile());
+        store.save(Map.of(), run, true);
+        var file = folder.resolve("mace-race.yml").toFile();
+        var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+        yaml.set("race.kit", null); yaml.save(file);
+
+        assertEquals("", store.load().run().kitId());
+        assertEquals("", run.kitId());
+    }
+    @Test void groundReturnSettingSurvivesReloadForEachCourse() {
+        var store = new RaceStore(folder.toFile());
+        var enabled = RaceCourse.defaults("airborne");
+        var disabled = new RaceCourse("platforms", 15, "Finish", 3, false);
+        store.save(Map.of(enabled.mapId(), enabled, disabled.mapId(), disabled), null, false);
+
+        var courses = store.load().courses();
+        assertTrue(courses.get("airborne").returnOnGround());
+        assertFalse(courses.get("platforms").returnOnGround());
+        assertEquals(disabled, courses.get("platforms"));
+    }
+    @Test void existingCoursesEnableGroundReturnWhenTheSettingIsMissing() throws Exception {
+        java.nio.file.Files.writeString(folder.resolve("mace-race.yml"), """
+                courses:
+                  old-course:
+                    max-advance: 12
+                    finish-name: Finish Line
+                    return-height: 5
+                """);
+
+        var course = new RaceStore(folder.toFile()).load().courses().get("old-course");
+        assertTrue(course.returnOnGround());
+        assertEquals(12, course.maxAdvance());
+        assertEquals("Finish Line", course.finishName());
+        assertEquals(5, course.returnHeight());
+    }
+}

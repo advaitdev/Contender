@@ -1,0 +1,128 @@
+package me.advait.contender.race;
+
+import me.advait.contender.arena.*;
+import me.advait.contender.map.*;
+import me.advait.contender.testutil.StateTestServer;
+import io.papermc.paper.registry.RegistryAccess;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
+import org.bukkit.*;
+import org.bukkit.attribute.*;
+import org.bukkit.block.Block;
+import org.bukkit.damage.DamageSource;
+import org.bukkit.entity.*;
+import org.bukkit.event.entity.*;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.util.BoundingBox;
+import org.bukkit.util.VoxelShape;
+import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class RaceSafetyTest {
+    @Test void landingReturnsToLatestCheckpointAndTheStartDoesNotLoop() {
+        try (var f = new Fixture(true)) {
+            f.start(); clearInvocations(f.player);
+            f.session.monitorRacers(); verify(f.player, never()).teleport(any(Location.class));
+            f.at(2, 67, 2); f.session.monitorRacers();
+            f.at(2, 64, 2); f.session.monitorRacers();
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 64));
+            clearInvocations(f.player);
+            f.at(1, 64, 1); f.session.monitorRacers(); f.session.monitorRacers();
+            verify(f.player, never()).teleport(any(Location.class));
+            f.run.hit(f.id, 1, System.nanoTime()); f.at(5, 70, 5); f.session.monitorRacers();
+            var landing = new PlayerMoveEvent(f.player, f.player.getLocation(), new Location(f.world, 5, 64, 5));
+            f.session.move(landing);
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 3 && loc.getY() == 67));
+            assertEquals(1, f.run.racer(f.id).checkpoint());
+        }
+    }
+    @Test void disablingGroundReturnStillKeepsFullHungerAndHealthDamageAtZero() {
+        try (var f = new Fixture(false)) {
+            f.start(); clearInvocations(f.player);
+            f.at(4, 70, 4); f.session.monitorRacers(); f.at(4, 64, 4); f.session.monitorRacers();
+            verify(f.player, never()).teleport(any(Location.class));
+            verify(f.player, times(2)).setFoodLevel(20); verify(f.player, times(2)).setSaturation(20); verify(f.player, times(2)).setExhaustion(0);
+            for (var cause : List.of(EntityDamageEvent.DamageCause.FALL, EntityDamageEvent.DamageCause.FIRE_TICK,
+                    EntityDamageEvent.DamageCause.LAVA, EntityDamageEvent.DamageCause.DROWNING, EntityDamageEvent.DamageCause.ENTITY_EXPLOSION,
+                    EntityDamageEvent.DamageCause.POISON, EntityDamageEvent.DamageCause.STARVATION, EntityDamageEvent.DamageCause.FREEZE)) {
+                var event = hit(f.player, cause); f.session.damage(event);
+                assertEquals(0, event.getFinalDamage(), cause.name()); assertFalse(event.isCancelled(), cause.name());
+                assertEquals(8, event.getDamage()); assertEquals(0, event.getDamage(EntityDamageEvent.DamageModifier.ABSORPTION));
+            }
+            var food = mock(FoodLevelChangeEvent.class); when(food.getEntity()).thenReturn(f.player); f.session.food(food); verify(food).setCancelled(true);
+            var exhaustion = mock(EntityExhaustionEvent.class); when(exhaustion.getEntity()).thenReturn(f.player); f.session.exhaustion(exhaustion); verify(exhaustion).setCancelled(true);
+            var attack = mock(EntityDamageByEntityEvent.class); when(attack.getEntity()).thenReturn(f.player); when(attack.getDamager()).thenReturn(mock(Player.class));
+            f.session.damage(attack); verify(attack).setCancelled(true);
+            var voidHit = hit(f.player, EntityDamageEvent.DamageCause.VOID); f.session.damage(voidHit); assertTrue(voidHit.isCancelled());
+            verify(f.player).teleport(argThat((Location loc) -> loc.getX() == 1 && loc.getY() == 64));
+        }
+    }
+    @Test void countdownAndFinishersDoNotTriggerGroundReturns() {
+        try (var f = new Fixture(true)) {
+            clearInvocations(f.player);
+            f.at(5, 70, 5); f.session.monitorRacers(); f.at(5, 64, 5); f.session.monitorRacers();
+            verify(f.player, never()).teleport(any(Location.class));
+            f.start(); f.at(5, 70, 5); f.session.monitorRacers();
+            f.run.hit(f.id, 2, System.nanoTime()); f.at(5, 64, 5); f.session.monitorRacers();
+            verify(f.player, never()).teleport(any(Location.class));
+        }
+    }
+    @SuppressWarnings("deprecation")
+    private EntityDamageEvent hit(Player player, EntityDamageEvent.DamageCause cause) {
+        var values = new EnumMap<EntityDamageEvent.DamageModifier, Double>(EntityDamageEvent.DamageModifier.class);
+        var functions = new EnumMap<EntityDamageEvent.DamageModifier, com.google.common.base.Function<? super Double, Double>>(EntityDamageEvent.DamageModifier.class);
+        for (var modifier : EntityDamageEvent.DamageModifier.values()) { values.put(modifier, 0d); functions.put(modifier, d -> 0d); }
+        values.put(EntityDamageEvent.DamageModifier.BASE, 8d); values.put(EntityDamageEvent.DamageModifier.ABSORPTION, -2d);
+        return new EntityDamageEvent(player, cause, mock(DamageSource.class), values, functions);
+    }
+    private static class Fixture implements AutoCloseable {
+        final StateTestServer env = new StateTestServer();
+        final MockedStatic<RegistryAccess> registry = mockStatic(RegistryAccess.class);
+        final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+        final MockedStatic<RaceKit> kit = mockStatic(RaceKit.class);
+        final Player player = mock(Player.class);
+        final UUID id = UUID.randomUUID();
+        final World world = mock(World.class);
+        final RaceRun run;
+        final RaceSession session;
+        Location position;
+        Fixture(boolean returnOnGround) {
+            registry.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
+            var attrs = new HashMap<Key, Attribute>();
+            doAnswer(call -> attrs.computeIfAbsent(call.getArgument(0), key -> {
+                Attribute a = mock(Attribute.class); when(a.getKey()).thenReturn(new NamespacedKey(key.namespace(), key.value())); return a;
+            })).when(Registry.ATTRIBUTE).getOrThrow(any(Key.class));
+            when(world.getName()).thenReturn("arena"); when(world.getMinHeight()).thenReturn(-64); when(world.getMaxHeight()).thenReturn(320);
+            when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true); bukkit.when(() -> Bukkit.getWorld("arena")).thenReturn(world);
+            Block solid = mock(Block.class), air = mock(Block.class); VoxelShape shape = mock(VoxelShape.class), empty = mock(VoxelShape.class);
+            when(shape.getBoundingBoxes()).thenReturn(List.of(new BoundingBox(0, 0, 0, 1, 1, 1))); when(empty.getBoundingBoxes()).thenReturn(List.of());
+            when(solid.getCollisionShape()).thenReturn(shape); when(air.getCollisionShape()).thenReturn(empty);
+            when(world.getBlockAt(anyInt(), anyInt(), anyInt())).thenAnswer(c -> ((int) c.getArgument(1)) == 63 ? solid : air);
+            Chunk chunk = mock(Chunk.class); when(world.getChunkAtAsync(0, 0)).thenReturn(CompletableFuture.completedFuture(chunk)); when(world.getChunkAt(0, 0)).thenReturn(chunk);
+            Entity[] mobs = {mob("#1", 3), mob("Finish", 6)}; when(chunk.getEntities()).thenReturn(mobs);
+            ArenaMap map = new ArenaMap("course"); map.setWorldName("arena"); map.setRollbackRegion(0, 60, 0, 10, 80, 10);
+            map.setTeam1Spawn(1, 64, 1, 0, 0); map.setTeam2Spawn(1, 64, 1, 0, 0);
+            ArenaInstance instance = mock(ArenaInstance.class); when(instance.map()).thenReturn(map); when(instance.cell()).thenReturn(new BlockBounds(0, -64, 0, 100, 319, 100));
+            at(1, 64, 1); when(player.getUniqueId()).thenReturn(id); when(player.isOnline()).thenReturn(true); when(player.getMaxHealth()).thenReturn(20d);
+            when(player.getGameMode()).thenReturn(GameMode.SURVIVAL); when(player.getInventory()).thenReturn(mock(PlayerInventory.class)); when(player.teleport(any(Location.class))).thenReturn(true);
+            when(player.getLocation()).thenAnswer(c -> position.clone()); when(player.getBoundingBox()).thenAnswer(c -> new BoundingBox(position.getX() - .3, position.getY(), position.getZ() - .3, position.getX() + .3, position.getY() + 1.8, position.getZ() + .3));
+            bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
+            run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, List.of(new RaceRun.Racer(id, "Alice")));
+            session = new RaceSession(env.plugin, mock(RaceManager.class), run, new RaceCourse("course", 15, "Finish", 3, returnOnGround), new ArenaLease(instance, UUID.randomUUID()));
+            session.enable(); assertEquals(RaceRun.State.COUNTDOWN, run.state());
+        }
+        void at(double x, double y, double z) { position = new Location(world, x, y, z); }
+        void start() { for (int i = 0; i < 10; i++) env.scheduled.getFirst().run(); assertEquals(RaceRun.State.RUNNING, run.state()); }
+        LivingEntity mob(String name, int x) {
+            var mob = mock(LivingEntity.class); when(mob.getUniqueId()).thenReturn(UUID.randomUUID()); when(mob.customName()).thenReturn(Component.text(name));
+            when(mob.getLocation()).thenAnswer(c -> new Location(world, x, 64, 4)); when(mob.getAttribute(any())).thenReturn(mock(AttributeInstance.class));
+            when(mob.isValid()).thenReturn(true); when(mob.getMaxHealth()).thenReturn(1024d); return mob;
+        }
+        @Override public void close() { session.disable(); kit.close(); bukkit.close(); registry.close(); env.close(); }
+    }
+}

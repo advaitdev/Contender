@@ -8,6 +8,12 @@ public final class RosterParser {
     public record PlayerIdentity(UUID id, String name) { }
     private record NamedEntry(String name, List<String> players) { }
     private RosterParser() { }
+    /** Counts entries using the same syntax as profile lookup, without starting network requests. */
+    public static int entryCount(String text, boolean teams) {
+        int count = readEntries(text, teams).size();
+        if (count < 2 || count > 64) throw new IllegalArgumentException("Enter between 2 and 64 players or teams.");
+        return count;
+    }
     public static List<TournamentEntry> parse(String text, boolean teams, Function<String, PlayerIdentity> findPlayer) {
         return resolveEntries(readEntries(text, teams), findPlayer);
     }
@@ -35,8 +41,10 @@ public final class RosterParser {
                 if (player == null) throw new IllegalArgumentException("Couldn't find player " + name + ".");
                 return player;
             }).toList();
+            Map<UUID, String> playerNames = new LinkedHashMap<>();
+            players.forEach(player -> playerNames.put(player.id(), player.name()));
             entries.add(new TournamentEntry(entry.name() == null ? players.getFirst().name() : entry.name(),
-                    players.stream().map(PlayerIdentity::id).toList()));
+                    players.stream().map(PlayerIdentity::id).toList(), playerNames));
         }
         return List.copyOf(entries);
     }

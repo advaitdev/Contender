@@ -2,7 +2,7 @@ package me.advait.contender.pvp;
 
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
-import me.advait.contender.spectator.SpectatorManager;
+import me.advait.contender.role.RoleManager;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -16,12 +16,19 @@ public class PvPListener implements Listener {
 
     private final PvPSettings pvpSettings;
     private final DuelManager duelManager;
-    private final SpectatorManager spectatorManager;
+    private final RoleManager roleManager;
+    private final me.advait.contender.minigame.MinigameManager minigames;
 
-    public PvPListener(PvPSettings pvpSettings, DuelManager duelManager, SpectatorManager spectatorManager) {
+    public PvPListener(PvPSettings pvpSettings, DuelManager duelManager, RoleManager roleManager) {
+        this(pvpSettings, duelManager, roleManager, null);
+    }
+
+    public PvPListener(PvPSettings pvpSettings, DuelManager duelManager, RoleManager roleManager,
+                       me.advait.contender.minigame.MinigameManager minigames) {
+        this.minigames = minigames;
         this.pvpSettings = pvpSettings;
         this.duelManager = duelManager;
-        this.spectatorManager = spectatorManager;
+        this.roleManager = roleManager;
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
@@ -45,6 +52,12 @@ public class PvPListener implements Listener {
         Duel victimDuel = duelManager.getDuel(victimUuid);
         if (attackerDuel != victimDuel && (attackerDuel != null || victimDuel != null)) {
             event.setCancelled(true);
+            return;
+        }
+
+        // The owning mode handles team rules, countdowns, and spectator protection.
+        if (minigames != null && (minigames.owns(attackerUuid) || minigames.owns(victimUuid))) {
+            if (!minigames.sameEvent(attackerUuid, victimUuid)) event.setCancelled(true);
             return;
         }
 
@@ -86,7 +99,7 @@ public class PvPListener implements Listener {
     /** Returns true if the player is in any duel-related role (contestant or spectator). */
     private boolean isInAnyDuelRole(UUID uuid) {
         if (duelManager.getDuel(uuid) != null) return true;
-        if (spectatorManager.isDeceased(uuid)) return true;
+        if (!roleManager.isContestant(uuid)) return true;
         return false;
     }
 }

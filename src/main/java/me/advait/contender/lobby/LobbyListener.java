@@ -1,5 +1,6 @@
 package me.advait.contender.lobby;
 
+import io.papermc.paper.event.player.AsyncPlayerSpawnLocationEvent;
 import me.advait.contender.Contender;
 import org.bukkit.Material;
 import org.bukkit.entity.ArmorStand;
@@ -13,7 +14,10 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.*;
+import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
 
 public class LobbyListener implements Listener {
 
@@ -27,12 +31,36 @@ public class LobbyListener implements Listener {
 
     // ── Player join ──────────────────────────────────────────────────────────
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onSpawnLocation(AsyncPlayerSpawnLocationEvent event) {
+        try {
+            // World lookup, config and duel ownership are all read on the server thread.
+            var playerId = event.getConnection().getProfile().getId();
+            var location = plugin.getServer().getScheduler().callSyncMethod(plugin,
+                    () -> lobbyManager.getJoinLocation(playerId)).get();
+            if (location != null) event.setSpawnLocation(location);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException failure) {
+            plugin.getLogger().log(Level.WARNING, "Could not select the lobby for a joining player.", failure.getCause());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        boolean returningFromEvent = plugin.getMinigameManager() != null
+                && (plugin.getMinigameManager().owns(player.getUniqueId()) || plugin.getMinigameManager().pendingReturn(player.getUniqueId()))
+                || plugin.getRaceManager() != null && (plugin.getRaceManager().owns(player.getUniqueId()) || plugin.getRaceManager().pendingReturn(player.getUniqueId()));
+        // Keep the join-time decision: recovery may finish before this delayed task runs.
         // 1-tick delay ensures the player is fully initialised before teleporting
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline()) lobbyManager.sendToLobby(player);
+            if (returningFromEvent) return;
+            if (plugin.getMinigameManager() != null && (plugin.getMinigameManager().owns(player.getUniqueId()) || plugin.getMinigameManager().pendingReturn(player.getUniqueId()))) return;
+            if (plugin.getRaceManager() != null && (plugin.getRaceManager().owns(player.getUniqueId()) || plugin.getRaceManager().pendingReturn(player.getUniqueId()))) return;
+            if (!player.isOnline() || plugin.getDuelManager().getDuel(player) != null) return;
+            plugin.getRoleManager().applySpectatorRole(player);
+            if (lobbyManager.isTeleportOnJoin()) lobbyManager.sendToLobby(player);
         }, 1L);
     }
 
@@ -40,7 +68,7 @@ public class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.isAllowBlockBreak()) {
+        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.canBreak(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
@@ -48,14 +76,14 @@ public class LobbyListener implements Listener {
     /** Suppresses the block-cracking animation before a break fires. */
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockDamageEarly(BlockDamageEvent event) {
-        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.isAllowBlockBreak()) {
+        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.canBreak(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.isAllowBlockBreak()) {
+        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.canPlace(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
@@ -63,7 +91,7 @@ public class LobbyListener implements Listener {
     /** Prevents placing water / lava / powdered snow via bucket. */
     @EventHandler(priority = EventPriority.HIGH)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        if (lobbyManager.isLobbyWorld(event.getPlayer().getWorld()) && !lobbyManager.isAllowBlockBreak()) {
+        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.canPlace(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
@@ -71,7 +99,7 @@ public class LobbyListener implements Listener {
     /** Prevents scooping up source blocks with a bucket. */
     @EventHandler(priority = EventPriority.HIGH)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        if (lobbyManager.isLobbyWorld(event.getPlayer().getWorld()) && !lobbyManager.isAllowBlockBreak()) {
+        if (lobbyManager.isLobbyWorld(event.getBlock().getWorld()) && !lobbyManager.canBreak(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
@@ -84,6 +112,7 @@ public class LobbyListener implements Listener {
         var block = event.getClickedBlock();
         if (block == null) return;
         if (!lobbyManager.isLobbyWorld(block.getWorld())) return;
+        if (lobbyManager.canBreak(event.getPlayer()) && lobbyManager.canPlace(event.getPlayer())) return;
 
         Material type = block.getType();
 
@@ -103,6 +132,7 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         if (!lobbyManager.isLobbyWorld(event.getRightClicked().getWorld())) return;
+        if (lobbyManager.canBreak(event.getPlayer()) && lobbyManager.canPlace(event.getPlayer())) return;
         var entity = event.getRightClicked();
         if (entity instanceof ArmorStand || entity instanceof ItemFrame) {
             event.setCancelled(true);
@@ -115,6 +145,12 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!lobbyManager.isLobbyWorld(event.getEntity().getWorld())) return;
+        if (event.getEntity() instanceof ArmorStand || event.getEntity() instanceof ItemFrame) {
+            if (event instanceof EntityDamageByEntityEvent attack && attack.getDamager() instanceof Player player
+                    && lobbyManager.canBreak(player)) return;
+            event.setCancelled(true);
+            return;
+        }
         if (event instanceof EntityDamageByEntityEvent byEntity
                 && byEntity.getDamager() instanceof Player attacker
                 && attacker.getGameMode() == GameMode.CREATIVE) {
@@ -152,6 +188,7 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
         if (lobbyManager.isLobbyWorld(event.getBlock().getWorld())) {
+            if (event.getEntity() instanceof Player player && lobbyManager.canBreak(player)) return;
             event.setCancelled(true);
         }
     }
@@ -174,6 +211,7 @@ public class LobbyListener implements Listener {
     @EventHandler
     public void onBlockIgnite(BlockIgniteEvent event) {
         if (lobbyManager.isLobbyWorld(event.getBlock().getWorld())) {
+            if (event.getPlayer() != null && lobbyManager.canPlace(event.getPlayer())) return;
             event.setCancelled(true);
         }
     }
@@ -189,6 +227,11 @@ public class LobbyListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onHangingBreak(HangingBreakEvent event) {
         if (lobbyManager.isLobbyWorld(event.getEntity().getWorld())) {
+            if (event instanceof HangingBreakByEntityEvent broken && broken.getRemover() instanceof Player player
+                    && lobbyManager.canBreak(player)) return;
+            // Let decorations detach when an allowed builder removes their supporting block.
+            if (event.getCause() == HangingBreakEvent.RemoveCause.PHYSICS
+                    && (lobbyManager.isAllowBlockBreak() || lobbyManager.isAdminBuildBypass())) return;
             event.setCancelled(true);
         }
     }

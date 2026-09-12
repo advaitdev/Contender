@@ -24,15 +24,10 @@ public final class RoundEndState extends AbstractDuelState {
             return;
         }
         if (winner != null) {
-            duel.broadcastActionBar("<color:" + MessageUtil.PRIMARY + ">" + net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().escapeTags(winner.getName())
-                    + " wins the round! <color:" + MessageUtil.SECONDARY + ">"
-                    + duel.getTeam1().getScore() + " - " + duel.getTeam2().getScore() + "</color></color>");
             for (UUID uuid : winner.getPlayers()) {
                 Player player = Bukkit.getPlayer(uuid);
                 if (player != null) MessageUtil.playRoundWin(player);
             }
-        } else {
-            duel.broadcastActionBar("<color:" + MessageUtil.WARNING + ">Round ended in a tie!</color>");
         }
         duel.rollbackArena(guard(this::startCountdown));
     }
@@ -41,10 +36,12 @@ public final class RoundEndState extends AbstractDuelState {
         for (int seconds = 3; seconds >= 1; seconds--) {
             int remaining = seconds;
             runLater(() -> {
-                duel.broadcastActionBar("<color:" + MessageUtil.WARNING + ">Next round in " + remaining + "...</color>");
+                duel.broadcastCountdown(remaining);
                 duel.broadcastSound(Duel.SoundType.COUNTDOWN_TICK);
             }, (4L - seconds) * 20L);
         }
         runLater(() -> duel.setState(new ActiveState(duel)), 80L);
     }
+
+    @Override protected void onDisable() { duel.clearCountdown(); }
 }

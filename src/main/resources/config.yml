@@ -1,18 +1,27 @@
 lobby:
+  # Use /setlobby to save the world, coordinates and facing together.
   world: "world"
   x: 0.5
   y: 64.0
   z: 0.5
   yaw: 0.0
   pitch: 0.0
+  # These settings can also be changed in /options > Lobby Settings.
+  teleport-on-join: true
+  # Applies to breaking blocks and collecting fluids with buckets.
   allow-block-break: false
+  # Applies to placing blocks and emptying buckets.
+  allow-block-place: false
+  # Players with contender.admin can build even when the options above are blocked.
+  admin-build-bypass: true
 
 arenas:
   world: "contender_arenas"
   copies-per-map: 20
   # Distance between arena slots, in blocks. Leave this unchanged after preparing maps.
   spacing: 1024
-  max-template-blocks: 5000000
+  # Maximum selected volume per map, including air.
+  max-template-blocks: 100000000
 
 nametags:
   roles:
@@ -22,3 +31,13 @@ nametags:
     spectator:
       prefix: "[Spectator]"
       color: gray
+
+# A blank title follows the current tournament name.
+tablist:
+  enabled: true
+  title: ""
+  color: gold
+
+# 0 is transparent; 100 is solid. Change this in /options > Board appearance.
+tournament-board:
+  background-opacity: 0

@@ -1,13 +1,15 @@
 package me.advait.contender.tier;
 
 import net.kyori.adventure.text.Component;
+import me.advait.contender.dialog.DialogIcon;
 import net.kyori.adventure.text.format.NamedTextColor;
 import java.util.*;
 
-/** Tierer's mode icons and colors, rendered as Adventure components. */
+/** Tierer's tier colors with vanilla item sprites for each mode. */
 public final class TierFormatter {
-    private static final Map<String, String> ICONS = Map.of("axe", "🪓", "pot", "⚗", "vanilla", "✦",
-            "uhc", "❤", "sword", "🗡", "smp", "⛨", "nop", "☠", "nethop", "☠");
+    private static final Map<String, DialogIcon> ICONS = Map.of("axe", DialogIcon.AXE, "pot", DialogIcon.POTION,
+            "vanilla", DialogIcon.CRYSTAL, "uhc", DialogIcon.APPLE, "sword", DialogIcon.DUEL,
+            "smp", DialogIcon.PLAYERS, "nop", DialogIcon.SPLASH_POTION, "nethop", DialogIcon.SPLASH_POTION);
     private TierFormatter() { }
     public record RankedTier(String mode, Ranking.Tier tier, boolean retired) { }
     public static NamedTextColor color(int tier) {
@@ -30,8 +32,8 @@ public final class TierFormatter {
     public static Component format(RankedTier rank) {
         NamedTextColor color = color(rank.tier().tier());
         Component result = Component.empty();
-        String icon = ICONS.getOrDefault(rank.mode(), "");
-        if (!icon.isEmpty()) result = result.append(Component.text(icon + " ", color));
+        DialogIcon icon = ICONS.get(rank.mode());
+        if (icon != null) result = result.append(icon.sprite()).append(Component.space());
         if (rank.retired()) result = result.append(Component.text("(R) ", NamedTextColor.GRAY));
         return result.append(Component.text(rank.tier().label(), color));
     }

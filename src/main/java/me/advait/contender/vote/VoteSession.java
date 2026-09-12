@@ -1,9 +1,6 @@
 package me.advait.contender.vote;
 
 import me.advait.contender.Contender;
-import me.advait.contender.gui.GUIHolder;
-import me.advait.contender.gui.GUIType;
-import me.advait.contender.gui.vote.VoteGUI;
 import me.advait.contender.util.MessageUtil;
 import me.advait.contender.util.StringUtil;
 import net.kyori.adventure.text.Component;
@@ -35,8 +32,8 @@ public class VoteSession {
     public void start() {
         MiniMessage mm = MiniMessage.miniMessage();
         Component announcement = mm.deserialize(
-                MessageUtil.FONT_OPEN + "<color:" + MessageUtil.SECONDARY + ">A vote has started! " +
-                "<color:" + MessageUtil.PRIMARY + ">Use /vote to participate!</color></color>" + MessageUtil.FONT_CLOSE);
+                "<color:" + MessageUtil.SECONDARY + ">A vote has started! " +
+                "<color:" + MessageUtil.PRIMARY + ">Use /vote to participate!</color></color>");
         for (Player p : Bukkit.getOnlinePlayers()) {
             p.sendMessage(announcement);
             MessageUtil.playSuccess(p);
@@ -62,6 +59,7 @@ public class VoteSession {
     }
 
     private void broadcastTimerActionBar() {
+        manager.timer().update(remainingSeconds);
         int m = remainingSeconds / 60;
         int s = remainingSeconds % 60;
         String timeStr = String.format("%02d:%02d", m, s);
@@ -74,20 +72,24 @@ public class VoteSession {
         }
     }
 
+    public boolean isEnded() { return ended; }
+    public boolean isCandidate(UUID id) {
+        return !removedCandidates.contains(id) && plugin.getRoleManager().isContestant(id) && plugin.getServer().getPlayer(id) != null;
+    }
     public void vote(UUID voter, UUID candidate) {
+        if (ended) throw new IllegalStateException("That vote has ended.");
+        if (!plugin.getRoleManager().isContestant(voter)) throw new IllegalArgumentException("Only contestants can vote.");
+        if (!isCandidate(candidate)) throw new IllegalArgumentException("That player is no longer a candidate.");
         voterToCandidate.put(voter, candidate);
-        refreshOpenGUIs();
     }
 
     public void removeVote(UUID voter) {
         voterToCandidate.remove(voter);
-        refreshOpenGUIs();
     }
 
     public void removeCandidate(UUID candidate) {
         removedCandidates.add(candidate);
         voterToCandidate.entrySet().removeIf(e -> e.getValue().equals(candidate));
-        refreshOpenGUIs();
     }
 
     public int getVoteCount(UUID candidate) {
@@ -110,15 +112,6 @@ public class VoteSession {
         return remainingSeconds;
     }
 
-    public void refreshOpenGUIs() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            var topInv = player.getOpenInventory().getTopInventory();
-            if (topInv.getHolder() instanceof GUIHolder holder && holder.getType() == GUIType.VOTE_GUI) {
-                VoteGUI.populate(topInv, this, player, plugin.getSpectatorManager());
-            }
-        }
-    }
-
     public void end() {
         if (ended) return;
         ended = true;
@@ -128,21 +121,8 @@ public class VoteSession {
             timerTask = null;
         }
 
-        closeAllGUIs();
-        announceResults();
-        manager.onSessionEnd();
-    }
-
-    private void closeAllGUIs() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            var topInv = player.getOpenInventory().getTopInventory();
-            if (topInv.getHolder() instanceof GUIHolder holder && holder.getType() == GUIType.VOTE_GUI) {
-                player.closeInventory();
-            }
-        }
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendActionBar(Component.empty());
-        }
+        for (Player player : Bukkit.getOnlinePlayers()) player.sendActionBar(Component.empty());
+        try { announceResults(); } finally { manager.onSessionEnd(); }
     }
 
     private void announceResults() {
@@ -152,15 +132,13 @@ public class VoteSession {
         Map<UUID, Integer> counts = new LinkedHashMap<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             UUID uuid = player.getUniqueId();
-            if (!plugin.getSpectatorManager().isDeceased(uuid) && !removedCandidates.contains(uuid)) {
+            if (isCandidate(uuid)) {
                 counts.put(uuid, getVoteCount(uuid));
             }
         }
 
         if (counts.isEmpty()) {
-            Component msg = mm.deserialize(MessageUtil.FONT_OPEN +
-                    "<color:" + MessageUtil.MUTED + ">The vote ended with no candidates.</color>" +
-                    MessageUtil.FONT_CLOSE);
+            Component msg = mm.deserialize("<color:" + MessageUtil.MUTED + ">The vote ended with no candidates.</color>");
             for (Player p : Bukkit.getOnlinePlayers()) p.sendMessage(msg);
             return;
         }
@@ -176,9 +154,7 @@ public class VoteSession {
 
         Component announcement;
         if (winners.size() > 1) {
-            announcement = mm.deserialize(MessageUtil.FONT_OPEN +
-                    "<color:" + MessageUtil.WARNING + ">The vote ended in a tie!</color>" +
-                    MessageUtil.FONT_CLOSE);
+            announcement = mm.deserialize("<color:" + MessageUtil.WARNING + ">The vote ended in a tie!</color>");
         } else {
             UUID winnerUuid = winners.get(0);
             Player winner = Bukkit.getPlayer(winnerUuid);
@@ -186,12 +162,10 @@ public class VoteSession {
                     : Objects.requireNonNullElse(Bukkit.getOfflinePlayer(winnerUuid).getName(), "Unknown");
 
             Component head = winner != null ? StringUtil.getPlayerHead(winner) : Component.empty();
-            Component text = mm.deserialize(MessageUtil.FONT_OPEN +
-                    "<color:" + MessageUtil.PRIMARY + ">" + winnerName + "</color>" +
+            Component text = mm.deserialize("<color:" + MessageUtil.PRIMARY + ">" + winnerName + "</color>" +
                     "<color:" + MessageUtil.MUTED + "> wins the vote with </color>" +
                     "<color:" + MessageUtil.SECONDARY + ">" + maxVotes + " vote" + (maxVotes != 1 ? "s" : "") + "</color>" +
-                    "<color:" + MessageUtil.MUTED + ">!</color>" +
-                    MessageUtil.FONT_CLOSE);
+                    "<color:" + MessageUtil.MUTED + ">!</color>");
             announcement = Component.empty().append(head).appendSpace().append(text);
         }
 

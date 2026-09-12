@@ -1,6 +1,5 @@
 package me.advait.contender.duel;
 
-import me.advait.contender.util.MessageUtil;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -10,11 +9,9 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.scheduler.BukkitTask;
 
 public final class ActiveState extends AbstractDuelState {
     private long invincibilityEndTime;
-    private BukkitTask invincibilityTask;
 
     public ActiveState(Duel duel) { super(duel); }
 
@@ -26,19 +23,6 @@ public final class ActiveState extends AbstractDuelState {
         duel.prepareRound();
         if (duel.getMode() == DuelMode.FFA) {
             invincibilityEndTime = System.currentTimeMillis() + 5000L;
-            invincibilityTask = runRepeating(() -> {
-                long remaining = invincibilityEndTime - System.currentTimeMillis();
-                if (remaining <= 0) {
-                    invincibilityTask.cancel();
-                    duel.announceRound();
-                    return;
-                }
-                int seconds = (int) Math.ceil(remaining / 1000.0);
-                duel.broadcastActionBar("<color:" + MessageUtil.WARNING + ">Invincibility: <color:"
-                        + MessageUtil.PRIMARY + ">" + seconds + "s</color></color>");
-            }, 0L, 10L);
-        } else {
-            duel.announceRound();
         }
         duel.broadcastSound(Duel.SoundType.COUNTDOWN_GO);
     }
@@ -55,6 +39,13 @@ public final class ActiveState extends AbstractDuelState {
         }
         // Respect restrictions applied by earlier listeners before resolving an elimination.
         if (event.isCancelled()) return;
+        boolean pvp = event.getDamageSource().getCausingEntity() instanceof Player;
+        if (event.getCause() != EntityDamageEvent.DamageCause.VOID
+                && (pvp ? duel.getKit().isPvpHurt() : duel.getKit().isPveHurt())) {
+            // Keep the hit event so Paper applies its normal hurt animation and knockback.
+            HurtRules.removeHealthDamage(event);
+            return;
+        }
         if (player.getHealth() + player.getAbsorptionAmount() - event.getFinalDamage() <= 0) {
             event.setCancelled(true);
             Player killer = null;

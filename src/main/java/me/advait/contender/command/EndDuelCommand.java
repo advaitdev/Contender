@@ -2,7 +2,7 @@ package me.advait.contender.command;
 
 import me.advait.contender.duel.Duel;
 import me.advait.contender.duel.DuelManager;
-import me.advait.contender.util.MessageUtil;
+import me.advait.contender.dialog.Dialogs;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -26,15 +26,13 @@ public class EndDuelCommand implements CommandExecutor {
         }
 
         if (!player.hasPermission("contender.master")) {
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">You don't have permission to do this!</color>");
+            Dialogs.error(player, "You don't have permission to end duels.");
             return true;
         }
 
         Duel duel = duelManager.getDuel(player);
         if (duel == null) {
-            MessageUtil.sendActionBar(player,
-                    "<color:" + MessageUtil.ERROR + ">You are not in a duel!</color>");
+            Dialogs.error(player, "You're not in a duel.");
             return true;
         }
 

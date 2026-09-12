@@ -13,9 +13,6 @@ public final class MessageUtil {
 
     private static final MiniMessage MM = MiniMessage.miniMessage();
 
-    public static final String FONT_OPEN = "<font:minecraft:ranyth>";
-    public static final String FONT_CLOSE = "</font>";
-
     public static final String PRIMARY = "#4CAF50";
     public static final String SECONDARY = "#2196F3";
     public static final String ACCENT = "#81C784";
@@ -31,7 +28,7 @@ public final class MessageUtil {
     }
 
     public static void sendActionBar(Player player, String miniMessage) {
-        player.sendActionBar(MM.deserialize(FONT_OPEN + miniMessage + FONT_CLOSE));
+        player.sendActionBar(MM.deserialize(miniMessage));
     }
 
     public static void playClick(Player player) {
@@ -65,8 +62,8 @@ public final class MessageUtil {
     public static void sendTitle(Player player, String title, String subtitle,
                                  int fadeInTicks, int stayTicks, int fadeOutTicks) {
         player.showTitle(Title.title(
-                MM.deserialize(FONT_OPEN + title + FONT_CLOSE),
-                MM.deserialize(FONT_OPEN + subtitle + FONT_CLOSE),
+                MM.deserialize(title),
+                MM.deserialize(subtitle),
                 Title.Times.times(
                         Duration.ofMillis(fadeInTicks * 50L),
                         Duration.ofMillis(stayTicks * 50L),
@@ -76,6 +73,6 @@ public final class MessageUtil {
     }
 
     public static Component guiTitle(String text) {
-        return MM.deserialize(FONT_OPEN + text + FONT_CLOSE);
+        return MM.deserialize(text);
     }
 }

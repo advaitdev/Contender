@@ -17,6 +17,8 @@ public class Kit {
     private boolean naturalRegen;
     private boolean spectatorInvisible;
     private boolean noClear;
+    private boolean pvpHurt;
+    private boolean pveHurt;
 
     public Kit(String id) {
         this.id = id;
@@ -45,6 +47,7 @@ public class Kit {
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
+        player.setExhaustion(0);
         player.setFireTicks(0);
         player.setLevel(0);
         player.setExp(0);
@@ -146,4 +149,10 @@ public class Kit {
     public void setNoClear(boolean noClear) {
         this.noClear = noClear;
     }
+
+    public boolean isPvpHurt() { return pvpHurt; }
+    public void setPvpHurt(boolean value) { pvpHurt = value; }
+    public boolean isPveHurt() { return pveHurt; }
+    public void setPveHurt(boolean value) { pveHurt = value; }
+    public boolean keepsHungerFull() { return pvpHurt || pveHurt; }
 }

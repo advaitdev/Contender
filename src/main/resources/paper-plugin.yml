@@ -1,0 +1,22 @@
+name: Contender
+version: '${project.version}'
+main: me.advait.contender.Contender
+bootstrapper: me.advait.contender.ContenderBootstrap
+api-version: '26.2'
+dependencies:
+  server:
+    FastAsyncWorldEdit:
+      load: BEFORE
+      required: true
+      join-classpath: true
+    voicechat:
+      load: BEFORE
+      required: false
+      join-classpath: true
+permissions:
+  contender.master:
+    description: Allows access to duel management and hacker selection
+    default: op
+  contender.admin:
+    description: Allows lobby, chat, voice and PvP settings, and configured admin bypasses
+    default: op

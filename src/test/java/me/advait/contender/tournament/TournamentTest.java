@@ -90,6 +90,63 @@ class TournamentTest {
         List<TournamentEntry> entries = List.of(new TournamentEntry("Red", List.of(player)), new TournamentEntry("Blue", List.of(player)));
         assertThrows(IllegalArgumentException.class, () -> new Tournament(UUID.randomUUID(), "Cup", "map", "kit", entries, true, false, 3, 10, 20));
     }
+    @Test void aShortenedStageCompletesAfterTheChosenRoundsWithoutRemovingEntries() {
+        Tournament tournament = new Tournament(UUID.randomUUID(), "Axe", "map", "kit", entries(10), false, true, 3, 10, 20, 3);
+        tournament.resume();
+        int played = 0;
+        TournamentMatch match;
+        while ((match = tournament.nextMatch(uuid -> true)) != null) {
+            assertTrue(match.round() <= 3);
+            match.start(); match.finish(win(1)); played++;
+        }
+        assertEquals(15, played);
+        assertEquals(3, tournament.rounds());
+        assertTrue(tournament.isComplete());
+        assertEquals(10, tournament.entries().size());
+        assertTrue(tournament.standings().stream().allMatch(standing -> standing.played() == 3));
+        assertThrows(IllegalStateException.class, tournament::resume);
+    }
+    @Test void shortenedSchedulesKeepPairingsScoresAndLengthAcrossRestarts() {
+        Tournament tournament = new Tournament(UUID.randomUUID(), "Axe", "map", "kit", entries(7), false, true, 3, 10, 20, 3);
+        tournament.matches().getFirst().setBestOf(7);
+        tournament.matches().getFirst().finish(win(2));
+        tournament.matches().get(1).start();
+        tournament.resume();
+        TournamentStore store = new TournamentStore(directory.resolve("shortened.yml").toFile());
+        store.save(tournament);
+        Tournament loaded = store.load();
+        assertEquals(3, loaded.rounds());
+        assertEquals(9, loaded.matches().size());
+        for (int i = 0; i < tournament.matches().size(); i++) {
+            TournamentMatch before = tournament.matches().get(i), after = loaded.matches().get(i);
+            assertEquals(before.number(), after.number()); assertEquals(before.round(), after.round());
+            assertEquals(before.first(), after.first()); assertEquals(before.second(), after.second());
+            assertEquals(before.bestOf(), after.bestOf()); assertEquals(before.result(), after.result());
+        }
+        assertEquals(tournament.standings(), loaded.standings());
+        assertEquals(TournamentMatch.Status.WAITING, loaded.matches().get(1).status());
+        assertFalse(loaded.isRunning());
+    }
+    @Test void oldSavedTournamentsStillLoadTheFullSchedule() throws Exception {
+        Tournament tournament = tournament(true, 4);
+        tournament.matches().getLast().finish(win(1));
+        var file = directory.resolve("legacy.yml").toFile();
+        TournamentStore store = new TournamentStore(file);
+        store.save(tournament);
+        var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+        yaml.set("bracket-rounds", null); yaml.save(file);
+        Tournament loaded = store.load();
+        assertEquals(5, loaded.rounds());
+        assertEquals(15, loaded.matches().size());
+        assertEquals(tournament.standings(), loaded.standings());
+        assertEquals(tournament.matches().getLast().result(), loaded.matches().getLast().result());
+    }
+    @Test void rosterCountUsesEntriesRatherThanTeamMembersAndNeedsNoPlayerLookup() {
+        assertEquals(4, RosterParser.entryCount("Alice, Bob\nCarol Dana", false));
+        assertEquals(2, RosterParser.entryCount("Red: Alice, Bob\nBlue: Carol, Dana", true));
+        assertThrows(IllegalArgumentException.class, () -> RosterParser.entryCount("Red Alice", true));
+        assertThrows(IllegalArgumentException.class, () -> RosterParser.entryCount("Alice", false));
+    }
     @Test void parsesSoloAndTeamRostersAndRejectsUnknownPlayers() {
         Map<String, RosterParser.PlayerIdentity> players = Map.of("Alice", new RosterParser.PlayerIdentity(UUID.randomUUID(), "Alice"),
                 "Bob", new RosterParser.PlayerIdentity(UUID.randomUUID(), "Bob"), "Carol", new RosterParser.PlayerIdentity(UUID.randomUUID(), "Carol"));

@@ -11,6 +11,7 @@ public record RoleStyle(String prefix, NamedTextColor color) {
         java.util.Objects.requireNonNull(color);
     }
     public Component prefixComponent() { return Component.text(prefix.isBlank() ? "" : prefix.strip() + " ", color); }
+    public Component displayName(String name) { return prefixComponent().append(Component.text(name, color)); }
     public static NamedTextColor parseColor(String name) {
         NamedTextColor color = NamedTextColor.NAMES.value(name.toLowerCase(java.util.Locale.ROOT));
         if (color == null) throw new IllegalArgumentException("Choose a color from the list.");

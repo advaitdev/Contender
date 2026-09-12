@@ -37,6 +37,8 @@ class DuelLifecycleTest {
             timer.run();
             verify(duel, times(1)).captureInventories();
             verify(duel, times(1)).prepareRound();
+            for (int second = duel.getPreRoundDelay(); second >= 1; second--) verify(duel).broadcastCountdown(second);
+            verify(duel).clearCountdown();
             verify(timer.task()).cancel();
             duel.shutdown();
         }
@@ -65,6 +67,22 @@ class DuelLifecycleTest {
             verify(manager).endDuel(duel);
             resets.get(1).run();
             verify(manager, times(1)).endDuel(duel);
+        }
+    }
+
+    @Test void betweenRoundCountdownEndsBeforeCombatAndCancelledCallbacksCannotReshowIt() {
+        try (var server = new StateTestServer(); var bukkit = mockStatic(Bukkit.class)) {
+            Duel duel = duel(server, mock(DuelManager.class));
+            doNothing().when(duel).prepareRound();
+            doAnswer(call -> { ((Runnable) call.getArgument(0)).run(); return null; }).when(duel).rollbackArena(any());
+            duel.setState(new RoundEndState(duel, null));
+            var callbacks = List.copyOf(server.scheduled);
+            for (int index = 0; index < 3; index++) {
+                callbacks.get(index).run(); verify(duel).broadcastCountdown(3 - index);
+            }
+            callbacks.get(3).run(); assertInstanceOf(ActiveState.class, duel.getState()); verify(duel).clearCountdown();
+            clearInvocations(duel); callbacks.forEach(StateTestServer.Scheduled::run);
+            verify(duel, never()).broadcastCountdown(anyInt()); duel.shutdown();
         }
     }
 

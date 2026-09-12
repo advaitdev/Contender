@@ -51,6 +51,7 @@ public class StartVoteCommand implements CommandExecutor {
             return true;
         }
 
+        try {
         if (!voteManager.startVote(seconds)) {
             if (sender instanceof Player player) {
                 MessageUtil.sendActionBar(player,
@@ -59,6 +60,7 @@ public class StartVoteCommand implements CommandExecutor {
             return true;
         }
 
+        } catch (IllegalStateException failure) { sender.sendMessage(failure.getMessage()); }
         return true;
     }
 }

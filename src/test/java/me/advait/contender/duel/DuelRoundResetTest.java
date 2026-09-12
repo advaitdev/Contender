@@ -13,6 +13,7 @@ import me.advait.contender.testutil.StateTestServer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -25,6 +26,7 @@ import org.mockito.MockedStatic;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,7 +43,7 @@ class DuelRoundResetTest {
             Map<UUID, Location> original = f.locations();
             f.begin();
             Set<UUID> participants = f.duel.getAllParticipants();
-            verify(f.arenas).resetRound(f.lease, participants);
+            verify(f.arenas).resetRound(eq(f.lease), eq(participants), any());
             verify(f.arenas, never()).reset(any());
             assertEquals(original, f.locations());
             assertFalse(f.round.canAddSpectator());
@@ -82,7 +84,7 @@ class DuelRoundResetTest {
         try (Fixture f = new Fixture()) {
             f.winner.blockTeleport = true;
             f.begin();
-            verify(f.arenas).resetRound(eq(f.lease), anySet());
+            verify(f.arenas).resetRound(eq(f.lease), anySet(), any());
             verify(f.duel, never()).resetFailed(any());
             f.completeReset();
             verify(f.duel).resetFailed(argThat(failure -> failure.getMessage().contains("Could not move")));
@@ -124,7 +126,7 @@ class DuelRoundResetTest {
         try (Fixture f = new Fixture()) {
             f.loser.dead = true;
             f.begin();
-            verify(f.arenas).resetRound(eq(f.lease), anySet());
+            verify(f.arenas).resetRound(eq(f.lease), anySet(), any());
             assertEquals(f.team2Spawn, f.loser.location);
             verifyNoInteractions(f.lobby);
             f.completeReset();
@@ -146,7 +148,7 @@ class DuelRoundResetTest {
             assertFalse(f.countdownTasks().isEmpty());
             assertFalse(f.duel.isFinished());
             verifyNoInteractions(f.lobby);
-            verify(f.arenas, times(1)).resetRound(eq(f.lease), anySet());
+            verify(f.arenas, times(1)).resetRound(eq(f.lease), anySet(), any());
         }
     }
 
@@ -236,6 +238,193 @@ class DuelRoundResetTest {
         }
     }
 
+    @Test void anUnregisteredVisitorCanStayForResetWithoutJoiningTheDuelRoster() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 39, 65, 36));
+            var outside = f.player("Outside", new Location(f.world, 2000, 65, 2000));
+            when(guest.player.getGameMode()).thenReturn(GameMode.CREATIVE);
+            Set<UUID> participants = Set.copyOf(f.duel.getAllParticipants());
+            Location guestStart = guest.location.clone();
+
+            f.begin();
+
+            assertFalse(guest.gravity);
+            assertEquals(guestStart, guest.location);
+            assertTrue(outside.gravity, "Another arena's visitor must not be frozen");
+            assertFalse(f.duel.hasParticipant(guest.id));
+            assertEquals(participants, f.duel.getAllParticipants());
+            verify(f.duel, never()).resetFailed(any());
+            verify(f.arenas).resetRound(eq(f.lease), eq(participants), any());
+            verifyNoInteractions(guest.inventory, outside.inventory, f.lobby);
+
+            f.completeReset();
+
+            assertEquals(f.spectatorSpawn, guest.location);
+            assertTrue(guest.gravity);
+            assertTrue(guest.data.isEmpty());
+            assertFalse(f.duel.hasParticipant(guest.id));
+            assertEquals(participants, f.duel.getAllParticipants());
+            assertFalse(f.duel.isFinished());
+            assertFalse(f.countdownTasks().isEmpty());
+            verify(guest.player, never()).setGameMode(any());
+            verifyNoInteractions(guest.inventory, outside.inventory, f.lobby);
+            verify(outside.player, never()).teleport(any(Location.class));
+            verify(outside.player, never()).setGravity(anyBoolean());
+        }
+    }
+
+    @Test void aVisitorWhoArrivesAfterResetWasQueuedIsProtectedByThePasteCallback() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.begin();
+            var guest = f.player("LateGuest", new Location(f.world, 38, 66, 38));
+            assertTrue(guest.gravity);
+
+            f.protectOccupant.accept(guest.player);
+
+            assertFalse(guest.gravity, "Protect a visitor found by the final pre-paste occupancy scan");
+            assertFalse(guest.data.isEmpty());
+            assertFalse(f.duel.hasParticipant(guest.id));
+            f.completeReset();
+            assertEquals(f.spectatorSpawn, guest.location);
+            assertTrue(guest.gravity);
+            assertTrue(guest.data.isEmpty());
+            assertFalse(f.duel.isFinished());
+            verify(f.duel, never()).resetFailed(any());
+            verify(guest.player, never()).setGameMode(any());
+            verifyNoInteractions(guest.inventory, f.lobby);
+        }
+    }
+
+    @Test void visitorMovementIsHeldInPlaceWithoutBlockingLookingAround() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
+            f.begin();
+            var from = guest.location.clone();
+            var destination = from.clone().add(3, -1, 2);
+            destination.setYaw(90);
+            destination.setPitch(-15);
+            var movement = new PlayerMoveEvent(guest.player, from, destination);
+
+            f.round.onVisitorMove(movement);
+
+            assertEquals(from.toVector(), movement.getTo().toVector());
+            assertEquals(90, movement.getTo().getYaw());
+            assertEquals(-15, movement.getTo().getPitch());
+            var withinArena = new PlayerTeleportEvent(guest.player, from.clone(), from.clone().add(2, 0, 0),
+                    PlayerTeleportEvent.TeleportCause.COMMAND);
+            f.round.onVisitorTeleporting(withinArena);
+            assertTrue(withinArena.isCancelled(), "A visitor cannot move elsewhere inside the area being pasted");
+            guest.gravity = true;
+            guest.velocity = new Vector(1, -2, 1);
+            f.repeatFreeze();
+            assertFalse(guest.gravity);
+            assertEquals(new Vector(), guest.velocity);
+            assertFalse(f.duel.hasParticipant(guest.id));
+        }
+    }
+
+    @Test void successfulVisitorTeleportOutReleasesGravityAndDoesNotPullThemBack() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
+            f.begin();
+            var blocked = new PlayerTeleportEvent(guest.player, guest.location.clone(), f.lobbySpawn.clone(),
+                    PlayerTeleportEvent.TeleportCause.COMMAND);
+            blocked.setCancelled(true);
+            f.round.onVisitorTeleport(blocked);
+            assertFalse(guest.gravity, "A blocked teleport must leave reset protection active");
+
+            var exit = new PlayerTeleportEvent(guest.player, guest.location.clone(), f.lobbySpawn.clone(),
+                    PlayerTeleportEvent.TeleportCause.COMMAND);
+            f.containment.onTeleport(exit);
+            f.round.onVisitorTeleporting(exit);
+            assertFalse(exit.isCancelled());
+            guest.location = exit.getTo().clone();
+            f.round.onVisitorTeleport(exit);
+
+            assertTrue(guest.gravity);
+            assertTrue(guest.data.isEmpty());
+            f.repeatFreeze();
+            clearInvocations(guest.player);
+            f.completeReset();
+
+            assertEquals(f.lobbySpawn, guest.location);
+            assertTrue(guest.gravity);
+            verify(guest.player, never()).teleport(any(Location.class));
+            verify(guest.player, never()).setGravity(anyBoolean());
+            verifyNoInteractions(guest.inventory);
+        }
+    }
+
+    @Test void aFailedPasteRestoresVisitorPhysicsWithoutChangingTheirInventoryOrMode() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
+            var alreadyFloating = f.player("FloatingGuest", new Location(f.world, 37, 68, 37));
+            alreadyFloating.gravity = false;
+            f.begin();
+            f.pasting.set(false);
+
+            f.reset.completeExceptionally(new IllegalStateException("Paste failed"));
+
+            assertTrue(f.duel.isFinished());
+            assertTrue(guest.gravity);
+            assertFalse(alreadyFloating.gravity);
+            assertTrue(guest.data.isEmpty());
+            assertTrue(alreadyFloating.data.isEmpty());
+            assertFalse(f.duel.hasParticipant(guest.id));
+            verify(guest.player, never()).setGameMode(any());
+            verify(alreadyFloating.player, never()).setGameMode(any());
+            verifyNoInteractions(guest.inventory, alreadyFloating.inventory);
+        }
+    }
+
+    @Test void cancellingRestoresVisitorsAndLateCallbacksCannotTouchThem() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
+            f.begin();
+            var pending = List.copyOf(f.server.scheduled);
+
+            f.duel.forceCancel();
+
+            assertTrue(guest.gravity);
+            assertTrue(guest.data.isEmpty());
+            assertFalse(f.duel.hasParticipant(guest.id));
+            clearInvocations(guest.player);
+            assertThrows(IllegalStateException.class, () -> f.protectOccupant.accept(guest.player));
+            f.completeReset();
+            pending.forEach(StateTestServer.Scheduled::run);
+
+            assertTrue(guest.gravity);
+            assertTrue(guest.data.isEmpty());
+            verify(guest.player, never()).setGravity(anyBoolean());
+            verify(guest.player, never()).teleport(any(Location.class));
+            verify(guest.player, never()).setGameMode(any());
+            verifyNoInteractions(guest.inventory);
+            assertTrue(f.duel.isFinished());
+        }
+    }
+
+    @Test void visitorsAreProtectedFromDamageOnlyWhileTheArenaIsResetting() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
+            var outside = f.player("Outside", new Location(f.world, 2000, 66, 2000));
+            f.begin();
+            var damage = mock(EntityDamageEvent.class);
+            when(damage.getEntity()).thenReturn(guest.player);
+            var unrelated = mock(EntityDamageEvent.class);
+            when(unrelated.getEntity()).thenReturn(outside.player);
+
+            f.round.onVisitorDamage(damage);
+            f.round.onVisitorDamage(unrelated);
+
+            verify(damage).setCancelled(true);
+            verify(unrelated, never()).setCancelled(anyBoolean());
+            f.completeReset();
+            clearInvocations(damage);
+            f.round.onVisitorDamage(damage);
+            verify(damage, never()).setCancelled(anyBoolean());
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final StateTestServer server = new StateTestServer();
         final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
@@ -255,11 +444,15 @@ class DuelRoundResetTest {
         final TestPlayer winner, loser, observer;
         final CompletableFuture<Void> reset = new CompletableFuture<>();
         final AtomicBoolean pasting = new AtomicBoolean();
+        Consumer<Player> protectOccupant;
         RoundEndState round;
         int nextTask;
 
         @SuppressWarnings("unchecked") Fixture() throws Exception {
             when(world.getName()).thenReturn("arenas"); when(world.getEntities()).thenReturn(List.of());
+            when(world.getPlayers()).thenAnswer(call -> players.values().stream()
+                    .filter(player -> player.online && player.location.getWorld() == world)
+                    .map(player -> player.player).toList());
             when(lobbyWorld.getName()).thenReturn("lobby");
             when(server.plugin.getArenaManager()).thenReturn(arenas);
             when(server.plugin.getLobbyManager()).thenReturn(lobby);
@@ -294,12 +487,13 @@ class DuelRoundResetTest {
             duel.addSpectator(observer.id);
             var deceased = Duel.class.getDeclaredField("deadPlayerSpectators"); deceased.setAccessible(true);
             ((Set<UUID>) deceased.get(duel)).add(loser.id); duel.getTeam2().markDead(loser.id);
-            when(arenas.resetRound(eq(lease), anySet())).thenAnswer(call -> {
+            when(arenas.resetRound(eq(lease), anySet(), any())).thenAnswer(call -> {
                 assertEquals(duel.getAllParticipants(), call.getArgument(1));
+                protectOccupant = call.getArgument(2);
                 for (TestPlayer player : players.values()) {
-                    assertSame(world, player.location.getWorld());
-                    assertTrue(insideSlot(player.location), player.player.getName() + " should stay in the occupied slot");
-                    assertFalse(player.gravity, "Freeze each participant before starting the paste");
+                    if (!player.online || player.location.getWorld() != world || !insideSlot(player.location)) continue;
+                    protectOccupant.accept(player.player);
+                    assertFalse(player.gravity, "Freeze each occupant before starting the paste");
                 }
                 pasting.set(true); return reset;
             });
@@ -330,8 +524,11 @@ class DuelRoundResetTest {
                 var event = new PlayerTeleportEvent(state.player, state.location.clone(), target.clone(), PlayerTeleportEvent.TeleportCause.PLUGIN);
                 if (state.blockTeleport) event.setCancelled(true);
                 containment.onTeleport(event);
+                if (round != null && round.isEnabled()) round.onVisitorTeleporting(event);
                 if (event.isCancelled()) return false;
-                state.location = event.getTo().clone(); return true;
+                state.location = event.getTo().clone();
+                if (round != null && round.isEnabled()) round.onVisitorTeleport(event);
+                return true;
             });
             return state;
         }
@@ -343,7 +540,7 @@ class DuelRoundResetTest {
         }
         void begin() {
             round = new RoundEndState(duel, duel.getTeam1()); duel.setState(round);
-            verify(arenas, never()).resetRound(any(), anySet()); verify(arenas, never()).reset(any()); runNext();
+            verify(arenas, never()).resetRound(any(), anySet(), any()); verify(arenas, never()).reset(any()); runNext();
         }
         void runNext() {
             while (nextTask < server.scheduled.size()) {

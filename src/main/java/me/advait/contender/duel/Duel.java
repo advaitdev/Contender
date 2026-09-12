@@ -457,9 +457,9 @@ public class Duel {
         completeRollback(plugin.getArenaManager().reset(arena), onComplete);
     }
 
-    void rollbackRoundArena(Runnable onComplete) {
+    void rollbackRoundArena(java.util.function.Consumer<Player> protectOccupant, Runnable onComplete) {
         if (arena == null) { rollbackArena(onComplete); return; }
-        completeRollback(plugin.getArenaManager().resetRound(arena, getAllParticipants()), onComplete);
+        completeRollback(plugin.getArenaManager().resetRound(arena, getAllParticipants(), protectOccupant), onComplete);
     }
 
     private void completeRollback(java.util.concurrent.CompletableFuture<Void> reset, Runnable onComplete) {

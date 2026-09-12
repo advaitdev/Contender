@@ -29,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 
@@ -45,7 +46,7 @@ public final class ArenaManager {
     private final Map<String, CompletableFuture<Void>> preparing = new HashMap<>();
     private final Map<ArenaInstance, CompletableFuture<Void>> restoring = new IdentityHashMap<>();
     private final Map<ArenaInstance, ResetPermission> resetPermissions = new IdentityHashMap<>();
-    private record ResetPermission(ArenaLease lease, Set<UUID> participants) { }
+    private record ResetPermission(ArenaLease lease, Set<UUID> participants, Consumer<Player> protectOccupant) { }
     private final Map<Object, Retry> retries = new HashMap<>();
     private final Map<String, String> failures = new HashMap<>();
     private final Set<String> scheduledPreparation = new HashSet<>();
@@ -522,27 +523,38 @@ public final class ArenaManager {
     }
 
     public CompletableFuture<Void> reset(ArenaLease lease) {
-        return reset(lease, Set.of());
+        return reset(lease, Set.of(), null);
     }
 
     /** The duel freezes these participants until the paste finishes and returns them to their spawns. */
     public CompletableFuture<Void> resetRound(ArenaLease lease, Set<UUID> participants) {
+        return resetRoundChecked(lease, participants, null);
+    }
+
+    /** Protects every occupant on the main thread immediately before the occupied round reset begins. */
+    public CompletableFuture<Void> resetRound(ArenaLease lease, Set<UUID> participants, Consumer<Player> protectOccupant) {
+        if (protectOccupant == null) return CompletableFuture.failedFuture(
+                new IllegalArgumentException("A round reset needs player protection."));
+        return resetRoundChecked(lease, participants, protectOccupant);
+    }
+
+    private CompletableFuture<Void> resetRoundChecked(ArenaLease lease, Set<UUID> participants, Consumer<Player> protectOccupant) {
         if (participants == null || participants.isEmpty()) return CompletableFuture.failedFuture(
                 new IllegalArgumentException("A round reset needs its participants."));
         final Set<UUID> allowed;
         try { allowed = Set.copyOf(participants); }
         catch (NullPointerException invalid) { return CompletableFuture.failedFuture(
                 new IllegalArgumentException("Round reset participants must have player IDs.", invalid)); }
-        return reset(lease, allowed);
+        return reset(lease, allowed, protectOccupant);
     }
 
-    private CompletableFuture<Void> reset(ArenaLease lease, Set<UUID> participants) {
+    private CompletableFuture<Void> reset(ArenaLease lease, Set<UUID> participants, Consumer<Player> protectOccupant) {
         if (closed || lease == null || !lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
         if (lease.instance().status() == ArenaInstance.Status.FAILED) return CompletableFuture.failedFuture(
                 new IllegalStateException("This arena copy is waiting for an automatic reset."));
         Clipboard clipboard = clipboards.get(lease.instance().map().getId());
         if (clipboard == null) return CompletableFuture.failedFuture(new IllegalStateException("Map template is not loaded."));
-        return restore(lease.instance(), clipboard, false, new ResetPermission(lease, participants));
+        return restore(lease.instance(), clipboard, false, new ResetPermission(lease, participants, protectOccupant));
     }
 
     private CompletableFuture<Void> restore(ArenaInstance instance, Clipboard clipboard, boolean repair) {
@@ -578,6 +590,7 @@ public final class ArenaManager {
             return chunks.run(world, instance.map().getBounds(), () -> {
                 requireReset(instance, revision, permission);
                 requireOccupants(instance, permission);
+                requireReset(instance, revision, permission);
                 // Remove entities across this slot, including those that wandered beyond the selection.
                 for (var entity : world.getEntities()) {
                     if (entity instanceof Player) continue;
@@ -639,8 +652,10 @@ public final class ArenaManager {
         if (world == null) return;
         for (Player player : world.getPlayers()) {
             Location location = player.getLocation();
-            if (instance.cell().containsColumn(location.getX(), location.getZ())
-                    && !permission.participants().contains(player.getUniqueId())) {
+            if (!instance.cell().containsColumn(location.getX(), location.getZ())) continue;
+            if (permission.protectOccupant() != null) {
+                permission.protectOccupant().accept(player);
+            } else if (!permission.participants().contains(player.getUniqueId())) {
                 throw new IllegalStateException("Move other players out of this arena copy before resetting the round.");
             }
         }

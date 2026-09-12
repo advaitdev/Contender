@@ -26,6 +26,95 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ArenaRoundResetTest {
+    @Test void registeredPlayersAndVisitorsAcrossTheWholeCellAreProtectedBeforePasting() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player contestant = f.player(5, 65, 5), spectator = f.player(10, 75, 10);
+            Player director = f.player(900, 500, 900), elsewhere = f.player(1024, 65, 5);
+            when(f.world.getPlayers()).thenReturn(List.of(contestant, spectator, director, elsewhere));
+            List<Player> protectedPlayers = new ArrayList<>();
+            Thread mainThread = Thread.currentThread();
+
+            var reset = f.manager.resetRound(f.lease,
+                    Set.of(contestant.getUniqueId(), spectator.getUniqueId()), player -> {
+                        assertSame(mainThread, Thread.currentThread());
+                        verify(f.world, never()).getEntities();
+                        protectedPlayers.add(player);
+                    });
+
+            assertTrue(protectedPlayers.isEmpty(), "Protection runs after chunk loading, just before the paste");
+            f.runPasteBoundary();
+
+            assertDoesNotThrow(reset::join);
+            assertEquals(List.of(contestant, spectator, director), protectedPlayers);
+            assertEquals(ArenaInstance.Status.IN_USE, f.instance.status());
+            verify(f.world).getEntities();
+        }
+    }
+
+    @Test void visitorsWhoArriveDuringChunkLoadingAreProtectedByThePasteBoundary() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player contestant = f.player(5, 65, 5), lateVisitor = f.player(10, 500, 10);
+            when(f.world.getPlayers()).thenReturn(List.of(contestant));
+            List<Player> protectedPlayers = new ArrayList<>();
+            var reset = f.manager.resetRound(f.lease, Set.of(contestant.getUniqueId()), protectedPlayers::add);
+
+            when(f.world.getPlayers()).thenReturn(List.of(contestant, lateVisitor));
+            f.runPasteBoundary();
+
+            assertDoesNotThrow(reset::join);
+            assertEquals(List.of(contestant, lateVisitor), protectedPlayers);
+        }
+    }
+
+    @Test void failedOccupantProtectionPreventsEntityRemovalAndPasting() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player contestant = f.player(5, 65, 5), visitor = f.player(900, 200, 900);
+            when(f.world.getPlayers()).thenReturn(List.of(contestant, visitor));
+            List<Player> protectedPlayers = new ArrayList<>();
+            var reset = f.manager.resetRound(f.lease, Set.of(contestant.getUniqueId()), player -> {
+                if (player == visitor) throw new IllegalStateException("Protection failed");
+                protectedPlayers.add(player);
+            });
+
+            f.runPasteBoundary();
+
+            var failure = assertThrows(CompletionException.class, reset::join);
+            assertEquals("Protection failed", failure.getCause().getMessage());
+            assertEquals(List.of(contestant), protectedPlayers);
+            verify(f.world, never()).getEntities();
+            assertEquals(ArenaInstance.Status.FAILED, f.instance.status());
+        }
+    }
+
+    @Test void expiredLeasePreventsCallingTheOccupantProtector() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player visitor = f.player(5, 65, 5);
+            when(f.world.getPlayers()).thenReturn(List.of(visitor));
+            List<Player> protectedPlayers = new ArrayList<>();
+            var reset = f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), protectedPlayers::add);
+            f.manager.release(f.lease);
+
+            f.runPasteBoundary();
+
+            assertThrows(CompletionException.class, reset::join);
+            assertTrue(protectedPlayers.isEmpty());
+            verify(f.world, never()).getEntities();
+        }
+    }
+
+    @Test void protectionThatExpiresTheLeaseCannotProceedToThePaste() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player visitor = f.player(5, 65, 5);
+            when(f.world.getPlayers()).thenReturn(List.of(visitor));
+            var reset = f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), player -> f.manager.release(f.lease));
+
+            f.runPasteBoundary();
+
+            assertThrows(CompletionException.class, reset::join);
+            verify(f.world, never()).getEntities();
+        }
+    }
+
     @Test void contestantsAndSpectatorsCanRemainInsideAnExplicitRoundReset() throws Exception {
         try (Fixture f = new Fixture()) {
             Player contestant = f.player(5, 65, 5), spectator = f.player(10, 75, 10);
@@ -167,6 +256,7 @@ class ArenaRoundResetTest {
             assertThrows(CompletionException.class, () -> f.manager.resetRound(f.lease, null).join());
             Set<UUID> invalid = new HashSet<>(); invalid.add(null);
             assertThrows(CompletionException.class, () -> f.manager.resetRound(f.lease, invalid).join());
+            assertThrows(CompletionException.class, () -> f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), null).join());
             f.manager.release(f.lease);
             assertThrows(CompletionException.class, () -> f.manager.resetRound(f.lease, Set.of(UUID.randomUUID())).join());
             assertThrows(CompletionException.class, () -> f.manager.resetRound(null, Set.of(UUID.randomUUID())).join());

@@ -89,21 +89,26 @@ class HackerManagerTest {
             assertThrows(IllegalStateException.class, () -> manager.update(alice, token, HackSettings.defaults()));
         }
     }
-    @Test void abilitiesFollowCombatDeathNextRoundAndCancellationWithoutChangingTheSavedValues() {
+    @Test void abilitiesStayOnInTheLobbyCountdownSpectatingAndAfterCancellation() {
         try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
             var manager = manager(server); Player alice = player("Alice");
             doReturn(List.of(alice)).when(server.server).getOnlinePlayers(); manager.pick(List.of(alice)); manager.enable();
             var settings = HackSettings.defaults().with(Map.of(HackSetting.ATTACK_SPEED, 1.4));
             manager.update(alice, manager.profile(alice.getUniqueId()).selection(), settings);
+            attributes.clearInvocations();
+            assertTrue(manager.hasActiveHacks(alice));
             var duel = mock(Duel.class); when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(duel);
             when(duel.isInDuel(alice.getUniqueId())).thenReturn(true);
-            assertFalse(manager.hasActiveHacks(alice));
+            assertTrue(manager.hasActiveHacks(alice));
             when(duel.isCombatActive()).thenReturn(true); manager.refresh();
             assertTrue(manager.hasActiveHacks(alice)); attributes.verify(() -> HackerAttributes.apply(alice, settings));
-            when(duel.isSpectator(alice.getUniqueId())).thenReturn(true); manager.refresh(); assertFalse(manager.hasActiveHacks(alice));
+            when(duel.isSpectator(alice.getUniqueId())).thenReturn(true); manager.refresh(); assertTrue(manager.hasActiveHacks(alice));
             when(duel.isSpectator(alice.getUniqueId())).thenReturn(false); manager.refresh(); assertTrue(manager.hasActiveHacks(alice));
-            when(duel.isCombatActive()).thenReturn(false); manager.refresh(); assertFalse(manager.hasActiveHacks(alice));
+            when(duel.isCombatActive()).thenReturn(false); manager.refresh(); assertTrue(manager.hasActiveHacks(alice));
+            when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(null); manager.refresh();
+            assertTrue(manager.hasActiveHacks(alice));
             assertEquals(settings, manager.profile(alice.getUniqueId()).settings());
+            attributes.verify(() -> HackerAttributes.apply(alice, null), never());
             manager.disable(); attributes.verify(() -> HackerAttributes.apply(alice, null), atLeastOnce());
         }
     }
@@ -146,7 +151,7 @@ class HackerManagerTest {
             manager.disable();
         }
     }
-    @Test void lobbyChangesStaySavedAndActivateWhenCombatStartsWithoutReopeningTheMenu() {
+    @Test void lobbyChangesApplyImmediatelyAndStayAppliedWhenCombatStarts() {
         try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
             var manager = manager(server); Player alice = player("Alice");
             doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
@@ -156,8 +161,8 @@ class HackerManagerTest {
             var changed = HackSettings.defaults().with(Map.of(HackSetting.REACH, 5.0, HackSetting.ANTI_KNOCKBACK, 50.0));
             manager.update(alice, manager.profile(alice.getUniqueId()).selection(), changed);
 
-            assertFalse(manager.hasActiveHacks(alice));
-            attributes.verify(() -> HackerAttributes.apply(alice, null));
+            assertTrue(manager.hasActiveHacks(alice));
+            attributes.verify(() -> HackerAttributes.apply(alice, changed));
             attributes.verifyNoMoreInteractions();
             assertEquals(changed, new HackerManager(server.plugin).profile(alice.getUniqueId()).settings());
             attributes.clearInvocations();
@@ -173,17 +178,73 @@ class HackerManagerTest {
             manager.disable();
         }
     }
-    @Test void resistanceCannotSuppressVoidDamageOrProtectSpectatorsAndOrdinaryPlayers() {
+    @Test void resistanceWorksInTheLobbyAndWhileWatchingButExcludesVoidAndUnselectedPlayers() {
         try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
             var manager = manager(server); Player alice = player("Alice"); manager.pick(List.of(alice)); manager.enable();
             manager.update(alice, manager.profile(alice.getUniqueId()).selection(), HackSettings.defaults().with(Map.of(HackSetting.RESISTANCE, 100.0)));
-            var duel = mock(Duel.class); when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(duel);
-            when(duel.isInDuel(alice.getUniqueId())).thenReturn(true); when(duel.isCombatActive()).thenReturn(true);
             var event = mock(EntityDamageEvent.class); when(event.getEntity()).thenReturn(alice); when(event.getDamage()).thenReturn(10.0);
             when(event.getCause()).thenReturn(EntityDamageEvent.DamageCause.VOID); manager.onDamage(event); verify(event, never()).setDamage(anyDouble());
             when(event.getCause()).thenReturn(EntityDamageEvent.DamageCause.FALL); manager.onDamage(event); verify(event).setDamage(0);
-            clearInvocations(event); when(duel.isSpectator(alice.getUniqueId())).thenReturn(true); manager.onDamage(event); verify(event, never()).setDamage(anyDouble());
-            when(duel.isSpectator(alice.getUniqueId())).thenReturn(false); manager.pick(List.of()); manager.onDamage(event); verify(event, never()).setDamage(anyDouble());
+            var duel = mock(Duel.class); when(server.plugin.getDuelManager().getDuel(alice)).thenReturn(duel);
+            clearInvocations(event); when(duel.isSpectator(alice.getUniqueId())).thenReturn(true); manager.onDamage(event); verify(event).setDamage(0);
+            clearInvocations(event); manager.pick(List.of()); manager.onDamage(event); verify(event, never()).setDamage(anyDouble());
+            manager.disable();
+        }
+    }
+
+    @Test void lobbySettingsReturnAfterReconnectAndRespawn() {
+        try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
+            var manager = manager(server); Player alice = player("Alice");
+            doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
+            manager.enable(); manager.pick(List.of(alice));
+            var settings = HackSettings.defaults().with(Map.of(HackSetting.MOVEMENT_SPEED, 2.0));
+            manager.update(alice, manager.profile(alice.getUniqueId()).selection(), settings);
+            attributes.clearInvocations();
+
+            var quit = mock(org.bukkit.event.player.PlayerQuitEvent.class);
+            when(quit.getPlayer()).thenReturn(alice);
+            manager.onQuit(quit);
+            attributes.verify(() -> HackerAttributes.apply(alice, null));
+            attributes.clearInvocations();
+
+            manager.onJoin(new PlayerJoinEvent(alice, (net.kyori.adventure.text.Component) null));
+            server.scheduled.getLast().run();
+            attributes.verify(() -> HackerAttributes.apply(alice, settings));
+            attributes.clearInvocations();
+
+            manager.onRespawn(mock(org.bukkit.event.player.PlayerRespawnEvent.class));
+            server.scheduled.getLast().run();
+            attributes.verify(() -> HackerAttributes.apply(alice, settings));
+            assertEquals(settings, manager.profile(alice.getUniqueId()).settings());
+            manager.disable();
+        }
+    }
+
+    @Test void roleChangesAndClearingSelectionRemoveLobbyAbilities() {
+        try (var server = new StateTestServer(); var attributes = mockStatic(HackerAttributes.class)) {
+            var manager = manager(server); Player alice = player("Alice");
+            doReturn(List.of(alice)).when(server.server).getOnlinePlayers();
+            manager.enable(); manager.pick(List.of(alice));
+            UUID selection = manager.profile(alice.getUniqueId()).selection();
+            var settings = HackSettings.defaults().with(Map.of(HackSetting.REACH, 6.0));
+            manager.update(alice, selection, settings);
+            attributes.clearInvocations();
+
+            when(server.plugin.getRoleManager().isContestant(alice.getUniqueId())).thenReturn(false);
+            manager.refresh();
+            assertFalse(manager.hasActiveHacks(alice));
+            attributes.verify(() -> HackerAttributes.apply(alice, null));
+            assertThrows(IllegalStateException.class, () -> manager.update(alice, selection, settings));
+
+            when(server.plugin.getRoleManager().isContestant(alice.getUniqueId())).thenReturn(true);
+            manager.refresh();
+            attributes.verify(() -> HackerAttributes.apply(alice, settings));
+            attributes.clearInvocations();
+
+            manager.pick(List.of());
+            assertFalse(manager.hasActiveHacks(alice));
+            attributes.verify(() -> HackerAttributes.apply(alice, null));
+            assertThrows(IllegalStateException.class, () -> manager.update(alice, selection, settings));
             manager.disable();
         }
     }

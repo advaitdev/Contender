@@ -49,11 +49,7 @@ public final class HackerManager extends AbstractGameState {
     public Profile profile(UUID id) { return hackers.get(id); }
     public boolean isHacker(UUID id) { return hackers.containsKey(id) && contender.getRoleManager().isContestant(id); }
     public boolean hasActiveHacks(Player player) {
-        if (!isEnabled() || !isHacker(player.getUniqueId())) return false;
-        var duel = contender.getDuelManager().getDuel(player);
-        if (contender.getMinigameManager() != null && contender.getMinigameManager().isPlaying(player.getUniqueId())) return true;
-        if (contender.getRaceManager() != null && contender.getRaceManager().isRacing(player.getUniqueId())) return true;
-        return duel != null && duel.isCombatActive() && duel.isInDuel(player.getUniqueId()) && !duel.isSpectator(player.getUniqueId());
+        return isEnabled() && isHacker(player.getUniqueId());
     }
     public void refresh() {
         for (Player player : contender.getServer().getOnlinePlayers()) {

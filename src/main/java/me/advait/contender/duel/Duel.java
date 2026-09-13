@@ -50,9 +50,14 @@ public class Duel {
     private AbstractDuelState state;
     private boolean started;
     private boolean participantsRestored;
+    private final Set<UUID> lobbyReturnsCompleted = new HashSet<>();
     private int currentRound;
     private BukkitTask spectatorVisibilityTask;
     private boolean firstRound;
+    private final Set<UUID> startEquipped = new HashSet<>();
+    private Map<UUID, Location> roundSpawnPlan;
+    private UUID preparingPlayer;
+    private Location preparingDestination;
     private final Map<Entity, BukkitTask> deathEffects = new HashMap<>();
 
 
@@ -163,7 +168,7 @@ public class Duel {
             for (UUID uuid : getAllDuelPlayers()) {
                 Player player = Bukkit.getPlayer(uuid);
                 if (player != null) {
-                    preDuelInventories.put(uuid, new InventorySnapshot(
+                    preDuelInventories.putIfAbsent(uuid, new InventorySnapshot(
                             player.getInventory().getStorageContents(),
                             player.getInventory().getArmorContents(),
                             player.getInventory().getItemInOffHand()
@@ -172,23 +177,16 @@ public class Duel {
             }
         }
 
-        for (UUID uuid : team1.getPlayers()) {
+        // Every contestant must reach the arena before anyone receives or loses equipment.
+        Map<UUID, Location> destinations = teamSpawns();
+        moveContestants(destinations);
+        for (UUID uuid : destinations.keySet()) {
             Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
+            if (!startEquipped.contains(uuid)) {
                 player.setGameMode(GameMode.SURVIVAL);
-                player.teleport(map.getTeam1Spawn());
                 if (kit.isNoClear()) kit.applyEffectsOnly(player);
                 else kit.apply(player);
-            }
-        }
-
-        for (UUID uuid : team2.getPlayers()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                player.setGameMode(GameMode.SURVIVAL);
-                player.teleport(map.getTeam2Spawn());
-                if (kit.isNoClear()) kit.applyEffectsOnly(player);
-                else kit.apply(player);
+                startEquipped.add(uuid);
             }
         }
 
@@ -270,7 +268,7 @@ public class Duel {
                 kit.apply(player);
             }
 
-            player.setHealth(20.0);
+            player.setHealth(Math.min(20.0, player.getMaxHealth()));
             player.setFoodLevel(20);
             player.setSaturation(5.0f);
             player.setLevel(0);
@@ -281,7 +279,16 @@ public class Duel {
     }
 
     void prepareRound() {
-        currentRound++;
+        if (roundSpawnPlan == null) {
+            roundSpawnPlan = teamSpawns();
+            if (mode == DuelMode.FFA) {
+                List<UUID> players = new ArrayList<>(getAllDuelPlayers());
+                Collections.shuffle(players);
+                for (int i = 0; i < players.size(); i++) roundSpawnPlan.put(players.get(i),
+                        i % 2 == 0 ? map.getTeam1Spawn() : map.getTeam2Spawn());
+            }
+        }
+        moveContestants(roundSpawnPlan);
 
         // Restore players who watched the rest of the previous round.
         for (UUID deadSpec : new HashSet<>(deadPlayerSpectators)) {
@@ -290,41 +297,77 @@ public class Duel {
         }
         deadPlayerSpectators.clear();
 
-        team1.resetAlive();
-        team2.resetAlive();
-
-        if (mode == DuelMode.FFA) {
-            // Randomly distribute all players between the two spawn points
-            List<UUID> allPlayers = new ArrayList<>(getAllDuelPlayers());
-            Collections.shuffle(allPlayers);
-            for (int i = 0; i < allPlayers.size(); i++) {
-                Player player = Bukkit.getPlayer(allPlayers.get(i));
-                if (player == null) continue;
-                player.setGameMode(GameMode.SURVIVAL);
-                player.teleport(i % 2 == 0 ? map.getTeam1Spawn() : map.getTeam2Spawn());
-            }
-        } else {
-            for (UUID uuid : team1.getPlayers()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    player.setGameMode(GameMode.SURVIVAL);
-                    player.teleport(map.getTeam1Spawn());
-                }
-            }
-            for (UUID uuid : team2.getPlayers()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    player.setGameMode(GameMode.SURVIVAL);
-                    player.teleport(map.getTeam2Spawn());
-                }
-            }
+        for (UUID uuid : roundSpawnPlan.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            player.setGameMode(GameMode.SURVIVAL);
         }
 
         if (!firstRound) {
             restoreInventories();
         }
-        firstRound = false;
         updateSpectatorVisibility();
+        team1.resetAlive();
+        team2.resetAlive();
+        firstRound = false;
+        currentRound++;
+        roundSpawnPlan = null;
+    }
+
+    private Map<UUID, Location> teamSpawns() {
+        Map<UUID, Location> destinations = new LinkedHashMap<>();
+        for (UUID id : team1.getPlayers()) destinations.put(id, map.getTeam1Spawn());
+        for (UUID id : team2.getPlayers()) destinations.put(id, map.getTeam2Spawn());
+        return destinations;
+    }
+
+    private void moveContestants(Map<UUID, Location> destinations) {
+        // Validate all players first so a dead teammate cannot start a partial setup.
+        for (UUID id : destinations.keySet()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player == null) throw new IllegalStateException("Waiting for a contestant to reconnect.");
+            if (player.isDead()) throw new IllegalStateException("Waiting for " + player.getName() + " to respawn.");
+        }
+        for (var entry : destinations.entrySet()) checkedSpawnTeleport(Bukkit.getPlayer(entry.getKey()), entry.getValue());
+    }
+
+    private void checkedSpawnTeleport(Player player, Location destination) {
+        if (destination == null || destination.getWorld() == null) throw new IllegalStateException("The duel's spawn world is not loaded.");
+        // Round resets already place players at their spawns; avoid another unnecessary teleport.
+        if (player.getWorld().equals(destination.getWorld()) && player.getLocation().distanceSquared(destination) < 0.0001) return;
+        preparingPlayer = player.getUniqueId();
+        preparingDestination = destination.clone();
+        try {
+            if (!player.teleport(destination.clone()) || !player.getWorld().equals(destination.getWorld())
+                    || player.getLocation().distanceSquared(destination) > 1) {
+                throw new IllegalStateException("Could not move " + player.getName() + " to the duel spawn.");
+            }
+        } finally { preparingPlayer = null; preparingDestination = null; }
+    }
+
+    boolean holdPreparationMovement(org.bukkit.event.player.PlayerMoveEvent event) {
+        if (event instanceof org.bukkit.event.player.PlayerTeleportEvent) {
+            if (event.getPlayer().getUniqueId().equals(preparingPlayer) && preparingDestination.equals(event.getTo())) return true;
+            event.setCancelled(true);
+        } else if (event.hasChangedPosition()) {
+            Location fixed = event.getFrom().clone();
+            fixed.setYaw(event.getTo().getYaw()); fixed.setPitch(event.getTo().getPitch());
+            event.setTo(fixed);
+        }
+        return true;
+    }
+
+    void holdPreparingPlayers() {
+        for (UUID id : getAllParticipants()) {
+            try {
+                Player player = Bukkit.getPlayer(id);
+                if (player != null) {
+                    player.setVelocity(new org.bukkit.util.Vector());
+                    player.setFallDistance(0);
+                }
+            } catch (RuntimeException failure) {
+                plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not hold a player while preparing the duel.", failure);
+            }
+        }
     }
 
     public void handleDeath(Player deadPlayer, Player killer) {
@@ -398,6 +441,7 @@ public class Duel {
     public void endDuel() {
         if (state.isEnding() || isFinished()) return;
         resultReason = DuelResult.Reason.FINISHED;
+        manager.reportResult(this);
         setState(new EndingState(this, false));
     }
 
@@ -426,18 +470,54 @@ public class Duel {
     }
 
     void returnParticipantsToLobby() {
-        if (participantsRestored) return;
-        participantsRestored = true;
-        stopSpectatorVisibility();
+        try { tryReturnParticipantsToLobby(); }
+        catch (RuntimeException failure) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not return every duel participant to the lobby.", failure);
+        }
+    }
+
+    /** Retain each participant until their lobby transfer and inventory restoration both succeed. */
+    boolean tryReturnParticipantsToLobby() {
+        if (participantsRestored) return true;
+        if (spectatorVisibilityTask != null) {
+            spectatorVisibilityTask.cancel();
+            spectatorVisibilityTask = null;
+        }
+        boolean complete = true;
+        RuntimeException incomplete = null;
         for (UUID uuid : getAllParticipants()) {
+            if (lobbyReturnsCompleted.contains(uuid)) continue;
             Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
+            if (player == null || !player.isOnline()) {
+                lobbyReturnsCompleted.add(uuid);
+                continue;
+            }
+            if (player.isDead()) {
+                complete = false;
+                continue;
+            }
+            try {
+                if (!plugin.getLobbyManager().sendToLobbyChecked(player)) {
+                    complete = false;
+                    continue;
+                }
                 if (isSpectator(uuid)) removeSpectatorMode(player);
-                plugin.getLobbyManager().sendToLobby(player);
+                if (plugin.getRoleManager() != null) plugin.getRoleManager().applySpectatorRole(player);
                 restorePreDuelInventory(uuid, player);
+                lobbyReturnsCompleted.add(uuid);
+            } catch (RuntimeException failure) {
+                complete = false;
+                if (incomplete == null) incomplete = new IllegalStateException("Could not finish every participant's lobby return.");
+                incomplete.addSuppressed(failure);
             }
         }
-        clearDeathEffects();
+        if (complete) {
+            stopSpectatorVisibility();
+            clearDeathEffects();
+            participantsRestored = true;
+        }
+        if (incomplete != null) throw incomplete;
+        return complete;
     }
 
     void finish() {
@@ -463,10 +543,11 @@ public class Duel {
     }
 
     private void completeRollback(java.util.concurrent.CompletableFuture<Void> reset, Runnable onComplete) {
+        AbstractDuelState owner = state;
         reset.whenComplete((ignored, failure) -> {
-            if (!plugin.isEnabled() || isFinished()) return;
+            if (!plugin.isEnabled() || isFinished() || state != owner || !owner.isEnabled()) return;
             if (failure != null) {
-                resetFailed(failure);
+                if (!owner.recoverArenaResetFailure(failure)) resetFailed(failure);
                 return;
             }
             placedBlocks.clear();
@@ -476,6 +557,7 @@ public class Duel {
 
     void resetFailed(Throwable failure) {
         if (isFinished()) return;
+        if (plugin.isEnabled() && state.isEnabled() && state.recoverResetFailure(failure)) return;
         plugin.getLogger().log(java.util.logging.Level.SEVERE, "Could not reset arena " + (arena == null ? map.getId() : arena.instance().slot()), failure);
         // Cleanup failures cannot erase a result that has already been decided.
         if (!state.isEnding()) resultReason = DuelResult.Reason.CANCELLED;
@@ -529,6 +611,14 @@ public class Duel {
         }
     }
 
+    /** Attach after DuelManager has confirmed the spectator's transfer succeeded. */
+    public void attachSpectator(Player player) {
+        spectators.add(player.getUniqueId());
+        applySpectatorMode(player);
+        plugin.refreshVoiceRouting();
+        plugin.refreshHackerAttributes();
+    }
+
     public void disconnectSpectator(Player player) {
         spectators.remove(player.getUniqueId());
         state.participantLeaving(player);
@@ -550,11 +640,13 @@ public class Duel {
         if (leaving == null) return;
         forfeitWinner = leaving == team1 ? 2 : 1;
         resultReason = DuelResult.Reason.FORFEIT;
+        manager.reportResult(this);
         broadcastMessage(Component.text(getOpponent(leaving).getName() + " wins by forfeit."));
         setState(new EndingState(this, true));
     }
 
     public ArenaLease getArena() { return arena; }
+    void reportResult() { manager.reportResult(this); }
     public DuelResult getResult() {
         Integer winner = forfeitWinner != null ? forfeitWinner
                 : team1.getScore() == team2.getScore() ? null : team1.getScore() > team2.getScore() ? 1 : 2;

@@ -45,6 +45,13 @@ public final class ArenaInstance {
         if (reservation != null || status != Status.FAILED) throw new IllegalStateException("Arena copy is still in use.");
         status = Status.PREPARING;
     }
+    /** Keeps a failed round's reservation while its owner starts another protected reset. */
+    void retryReset(ArenaLease lease) {
+        if (!owns(lease) || status != Status.FAILED) throw new IllegalStateException("Arena reset reservation expired.");
+        resetRevision++;
+        cleanForCache = false;
+        status = Status.IN_USE;
+    }
     long beginReset() {
         if (status == Status.FAILED) throw new IllegalStateException("This arena copy is waiting for an automatic reset.");
         long revision = ++resetRevision;

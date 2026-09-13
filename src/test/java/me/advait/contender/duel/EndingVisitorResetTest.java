@@ -38,7 +38,7 @@ class EndingVisitorResetTest {
             director.gravity = false;
             f.begin();
 
-            verify(f.duel).returnParticipantsToLobby();
+            verify(f.duel).tryReturnParticipantsToLobby();
             verify(f.duel, never()).rollbackArena(any());
             verify(f.duel).rollbackRoundArena(any(), any());
             assertFalse(director.gravity);
@@ -163,6 +163,47 @@ class EndingVisitorResetTest {
         }
     }
 
+    @Test void blockedLobbyReturnsKeepTheArenaReservedUntilThePlayersArrive() {
+        try (Fixture f = new Fixture()) {
+            when(f.duel.tryReturnParticipantsToLobby()).thenReturn(false, true);
+            f.begin();
+            verify(f.duel, never()).rollbackRoundArena(any(), any());
+            verify(f.duel, never()).finish();
+            assertTrue(f.state.isEnabled());
+            f.retry();
+            verify(f.duel).rollbackRoundArena(any(), any());
+            f.complete.run();
+            verify(f.duel).finish();
+        }
+    }
+
+    @Test void failedFinalPasteRetriesWithoutEndingTheDuelOrDiscardingItsResult() {
+        try (Fixture f = new Fixture()) {
+            Guest guest = f.guest(new Location(f.world, 35, 65, 35));
+            f.begin();
+            assertTrue(f.state.recoverArenaResetFailure(new IllegalStateException("Paste failed")));
+            verify(f.duel, never()).finish();
+            assertFalse(guest.gravity);
+            f.retry();
+            verify(f.duel, times(2)).rollbackRoundArena(any(), any());
+            verify(f.duel, times(2)).reportResult();
+            f.complete.run();
+            verify(f.duel).finish();
+            assertTrue(guest.gravity);
+        }
+    }
+
+    @Test void cancellingDuringFinalResetBackoffCannotStartAnotherPaste() {
+        try (Fixture f = new Fixture()) {
+            f.begin();
+            f.state.recoverArenaResetFailure(new IllegalStateException("Paste failed"));
+            f.state.disable();
+            f.retry();
+            verify(f.duel).rollbackRoundArena(any(), any());
+            verify(f.duel, never()).finish();
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final StateTestServer server = new StateTestServer();
         final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
@@ -187,6 +228,7 @@ class EndingVisitorResetTest {
             var instance = new ArenaInstance(0, map, new BlockBounds(0, -64, 0, 99, 319, 99));
             when(duel.getArena()).thenReturn(new ArenaLease(instance, UUID.randomUUID()));
             when(duel.getPlugin()).thenReturn(server.plugin);
+            when(duel.tryReturnParticipantsToLobby()).thenReturn(true);
             Logger logger = mock(Logger.class);
             when(server.plugin.getLogger()).thenReturn(logger);
             state = new EndingState(duel, true);
@@ -227,6 +269,10 @@ class EndingVisitorResetTest {
 
         void begin() { state.enable(); }
         void repeat() { List.copyOf(server.scheduled).forEach(StateTestServer.Scheduled::run); }
+        void retry() {
+            server.scheduled.stream().filter(task -> !task.repeating() && task.delay() >= 40)
+                    .reduce((first, last) -> last).orElseThrow().run();
+        }
         @Override public void close() { state.disable(); bukkit.close(); server.close(); }
     }
 

@@ -550,10 +550,16 @@ public final class ArenaManager {
 
     private CompletableFuture<Void> reset(ArenaLease lease, Set<UUID> participants, Consumer<Player> protectOccupant) {
         if (closed || lease == null || !lease.instance().owns(lease)) return CompletableFuture.failedFuture(new IllegalStateException("Arena reservation expired."));
-        if (lease.instance().status() == ArenaInstance.Status.FAILED) return CompletableFuture.failedFuture(
+        boolean retry = lease.instance().status() == ArenaInstance.Status.FAILED;
+        if (retry && protectOccupant == null) return CompletableFuture.failedFuture(
                 new IllegalStateException("This arena copy is waiting for an automatic reset."));
+        if (retry && restoring.containsKey(lease.instance())) return CompletableFuture.failedFuture(
+                new IllegalStateException("The previous arena reset is still finishing."));
         Clipboard clipboard = clipboards.get(lease.instance().map().getId());
         if (clipboard == null) return CompletableFuture.failedFuture(new IllegalStateException("Map template is not loaded."));
+        // Failed worker futures are removed only after the worker has finished and closed its edit session.
+        // Retain this game's reservation; background preparation must never claim its occupied copy.
+        if (retry) lease.instance().retryReset(lease);
         return restore(lease.instance(), clipboard, false, new ResetPermission(lease, participants, protectOccupant));
     }
 

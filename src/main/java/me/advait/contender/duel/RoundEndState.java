@@ -32,10 +32,15 @@ public final class RoundEndState extends AbstractDuelState {
     private Location transportDestination;
     private boolean resetting;
     private boolean resetComplete;
+    private boolean arenaResetPending;
+    private boolean arenaRestored;
+    private boolean respawnReturnPending;
+    private final DuelResetRetry recovery;
 
     public RoundEndState(Duel duel, DuelTeam winner) {
         super(duel);
         this.winner = winner;
+        recovery = new DuelResetRetry(duel, (task, delay) -> runLater(task, delay));
     }
 
     @Override
@@ -62,9 +67,36 @@ public final class RoundEndState extends AbstractDuelState {
 
     private void beginReset() {
         resetting = true;
-        protectParticipants();
         runRepeating(() -> checked(this::protectParticipants), 1L, 1L);
-        duel.rollbackRoundArena(this::protectOccupant, guard(() -> checked(this::returnForCountdown)));
+        attemptReset();
+    }
+
+    private void attemptReset() {
+        if (!isEnabled() || !resetting || resetComplete || arenaResetPending) return;
+        protectParticipants();
+        if (arenaRestored) { returnForCountdown(); return; }
+        arenaResetPending = true;
+        try {
+            duel.rollbackRoundArena(this::protectOccupant, guard(() -> {
+                arenaResetPending = false;
+                arenaRestored = true;
+                checked(this::returnForCountdown);
+            }));
+        } catch (RuntimeException failure) {
+            arenaResetPending = false;
+            throw failure;
+        }
+    }
+
+    @Override boolean recoverArenaResetFailure(Throwable failure) {
+        arenaResetPending = false;
+        return recoverResetFailure(failure);
+    }
+
+    @Override boolean recoverResetFailure(Throwable failure) {
+        if (!isEnabled() || !resetting || duel.getArena() == null || resetComplete) return false;
+        recovery.retry(failure, () -> checked(this::attemptReset));
+        return true;
     }
 
     private void protectParticipants() {
@@ -106,6 +138,7 @@ public final class RoundEndState extends AbstractDuelState {
     }
 
     private void returnForCountdown() {
+        if (!isEnabled() || !resetting || resetComplete || !arenaRestored) return;
         boolean waitingForRespawn = false;
         for (UUID id : duel.getAllParticipants()) {
             Player player = Bukkit.getPlayer(id);
@@ -116,7 +149,18 @@ public final class RoundEndState extends AbstractDuelState {
             positioned.add(id);
         }
         if (waitingForRespawn) {
-            runLater(() -> checked(this::returnForCountdown), 1L);
+            if (!respawnReturnPending) {
+                respawnReturnPending = true;
+                try {
+                    runLater(() -> {
+                        respawnReturnPending = false;
+                        checked(this::returnForCountdown);
+                    }, 1L);
+                } catch (RuntimeException failure) {
+                    respawnReturnPending = false;
+                    throw failure;
+                }
+            }
             return;
         }
         for (Player visitor : List.copyOf(visitors.values())) {
@@ -128,9 +172,11 @@ public final class RoundEndState extends AbstractDuelState {
             }
         }
         protection.close();
+        recovery.clear();
         visitors.clear();
         resetting = false;
         resetComplete = true;
+        respawnReturnPending = false;
         positioned.clear();
         startCountdown();
     }
@@ -228,6 +274,8 @@ public final class RoundEndState extends AbstractDuelState {
 
     @Override protected void onDisable() {
         resetting = false;
+        respawnReturnPending = false;
+        recovery.clear();
         try { protection.close(); }
         finally { visitors.clear(); duel.clearCountdown(); }
     }

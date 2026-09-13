@@ -58,7 +58,10 @@ class LobbyManagerTest {
         when(player.getUniqueId()).thenReturn(UUID.randomUUID()); when(player.getMaxHealth()).thenReturn(20.0);
         when(roles.getRole(player.getUniqueId())).thenReturn(me.advait.contender.role.PlayerRole.SPECTATOR);
         LobbyManager lobby = spy(new LobbyManager(plugin));
-        doReturn(new Location(mock(World.class), 0, 80, 0)).when(lobby).getLobbyLocation();
+        Location destination = new Location(mock(World.class), 0, 80, 0);
+        doReturn(destination).when(lobby).getLobbyLocation();
+        when(player.getWorld()).thenReturn(destination.getWorld());
+        when(player.getLocation()).thenReturn(destination.clone());
         lobby.sendToLobby(player);
         verify(player).setGameMode(GameMode.SPECTATOR);
         when(roles.getRole(player.getUniqueId())).thenReturn(me.advait.contender.role.PlayerRole.CONTESTANT);
@@ -133,9 +136,100 @@ class LobbyManagerTest {
         Player player = mock(Player.class, RETURNS_DEEP_STUBS);
         LobbyManager lobby = spy(new LobbyManager(plugin));
         doReturn(new Location(mock(World.class), 0, 80, 0)).when(lobby).getLobbyLocation();
-        lobby.sendToLobby(player);
+        assertFalse(lobby.sendToLobbyChecked(player));
         verify(player.getInventory(), never()).clear(); verify(player, never()).setGameMode(any());
+        verify(player, never()).getActivePotionEffects();
+        verify(player, never()).setHealth(anyDouble());
         verify(logger).warning(contains("teleport was cancelled"));
+    }
+    @Test void missingLobbyDoesNotTeleportOrChangePlayerState() {
+        Contender plugin = mock(Contender.class);
+        Player player = mock(Player.class);
+        LobbyManager lobby = spy(new LobbyManager(plugin));
+        doReturn(null).when(lobby).getLobbyLocation();
+
+        assertFalse(lobby.sendToLobbyChecked(player));
+
+        verifyNoInteractions(player);
+        verify(plugin, never()).getRoleManager();
+    }
+    @Test void redirectedLobbyTeleportDoesNotResetThePlayerEvenWhenTeleportReturnsTrue() {
+        Contender plugin = mock(Contender.class);
+        when(plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
+        Player player = mock(Player.class, RETURNS_DEEP_STUBS);
+        LobbyManager lobby = spy(new LobbyManager(plugin));
+        Location destination = new Location(mock(World.class), 12.5, 80, -9.5);
+        doReturn(destination).when(lobby).getLobbyLocation();
+        when(player.getWorld()).thenReturn(destination.getWorld());
+        when(player.getLocation()).thenReturn(destination.clone().add(10, 0, 0));
+        when(player.teleport(any(Location.class))).thenAnswer(invocation -> {
+            // A teleport listener may change the requested location as well as the player's destination.
+            Location requested = invocation.getArgument(0);
+            requested.add(10, 0, 0);
+            return true;
+        });
+
+        assertFalse(lobby.sendToLobbyChecked(player));
+
+        assertEquals(12.5, destination.getX());
+        verify(player.getInventory(), never()).clear();
+        verify(player, never()).setGameMode(any());
+        verify(player, never()).getActivePotionEffects();
+        verify(player, never()).setHealth(anyDouble());
+        verify(player, never()).setFoodLevel(anyInt());
+        verify(plugin, never()).getRoleManager();
+        verify(plugin.getLogger()).warning(contains("teleport was redirected"));
+    }
+    @Test void lobbyTeleportToTheWrongWorldDoesNotResetThePlayer() {
+        Contender plugin = mock(Contender.class);
+        when(plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
+        Player player = mock(Player.class, RETURNS_DEEP_STUBS);
+        LobbyManager lobby = spy(new LobbyManager(plugin));
+        Location destination = new Location(mock(World.class), 0, 80, 0);
+        World otherWorld = mock(World.class);
+        doReturn(destination).when(lobby).getLobbyLocation();
+        when(player.teleport(any(Location.class))).thenReturn(true);
+        when(player.getWorld()).thenReturn(otherWorld);
+        when(player.getLocation()).thenReturn(new Location(otherWorld, 0, 80, 0));
+
+        assertFalse(lobby.sendToLobbyChecked(player));
+
+        verify(player.getInventory(), never()).clear();
+        verify(player, never()).setGameMode(any());
+        verify(player, never()).getActivePotionEffects();
+        verify(plugin, never()).getRoleManager();
+    }
+    @Test void confirmedLobbyArrivalResetsPlayerStateAndReturnsSuccess() {
+        Contender plugin = mock(Contender.class);
+        var roles = mock(me.advait.contender.role.RoleManager.class);
+        when(plugin.getRoleManager()).thenReturn(roles);
+        Player player = mock(Player.class, RETURNS_DEEP_STUBS);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(player.getMaxHealth()).thenReturn(20.0);
+        when(roles.getRole(player.getUniqueId())).thenReturn(me.advait.contender.role.PlayerRole.CONTESTANT);
+        LobbyManager lobby = spy(new LobbyManager(plugin));
+        Location destination = new Location(mock(World.class), 12.5, 80, -9.5);
+        doReturn(destination).when(lobby).getLobbyLocation();
+        var position = new java.util.concurrent.atomic.AtomicReference<>(destination.clone().add(50, 0, 0));
+        when(player.getLocation()).thenAnswer(invocation -> position.get().clone());
+        when(player.getWorld()).thenAnswer(invocation -> position.get().getWorld());
+        when(player.teleport(any(Location.class))).thenAnswer(invocation -> {
+            position.set(((Location) invocation.getArgument(0)).clone());
+            return true;
+        });
+
+        assertTrue(lobby.sendToLobbyChecked(player));
+
+        assertEquals(destination, player.getLocation());
+        verify(player.getInventory()).clear();
+        verify(player).getActivePotionEffects();
+        verify(player).setFireTicks(0);
+        verify(player).setHealth(20);
+        verify(player).setFoodLevel(20);
+        verify(player).setSaturation(5.0f);
+        verify(player).setLevel(0);
+        verify(player).setExp(0);
+        verify(player).setGameMode(GameMode.SURVIVAL);
     }
     @Test void oldBuildSwitchStillControlsPlacementUntilTheNewSettingIsSaved() {
         Contender plugin = mock(Contender.class);

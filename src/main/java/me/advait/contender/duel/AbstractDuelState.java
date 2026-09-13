@@ -34,6 +34,8 @@ public abstract class AbstractDuelState extends AbstractGameState {
     public boolean isEnding() { return false; }
     public boolean isFinished() { return false; }
     public boolean canAddSpectator() { return true; }
+    boolean recoverResetFailure(Throwable failure) { return false; }
+    boolean recoverArenaResetFailure(Throwable failure) { return recoverResetFailure(failure); }
     /** Return true when this phase has handled transport or movement itself. */
     public boolean handleArenaContainment(org.bukkit.event.player.PlayerMoveEvent event) { return false; }
     protected Location respawnOverride(Player player) { return null; }

@@ -12,28 +12,56 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 
 public final class ActiveState extends AbstractDuelState {
     private long invincibilityEndTime;
+    private final DuelResetRetry retry;
+    private org.bukkit.scheduler.BukkitTask holdingTask;
+    private boolean ready;
 
-    public ActiveState(Duel duel) { super(duel); }
+    public ActiveState(Duel duel) {
+        super(duel);
+        retry = new DuelResetRetry(duel, (action, delay) -> runLater(action, delay), "round preparation");
+    }
 
     @Override
-    public boolean isCombatPhase() { return true; }
+    public boolean isCombatPhase() { return ready; }
+
+    @Override public boolean canAddSpectator() { return ready; }
 
     @Override
-    protected void onEnable() {
-        duel.prepareRound();
+    protected void onEnable() { prepare(); }
+
+    private void prepare() {
+        try { duel.prepareRound(); }
+        catch (RuntimeException failure) {
+            if (holdingTask == null) holdingTask = runRepeating(() -> { if (!ready) duel.holdPreparingPlayers(); }, 1L, 1L);
+            duel.holdPreparingPlayers();
+            retry.retry(failure, this::prepare);
+            return;
+        }
+        retry.clear();
+        if (holdingTask != null) holdingTask.cancel();
+        ready = true;
         if (duel.getMode() == DuelMode.FFA) {
             invincibilityEndTime = System.currentTimeMillis() + 5000L;
         }
-        duel.broadcastSound(Duel.SoundType.COUNTDOWN_GO);
+        try { duel.broadcastSound(Duel.SoundType.COUNTDOWN_GO); }
+        catch (RuntimeException failure) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not play the duel start sound.", failure);
+        }
     }
 
     public boolean isInvincibilityActive() {
-        return isEnabled() && System.currentTimeMillis() < invincibilityEndTime;
+        return isEnabled() && ready && System.currentTimeMillis() < invincibilityEndTime;
     }
+
+    @Override public boolean handleArenaContainment(org.bukkit.event.player.PlayerMoveEvent event) {
+        return !ready && duel.holdPreparationMovement(event);
+    }
+
+    @Override protected void onDisable() { ready = false; retry.clear(); }
 
     @Override
     protected void handleDamage(EntityDamageEvent event, Player player) {
-        if (isInvincibilityActive()) {
+        if (!ready || isInvincibilityActive()) {
             event.setCancelled(true);
             return;
         }
@@ -65,6 +93,7 @@ public final class ActiveState extends AbstractDuelState {
 
     @Override
     protected void handleAttack(EntityDamageByEntityEvent event, Player attacker) {
+        if (!ready) { event.setCancelled(true); return; }
         if (event.getEntity() instanceof Player victim) {
             if (duel.isSpectator(victim.getUniqueId())) {
                 event.setCancelled(true);
@@ -86,6 +115,7 @@ public final class ActiveState extends AbstractDuelState {
         event.setKeepLevel(true);
         event.deathMessage(null);
         event.setDroppedExp(0);
+        if (!ready) return;
         duel.handleDeath(player, player.getKiller());
         duel.spawnDeathMannequin(player);
     }

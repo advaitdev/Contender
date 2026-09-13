@@ -26,6 +26,114 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ArenaRoundResetTest {
+    @Test void failedPasteCanRetryWithTheSameLeaseAndProtectEveryoneAgain() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player contestant = f.player(5, 65, 5), visitor = f.player(900, 200, 900);
+            when(f.world.getPlayers()).thenReturn(List.of(contestant, visitor));
+            List<Player> protectedPlayers = new ArrayList<>();
+            Set<UUID> participants = Set.of(contestant.getUniqueId());
+            var first = f.manager.resetRound(f.lease, participants, protectedPlayers::add);
+            f.runPasteBoundary(new IllegalStateException("Temporary paste failure"));
+
+            assertThrows(CompletionException.class, first::join);
+            assertEquals(ArenaInstance.Status.FAILED, f.instance.status());
+            assertTrue(f.instance.owns(f.lease));
+            assertNull(f.manager.acquire("arena"));
+            assertThrows(CompletionException.class, () -> f.manager.reset(f.lease).join());
+            assertThrows(CompletionException.class, () -> f.manager.resetRound(f.lease, participants).join());
+
+            var retry = f.manager.resetRound(f.lease, participants, protectedPlayers::add);
+            assertEquals(ArenaInstance.Status.RESETTING, f.instance.status());
+            f.runPasteBoundary();
+
+            assertDoesNotThrow(retry::join);
+            assertEquals(List.of(contestant, visitor, contestant, visitor), protectedPlayers);
+            assertEquals(2, f.pastes.size());
+            assertEquals(ArenaInstance.Status.IN_USE, f.instance.status());
+            assertTrue(f.instance.owns(f.lease));
+        }
+    }
+
+    @Test void failedCopyCannotRetryWhileAnEarlierPasteIsStillRunning() throws Exception {
+        try (Fixture f = new Fixture()) {
+            Player contestant = f.player(5, 65, 5);
+            when(f.world.getPlayers()).thenReturn(List.of(contestant));
+            List<Player> protectedPlayers = new ArrayList<>();
+            Set<UUID> participants = Set.of(contestant.getUniqueId());
+            var first = f.manager.resetRound(f.lease, participants, protectedPlayers::add);
+            assertThrows(ChecksPassed.class, () -> f.pastes.getFirst().beforePaste().get());
+            f.manager.discard(f.lease);
+
+            var blocked = f.manager.resetRound(f.lease, participants, protectedPlayers::add);
+
+            assertThrows(CompletionException.class, blocked::join);
+            assertFalse(first.isDone());
+            assertEquals(1, f.pastes.size());
+            assertEquals(List.of(contestant), protectedPlayers);
+            assertEquals(ArenaInstance.Status.FAILED, f.instance.status());
+            f.pastes.getFirst().completion().completeExceptionally(new IllegalStateException("Previous paste finished"));
+            assertThrows(CompletionException.class, first::join);
+
+            var retry = f.manager.resetRound(f.lease, participants, protectedPlayers::add);
+            f.runPasteBoundary();
+            assertDoesNotThrow(retry::join);
+            assertEquals(2, f.pastes.size());
+        }
+    }
+
+    @Test void releasedFailedCopyCannotBeRetriedWithItsExpiredLease() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var first = f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), player -> { });
+            f.runPasteBoundary(new IllegalStateException("Temporary paste failure"));
+            assertThrows(CompletionException.class, first::join);
+            f.manager.release(f.lease);
+
+            var retry = f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), player -> fail("Expired owner"));
+
+            assertThrows(CompletionException.class, retry::join);
+            assertEquals(1, f.pastes.size());
+            assertEquals(ArenaInstance.Status.FAILED, f.instance.status());
+            assertFalse(f.instance.isReserved());
+        }
+    }
+
+    @Test void maintenanceCannotRepairOrReassignAFailedReservedRound() throws Exception {
+        try (Fixture f = new Fixture()) {
+            var reset = f.manager.resetRound(f.lease, Set.of(UUID.randomUUID()), player -> { });
+            f.runPasteBoundary(new IllegalStateException("Temporary paste failure"));
+            assertThrows(CompletionException.class, reset::join);
+
+            f.manager.maintain();
+            f.manager.maintain();
+
+            assertEquals(1, f.pastes.size());
+            assertNull(f.manager.acquire("arena"));
+            assertTrue(f.instance.owns(f.lease));
+            assertEquals(ArenaInstance.Status.FAILED, f.instance.status());
+        }
+    }
+
+    @Test void failedReservationRecoveryNeverRevivesAnOlderResetRevision() {
+        ArenaInstance instance = new ArenaInstance(0, new ArenaMap("arena"), new BlockBounds(0, 0, 0, 15, 15, 15));
+        instance.reuseSavedCopy();
+        ArenaLease lease = instance.acquire();
+        assertThrows(IllegalStateException.class, () -> instance.retryReset(lease));
+        long failed = instance.beginReset();
+        instance.failed(failed);
+        assertThrows(IllegalStateException.class, () -> instance.retryReset(new ArenaLease(instance, UUID.randomUUID())));
+
+        instance.retryReset(lease);
+        long retried = instance.beginReset();
+
+        assertFalse(instance.restored(failed));
+        instance.failed(failed);
+        assertTrue(instance.isReset(retried));
+        assertFalse(instance.canCache());
+        assertTrue(instance.restored(retried));
+        assertTrue(instance.owns(lease));
+        assertFalse(instance.canCache(), "The recovered copy remains reserved");
+    }
+
     @Test void registeredPlayersAndVisitorsAcrossTheWholeCellAreProtectedBeforePasting() throws Exception {
         try (Fixture f = new Fixture()) {
             Player contestant = f.player(5, 65, 5), spectator = f.player(10, 75, 10);
@@ -271,6 +379,7 @@ class ArenaRoundResetTest {
     private static final class Fixture implements AutoCloseable {
         final StateTestServer server = new StateTestServer();
         final World world = mock(World.class);
+        final MapManager maps = mock(MapManager.class);
         final List<Paste> pastes = new ArrayList<>();
         final MockedConstruction<ArenaChunks> chunks;
         final ArenaManager manager;
@@ -283,11 +392,14 @@ class ArenaRoundResetTest {
                 pastes.add(new Paste(call.getArgument(2), completion));
                 return completion;
             }));
-            manager = new ArenaManager(server.plugin, mock(MapManager.class));
+            manager = new ArenaManager(server.plugin, maps);
             field(manager, "world", world);
             ArenaMap map = new ArenaMap("arena");
             map.setWorldName("arenas");
             map.setRollbackRegion(0, 60, 0, 15, 80, 15);
+            map.setTeam1Spawn(2, 65, 2, 0, 0);
+            map.setTeam2Spawn(12, 65, 12, 0, 0);
+            when(maps.getMaps()).thenReturn(List.of(map));
             instance = new ArenaInstance(0, map, new BlockBounds(0, -64, 0, 1023, 319, 1023));
             instance.reuseSavedCopy();
             lease = instance.acquire();
@@ -304,12 +416,17 @@ class ArenaRoundResetTest {
         }
 
         void runPasteBoundary() {
+            runPasteBoundary(null);
+        }
+
+        void runPasteBoundary(RuntimeException pasteFailure) {
             Paste paste = pastes.getLast();
             try {
                 paste.beforePaste().get();
                 fail("Expected the mocked FAWE boundary");
             } catch (ChecksPassed checked) {
-                paste.completion().complete(null);
+                if (pasteFailure == null) paste.completion().complete(null);
+                else paste.completion().completeExceptionally(pasteFailure);
             } catch (RuntimeException failure) {
                 paste.completion().completeExceptionally(failure);
             }

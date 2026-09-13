@@ -22,10 +22,14 @@ public final class EndingState extends AbstractDuelState {
     private final Map<UUID, Player> visitors = new HashMap<>();
     private boolean resetting;
     private UUID transporting;
+    private boolean arenaResetPending;
+    private boolean arenaRestored;
+    private final DuelResetRetry recovery;
 
     public EndingState(Duel duel, boolean forced) {
         super(duel);
         this.forced = forced;
+        recovery = new DuelResetRetry(duel, (task, delay) -> runLater(task, delay));
     }
 
     boolean isForced() { return forced; }
@@ -47,17 +51,51 @@ public final class EndingState extends AbstractDuelState {
     }
 
     private void cleanUp() {
-        duel.returnParticipantsToLobby();
         if (duel.getArena() == null) {
+            duel.returnParticipantsToLobby();
             duel.rollbackArena(guard(duel::finish));
             return;
         }
-        checked(() -> {
-            resetting = true;
-            protectVisitors();
-            runRepeating(() -> checked(this::protectVisitors), 1L, 1L);
-            duel.rollbackRoundArena(this::protect, guard(() -> checked(this::finishReset)));
-        });
+        resetting = true;
+        runRepeating(() -> checked(this::protectVisitors), 1L, 1L);
+        checked(this::attemptCleanup);
+    }
+
+    private void attemptCleanup() {
+        if (!isEnabled() || !resetting || arenaResetPending) return;
+        duel.reportResult();
+        if (!duel.tryReturnParticipantsToLobby()) {
+            recovery.retry(new IllegalStateException("Waiting for players to return to the lobby."), () -> checked(this::attemptCleanup));
+            return;
+        }
+        protectVisitors();
+        if (arenaRestored) { finishReset(); return; }
+        arenaResetPending = true;
+        try {
+            duel.rollbackRoundArena(this::protect, guard(() -> {
+                arenaResetPending = false;
+                arenaRestored = true;
+                checked(this::finishReset);
+            }));
+        } catch (RuntimeException failure) {
+            arenaResetPending = false;
+            throw failure;
+        }
+    }
+
+    @Override boolean recoverArenaResetFailure(Throwable failure) {
+        arenaResetPending = false;
+        return recoverResetFailure(failure);
+    }
+
+    @Override boolean recoverResetFailure(Throwable failure) {
+        if (!isEnabled() || !resetting || duel.getArena() == null) return false;
+        recovery.retry(failure, () -> checked(this::attemptCleanup));
+        return true;
+    }
+
+    @Override protected Location respawnOverride(Player player) {
+        return duel.getPlugin().getLobbyManager().getLobbyLocation();
     }
 
     private boolean inside(Location location) {
@@ -102,6 +140,7 @@ public final class EndingState extends AbstractDuelState {
             } finally { transporting = null; }
         }
         protection.close();
+        recovery.clear();
         visitors.clear();
         resetting = false;
         duel.finish();
@@ -149,7 +188,8 @@ public final class EndingState extends AbstractDuelState {
 
     @Override protected void onDisable() {
         resetting = false;
-        protection.close();
-        visitors.clear();
+        recovery.clear();
+        try { protection.close(); }
+        finally { visitors.clear(); }
     }
 }

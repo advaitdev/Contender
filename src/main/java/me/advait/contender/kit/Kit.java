@@ -44,7 +44,7 @@ public class Kit {
 
     /** Resets health/food/effects without touching the inventory. Used for No Clear kit. */
     public void applyEffectsOnly(Player player) {
-        player.setHealth(20.0);
+        player.setHealth(Math.min(20.0, player.getMaxHealth()));
         player.setFoodLevel(20);
         player.setSaturation(5.0f);
         player.setExhaustion(0);

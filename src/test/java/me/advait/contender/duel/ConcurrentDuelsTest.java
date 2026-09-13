@@ -8,6 +8,8 @@ import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.vote.VoteManager;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +47,13 @@ class ConcurrentDuelsTest {
             when(player.getName()).thenReturn("Player" + i);
             online.put(id, player);
         }
-        ArenaMap map = new ArenaMap("forest");
+        World world = mock(World.class);
+        Location spectatorSpawn = new Location(world, 5, 70, 5), lobbySpawn = new Location(world, 100, 70, 100);
+        ArenaMap map = spy(new ArenaMap("forest"));
+        doReturn(spectatorSpawn).when(map).getSpectatorSpawn();
+        var lobby = mock(me.advait.contender.lobby.LobbyManager.class);
+        when(plugin.getLobbyManager()).thenReturn(lobby);
+        when(lobby.getLobbyLocation()).thenReturn(lobbySpawn);
         ArenaLease firstArena = new ArenaLease(mock(ArenaInstance.class), UUID.randomUUID());
         ArenaLease secondArena = new ArenaLease(mock(ArenaInstance.class), UUID.randomUUID());
         when(arenas.acquire("forest")).thenReturn(firstArena, secondArena);
@@ -54,6 +62,7 @@ class ConcurrentDuelsTest {
             when(duel.getAllDuelPlayers()).thenReturn(setup.getAllPlayers());
             when(duel.getAllParticipants()).thenReturn(setup.getAllPlayers());
             when(duel.getArena()).thenReturn((ArenaLease) context.arguments().get(3));
+            when(duel.getMap()).thenReturn(map);
             when(duel.isInDuel(any())).thenAnswer(call -> setup.getAllPlayers().contains(call.getArgument(0)));
             when(duel.getResult()).thenReturn(new DuelResult(DuelResult.Reason.FINISHED, 2, 1, 1));
         })) {
@@ -73,17 +82,22 @@ class ConcurrentDuelsTest {
             verify(arenas, times(2)).acquire("forest");
             Player visitor = online.get(ids.get(4));
             when(visitor.getInventory()).thenReturn(mock(org.bukkit.inventory.PlayerInventory.class));
+            var visitorLocation = new java.util.concurrent.atomic.AtomicReference<>(lobbySpawn);
+            when(visitor.getWorld()).thenReturn(world);
+            when(visitor.getLocation()).thenAnswer(call -> visitorLocation.get().clone());
+            when(visitor.teleport(any(Location.class))).thenAnswer(call -> { visitorLocation.set(call.getArgument(0)); return true; });
+            when(lobby.sendToLobbyChecked(visitor)).thenAnswer(call -> {
+                assertSame(first, manager.getDuel(visitor), "Keep the old match until the lobby teleport succeeds");
+                visitorLocation.set(lobbySpawn); return true;
+            });
             AbstractDuelState state = mock(AbstractDuelState.class);
             when(state.canAddSpectator()).thenReturn(true);
             when(first.getState()).thenReturn(state);
             manager.spectate(visitor, first);
             assertSame(first, manager.getDuel(visitor));
-            doAnswer(call -> {
-                assertNull(manager.getDuel(visitor), "Release ownership before the lobby teleport can trigger confinement");
-                return null;
-            }).when(first).removeSpectator(visitor);
             manager.leaveSpectating(visitor);
             assertNull(manager.getDuel(visitor));
+            verify(first).disconnectSpectator(visitor);
             assertEquals(2, manager.getActiveDuels().size());
             manager.endDuel(first);
             manager.endDuel(first);

@@ -73,6 +73,7 @@ public final class ArenaProtectionListener implements Listener {
             event.setCancelled(true);
             return;
         }
+        if (event instanceof PlayerTeleportEvent teleport && duels.isSpectatorTransfer(teleport)) return;
         Duel duel = duels.getDuel(event.getPlayer());
         if (duel == null || duel.getArena() == null || !duel.getState().isEnabled() || duel.getState().isEnding()) return;
         if (duel.getState().handleArenaContainment(event)) return;

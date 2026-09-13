@@ -122,12 +122,22 @@ public class LobbyManager {
     }
 
     public void sendToLobby(Player player) {
-        Location lobby = getLobbyLocation();
-        if (lobby == null) return;
-        if (!player.teleport(lobby)) {
-            plugin.getLogger().warning("Could not teleport " + player.getName() + " to the lobby: the teleport was cancelled.");
+        sendToLobbyChecked(player);
+    }
+
+    /** Only reset the player's lobby state after confirming that the teleport reached the lobby. */
+    public boolean sendToLobbyChecked(Player player) {
+        Location configuredLobby = getLobbyLocation();
+        if (configuredLobby == null) return false;
+        Location lobby = configuredLobby.clone();
+        boolean teleported = player.teleport(lobby.clone());
+        Location actual = teleported ? player.getLocation() : null;
+        if (!teleported || actual == null || !lobby.getWorld().equals(player.getWorld())
+                || !lobby.getWorld().equals(actual.getWorld()) || !(actual.distanceSquared(lobby) <= 1)) {
+            plugin.getLogger().warning("Could not teleport " + player.getName() + " to the lobby: the teleport was "
+                    + (teleported ? "redirected." : "cancelled."));
             me.advait.contender.dialog.Dialogs.tell(player, "The lobby teleport was blocked. Try /lobby again.");
-            return;
+            return false;
         }
 
         player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
@@ -141,5 +151,6 @@ public class LobbyManager {
         player.setGameMode(plugin.getRoleManager().getRole(player.getUniqueId()) == me.advait.contender.role.PlayerRole.SPECTATOR
                 ? GameMode.SPECTATOR : GameMode.SURVIVAL);
         if (plugin.getSpectatorControls() != null && plugin.getSpectatorControls().watching(player)) plugin.getSpectatorControls().giveCompass(player);
+        return true;
     }
 }

@@ -80,7 +80,7 @@ class DuelRoundResetTest {
         }
     }
 
-    @Test void blockedSpawnTeleportFailsOnlyAfterPasteAndReleasesResetProtection() throws Exception {
+    @Test void blockedSpawnTeleportKeepsProtectionAndRetriesWithoutRepeatingThePaste() throws Exception {
         try (Fixture f = new Fixture()) {
             f.winner.blockTeleport = true;
             f.begin();
@@ -88,11 +88,20 @@ class DuelRoundResetTest {
             verify(f.duel, never()).resetFailed(any());
             f.completeReset();
             verify(f.duel).resetFailed(argThat(failure -> failure.getMessage().contains("Could not move")));
-            assertTrue(f.duel.isFinished());
-            assertEquals(DuelResult.Reason.CANCELLED, f.duel.getResult().reason());
-            verify(f.arenas).discard(f.lease);
-            verify(f.manager).endDuel(f.duel);
+            assertFalse(f.duel.isFinished());
+            assertSame(f.round, f.duel.getState());
+            assertEquals(1, f.duel.getTeam1().getScore());
+            assertTrue(f.players.values().stream().allMatch(player -> !player.gravity && !player.data.isEmpty()));
+            verify(f.arenas, never()).discard(any());
+            verify(f.manager, never()).endDuel(any());
             verify(f.duel, never()).broadcastCountdown(anyInt());
+
+            f.winner.blockTeleport = false;
+            f.runNext();
+
+            assertTrue(f.round.canAddSpectator());
+            assertEquals(f.team1Spawn, f.winner.location);
+            verify(f.arenas, times(1)).resetRound(eq(f.lease), anySet(), any());
             assertTrue(f.players.values().stream().allMatch(player -> player.gravity && player.data.isEmpty()));
         }
     }
@@ -220,21 +229,25 @@ class DuelRoundResetTest {
         }
     }
 
-    @Test void aFailedPasteReleasesProtectionAndNeverStartsTheNextRound() throws Exception {
+    @Test void aFailedPasteKeepsTheMatchProtectedUntilExplicitCancellation() throws Exception {
         try (Fixture f = new Fixture()) {
             f.begin();
             var failure = new IllegalStateException("Paste failed");
             f.pasting.set(false);
             f.reset.completeExceptionally(failure);
-            List.copyOf(f.server.scheduled).forEach(StateTestServer.Scheduled::run);
-            verify(f.duel).resetFailed(failure);
-            assertTrue(f.duel.isFinished());
-            assertEquals(DuelResult.Reason.CANCELLED, f.duel.getResult().reason());
-            assertTrue(f.players.values().stream().allMatch(player -> player.gravity && player.data.isEmpty()));
-            verify(f.arenas).discard(f.lease);
-            verify(f.manager).endDuel(f.duel);
+            assertFalse(f.duel.isFinished());
+            assertSame(f.round, f.duel.getState());
+            assertEquals(1, f.duel.getTeam1().getScore());
+            assertTrue(f.players.values().stream().allMatch(player -> !player.gravity && !player.data.isEmpty()));
+            verify(f.arenas, never()).discard(any());
+            verify(f.manager, never()).endDuel(any());
             verify(f.duel, never()).broadcastCountdown(anyInt());
             verify(f.duel, never()).prepareRound();
+
+            f.duel.forceCancel();
+
+            assertTrue(f.duel.isFinished());
+            assertTrue(f.players.values().stream().allMatch(player -> player.gravity && player.data.isEmpty()));
         }
     }
 
@@ -355,7 +368,7 @@ class DuelRoundResetTest {
         }
     }
 
-    @Test void aFailedPasteRestoresVisitorPhysicsWithoutChangingTheirInventoryOrMode() throws Exception {
+    @Test void visitorsStayProtectedAfterPasteFailureAndRecoverTheirPhysicsOnCancellation() throws Exception {
         try (Fixture f = new Fixture()) {
             var guest = f.player("Guest", new Location(f.world, 38, 66, 38));
             var alreadyFloating = f.player("FloatingGuest", new Location(f.world, 37, 68, 37));
@@ -365,7 +378,16 @@ class DuelRoundResetTest {
 
             f.reset.completeExceptionally(new IllegalStateException("Paste failed"));
 
-            assertTrue(f.duel.isFinished());
+            assertFalse(f.duel.isFinished());
+            assertSame(f.round, f.duel.getState());
+            assertFalse(guest.gravity);
+            assertFalse(alreadyFloating.gravity);
+            assertFalse(guest.data.isEmpty());
+            assertFalse(alreadyFloating.data.isEmpty());
+            verify(f.manager, never()).endDuel(any());
+
+            f.duel.forceCancel();
+
             assertTrue(guest.gravity);
             assertFalse(alreadyFloating.gravity);
             assertTrue(guest.data.isEmpty());

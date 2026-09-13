@@ -6,7 +6,7 @@ import java.io.File;
 import java.util.*;
 
 final class RaceStore {
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
     private final File file;
     RaceStore(File folder) { file = new File(folder, "mace-race.yml"); }
     record Saved(Map<String, RaceCourse> courses, RaceRun run, boolean selected) { }
@@ -18,7 +18,7 @@ final class RaceStore {
             var c = section.getConfigurationSection(id);
             double height = c.getDouble("return-height", RaceCourse.DEFAULT_RETURN_HEIGHT);
             // Upgrade the old default once; heights explicitly saved in this format stay unchanged.
-            if (yaml.getInt("version", 1) < VERSION && height == 3) height = RaceCourse.DEFAULT_RETURN_HEIGHT;
+            if (yaml.getInt("version", 1) < VERSION && (height == 3 || height == 6)) height = RaceCourse.DEFAULT_RETURN_HEIGHT;
             courses.put(id, new RaceCourse(id, c.getInt("max-advance", 15), c.getString("finish-name", "Finish"),
                     height, c.getBoolean("return-on-ground", true)));
         }

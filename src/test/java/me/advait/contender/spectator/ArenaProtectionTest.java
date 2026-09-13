@@ -5,6 +5,7 @@ import me.advait.contender.duel.*;
 import me.advait.contender.map.ArenaMap;
 import me.advait.contender.map.BlockBounds;
 import me.advait.contender.kit.Kit;
+import me.advait.contender.race.RaceManager;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -12,6 +13,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.entity.Mannequin;
@@ -22,6 +24,60 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ArenaProtectionTest {
+    @Test void raceWindBurstKeepsItsLaunchPacketWithoutChangingCourseBlocks() {
+        World world = mock(World.class);
+        ArenaManager arenas = mock(ArenaManager.class);
+        RaceManager races = mock(RaceManager.class);
+        when(arenas.isArenaWorld(world)).thenReturn(true);
+        Block source = block(world, 8), nearby = block(world, 9);
+        when(races.inArena(source.getLocation())).thenReturn(true);
+        var listener = new ArenaProtectionListener(mock(DuelManager.class), arenas, races);
+        BlockExplodeEvent windBurst = mock(BlockExplodeEvent.class);
+        when(windBurst.getBlock()).thenReturn(source);
+        List<Block> affected = new ArrayList<>(List.of(source, nearby));
+        when(windBurst.blockList()).thenReturn(affected);
+
+        listener.onBlockExplode(windBurst);
+
+        assertTrue(affected.isEmpty());
+        verify(windBurst, never()).setCancelled(anyBoolean());
+    }
+
+    @Test void raceWindChargesKeepTheirLaunchWithoutChangingCourseBlocks() {
+        World world = mock(World.class);
+        ArenaManager arenas = mock(ArenaManager.class);
+        RaceManager races = mock(RaceManager.class);
+        when(arenas.isArenaWorld(world)).thenReturn(true);
+        Location origin = new Location(world, 8, 64, 0);
+        when(races.inArena(origin)).thenReturn(true);
+        var listener = new ArenaProtectionListener(mock(DuelManager.class), arenas, races);
+        EntityExplodeEvent windCharge = mock(EntityExplodeEvent.class);
+        when(windCharge.getLocation()).thenReturn(origin);
+        List<Block> affected = new ArrayList<>(List.of(block(world, 8), block(world, 9)));
+        when(windCharge.blockList()).thenReturn(affected);
+
+        listener.onEntityExplode(windCharge);
+
+        assertTrue(affected.isEmpty());
+        verify(windCharge, never()).setCancelled(anyBoolean());
+    }
+
+    @Test void aRaceDoesNotEnableExplosionsInOtherIdleArenaCopies() {
+        World world = mock(World.class);
+        ArenaManager arenas = mock(ArenaManager.class);
+        RaceManager races = mock(RaceManager.class);
+        when(arenas.isArenaWorld(world)).thenReturn(true);
+        var listener = new ArenaProtectionListener(mock(DuelManager.class), arenas, races);
+        Block source = block(world, 80);
+        BlockExplodeEvent explosion = mock(BlockExplodeEvent.class);
+        when(explosion.getBlock()).thenReturn(source);
+
+        listener.onBlockExplode(explosion);
+
+        verify(explosion).setCancelled(true);
+        verify(explosion, never()).blockList();
+    }
+
     @Test void aHoldingStateCanAuthorizeTransportWithoutOrdinaryArenaContainmentRewritingIt() {
         var f = new MovementFixture();
         World lobby = mock(World.class);

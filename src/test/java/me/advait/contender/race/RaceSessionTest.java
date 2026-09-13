@@ -24,6 +24,49 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RaceSessionTest {
+    @Test void checkpointReturnAddsTheDefaultHeightAboveATallMobsHead() {
+        try (var f = new TargetFixture(RaceCourse.defaults("course"))) {
+            when(f.target.getBoundingBox()).thenReturn(new org.bukkit.util.BoundingBox(1.5, 64, 3.5, 2.5, 70, 4.5));
+            f.kit.when(() -> RaceKit.isReturn(any())).thenReturn(true);
+            for (int i = 0; i < 10; i++) f.env.scheduled.getFirst().run();
+            f.run.hit(f.player.getUniqueId(), 1, System.nanoTime());
+            clearInvocations(f.player);
+
+            f.session.bed(new PlayerInteractEvent(f.player, org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
+                    mock(ItemStack.class), null, null, EquipmentSlot.HAND));
+
+            assertEquals(82, f.position.getY(), "Return above the mob's head, even above the selection's ceiling");
+            assertEquals(2, f.position.getX());
+            verify(f.player).setFallDistance(0);
+        }
+    }
+
+    @Test void blockedOrRedirectedReturnsDoNotClearFallStateOrGrounding() throws Exception {
+        for (boolean redirected : List.of(false, true)) {
+            try (var f = new TargetFixture(RaceCourse.defaults("course"))) {
+                f.kit.when(() -> RaceKit.isReturn(any())).thenReturn(true);
+                for (int i = 0; i < 10; i++) f.env.scheduled.getFirst().run();
+                var field = RaceSession.class.getDeclaredField("grounding"); field.setAccessible(true);
+                RaceGrounding grounding = (RaceGrounding) field.get(f.session);
+                grounding.landed(f.player.getUniqueId(), false);
+                doAnswer(call -> {
+                    if (redirected) f.position = ((Location) call.getArgument(0)).clone().add(0, -8, 0);
+                    return redirected;
+                }).when(f.player).teleport(any(Location.class));
+                clearInvocations(f.player);
+
+                f.session.bed(new PlayerInteractEvent(f.player, org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
+                        mock(ItemStack.class), null, null, EquipmentSlot.HAND));
+
+                verify(f.player).teleport(any(Location.class));
+                verify(f.player, never()).setFallDistance(anyFloat());
+                verify(f.player, never()).setVelocity(any());
+                verify(f.player, never()).setFireTicks(anyInt());
+                assertTrue(grounding.landed(f.player.getUniqueId(), true), "Keep the failed return armed for another attempt");
+            }
+        }
+    }
+
     @Test void racersCanArrangeTheirInventoryDuringCountdownAndTheRace() {
         try (var f = new TargetFixture()) {
             var view = inventoryView(f);
@@ -210,10 +253,12 @@ class RaceSessionTest {
             ArenaMap map = map(); var arena = mock(ArenaInstance.class); when(arena.map()).thenReturn(map);
             when(arena.cell()).thenReturn(new me.advait.contender.map.BlockBounds(0, -64, 0, 100, 320, 100));
             Player player = mock(Player.class); UUID id = UUID.randomUUID(); when(player.getUniqueId()).thenReturn(id);
-            when(player.getLocation()).thenAnswer(i -> new Location(world, 1, 64, 1));
+            var position = new java.util.concurrent.atomic.AtomicReference<>(new Location(world, 1, 64, 1));
+            when(player.getLocation()).thenAnswer(i -> position.get().clone());
             when(player.getBoundingBox()).thenAnswer(i -> new org.bukkit.util.BoundingBox(.7, 64, .7, 1.3, 65.8, 1.3));
             when(player.isOnline()).thenReturn(true); when(player.getMaxHealth()).thenReturn(20d);
-            when(player.getActivePotionEffects()).thenReturn(List.of()); when(player.teleport(any(Location.class))).thenReturn(true);
+            when(player.getActivePotionEffects()).thenReturn(List.of());
+            when(player.teleport(any(Location.class))).thenAnswer(call -> { position.set(((Location) call.getArgument(0)).clone()); return true; });
             when(player.getInventory()).thenReturn(mock(PlayerInventory.class)); bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
             var run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, List.of(new RaceRun.Racer(id, "Alice")));
             var session = new RaceSession(env.plugin, manager, run, RaceCourse.defaults("course"), new ArenaLease(arena, UUID.randomUUID()));
@@ -225,7 +270,7 @@ class RaceSessionTest {
             run.hit(id, 2, System.nanoTime());
             Location from = new Location(world, 4, 64, 4), to = new Location(world, 4, 50, 4);
             var fall = new PlayerMoveEvent(player, from, to); session.move(fall);
-            assertEquals(70, fall.getTo().getY()); assertEquals(4, fall.getTo().getX());
+            assertEquals(76, fall.getTo().getY()); assertEquals(4, fall.getTo().getX());
             var escape = new PlayerTeleportEvent(player, from, new Location(world, 150, 70, 4), PlayerTeleportEvent.TeleportCause.ENDER_PEARL);
             session.teleport(escape); assertTrue(escape.isCancelled());
             var wind = new PlayerMoveEvent(player, from, new Location(world, 50, 150, 4)); session.move(wind);
@@ -273,8 +318,10 @@ class RaceSessionTest {
         final LivingEntity target;
         final RaceRun run;
         final RaceSession session;
+        Location position = new Location(world, 1, 64, 1);
 
-        TargetFixture() {
+        TargetFixture() { this(new RaceCourse("course", 15, "Finish", 3, false)); }
+        TargetFixture(RaceCourse course) {
             access.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
             var attributes = new HashMap<net.kyori.adventure.key.Key, org.bukkit.attribute.Attribute>();
             var attributeRegistry = Registry.ATTRIBUTE;
@@ -294,13 +341,14 @@ class RaceSessionTest {
             var arena = mock(ArenaInstance.class); when(arena.map()).thenReturn(map);
             when(arena.cell()).thenReturn(new me.advait.contender.map.BlockBounds(0, -64, 0, 100, 320, 100));
             UUID id = UUID.randomUUID(); when(player.getUniqueId()).thenReturn(id);
-            when(player.getLocation()).thenAnswer(call -> new Location(world, 1, 64, 1));
+            when(player.getLocation()).thenAnswer(call -> position.clone());
             when(player.isOnline()).thenReturn(true); when(player.getMaxHealth()).thenReturn(20d);
-            when(player.getActivePotionEffects()).thenReturn(List.of()); when(player.teleport(any(Location.class))).thenReturn(true);
+            when(player.getActivePotionEffects()).thenReturn(List.of());
+            when(player.teleport(any(Location.class))).thenAnswer(call -> { position = ((Location) call.getArgument(0)).clone(); return true; });
             when(player.getInventory()).thenReturn(mock(PlayerInventory.class));
             bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
             run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, List.of(new RaceRun.Racer(id, "Alice")));
-            session = new RaceSession(env.plugin, manager, run, new RaceCourse("course", 15, "Finish", 3, false), new ArenaLease(arena, UUID.randomUUID()));
+            session = new RaceSession(env.plugin, manager, run, course, new ArenaLease(arena, UUID.randomUUID()));
             session.enable(); assertEquals(RaceRun.State.COUNTDOWN, run.state());
         }
         @Override public void close() {

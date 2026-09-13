@@ -178,7 +178,7 @@ public final class RaceDialogs {
     }
     private void courseRules(Player player, String id) {
         var course = plugin.getRaceManager().course(id);
-        form(player, "Course Rules", DialogText.muted("These rules apply to races on this course.\n\nWith Return on Ground enabled, landing returns you to your last checkpoint, or the start.\nYou can stand at the start until you first leave the ground.\n\nReturn height is measured above the checkpoint mob or the start."), List.of(
+        form(player, "Course Rules", DialogText.muted("Return settings apply to the current race when you save.\n\nWith Return on Ground enabled, landing returns you to your last checkpoint, or the start.\nYou can stand at the start until you first leave the ground.\n\nReturn height is measured above the top of the checkpoint mob, or above the start."), List.of(
                 DialogInput.text("advance", DialogIcon.STEP.label("Maximum Checkpoint Jump")).initial(String.valueOf(course.maxAdvance())).maxLength(4).width(300).build(),
                 DialogInput.text("finish", DialogIcon.NAME.label("Finish Mob Name")).initial(course.finishName()).maxLength(48).width(300).build(),
                 DialogInput.text("height", DialogIcon.JUMP.label("Return Height")).initial(String.valueOf((int) course.returnHeight())).maxLength(2).width(300).build(),

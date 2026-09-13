@@ -151,7 +151,10 @@ public final class ArenaProtectionListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent event) {
         if (arenas.isArenaWorld(event.getBlock().getWorld())) {
-            if (!combat(event.getBlock().getLocation())) event.setCancelled(true);
+            // Wind Burst has no source entity. Cancelling its block explosion also
+            // suppresses the packet that launches the player.
+            if (races != null && races.inArena(event.getBlock().getLocation())) event.blockList().clear();
+            else if (!combat(event.getBlock().getLocation())) event.setCancelled(true);
             else event.blockList().removeIf(b -> !sameArena(event.getBlock().getLocation(), b.getLocation()));
         }
     }

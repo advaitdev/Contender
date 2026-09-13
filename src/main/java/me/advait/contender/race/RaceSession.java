@@ -23,7 +23,7 @@ public final class RaceSession extends AbstractGameState {
     private final Contender contender;
     private final RaceManager manager;
     private final RaceRun run;
-    private final RaceCourse course;
+    private RaceCourse course;
     private final ArenaLease lease;
     private final Set<Chunk> tickets = new HashSet<>();
     private final Map<UUID, Integer> mobs = new HashMap<>();
@@ -49,6 +49,11 @@ public final class RaceSession extends AbstractGameState {
     public boolean owns(UUID id) { return run.racer(id) != null && !returning.contains(id) && entered.contains(id); }
     public boolean racing(UUID id) { return owns(id) && run.state() == RaceRun.State.RUNNING && !run.racer(id).done(); }
     public boolean prepared() { return run.state() != RaceRun.State.READY; }
+    void applyReturnRules(RaceCourse settings) {
+        course = new RaceCourse(course.mapId(), course.maxAdvance(), course.finishName(),
+                settings.returnHeight(), settings.returnOnGround());
+        grounding.clear();
+    }
     @Override protected void onEnable() {
         World world = Bukkit.getWorld(lease.instance().map().getWorldName());
         // In 26.2 hostile mobs are removed in Peaceful, even when they are persistent.
@@ -187,12 +192,30 @@ public final class RaceSession extends AbstractGameState {
     private Location returnPoint(Player player) {
         var racer = run.racer(player.getUniqueId());
         Location location = checkpoints.getOrDefault(racer.checkpoint(), lease.instance().map().getTeam1Spawn())
-                .clone().add(0, course.returnHeight(), 0);
+                .clone();
+        for (var entry : mobs.entrySet()) {
+            if (entry.getValue() != racer.checkpoint()) continue;
+            LivingEntity target = targets.get(entry.getKey());
+            if (target != null) {
+                var bounds = target.getBoundingBox();
+                if (bounds != null) location.setY(Math.max(location.getY(), bounds.getMaxY()));
+            }
+            break;
+        }
+        location.add(0, course.returnHeight(), 0);
         location.setYaw(player.getYaw()); location.setPitch(player.getPitch()); return location;
     }
     private boolean teleport(Player player, Location location) {
+        if (location == null || location.getWorld() == null) return false;
+        Location destination = location.clone();
+        boolean previousTeleport = internalTeleport;
         internalTeleport = true;
-        try { return player.teleport(location); } finally { internalTeleport = false; }
+        try {
+            if (!player.teleport(destination.clone())) return false;
+            Location arrived = player.getLocation();
+            return arrived != null && destination.getWorld().equals(arrived.getWorld())
+                    && arrived.distanceSquared(destination) <= 1;
+        } finally { internalTeleport = previousTeleport; }
     }
     private void returnPlayer(Player player) {
         if (!owns(player.getUniqueId())) return;

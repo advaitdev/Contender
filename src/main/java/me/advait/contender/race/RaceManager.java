@@ -82,8 +82,21 @@ public final class RaceManager extends AbstractGameState {
         selected = false; save();
     }
     public void configure(RaceCourse course) {
-        if ((busy() || current != null && !current.terminal()) && current != null && current.mapId().equals(course.mapId())) throw new IllegalStateException("Wait for the race and arena reset to finish.");
-        requireMap(course.mapId()); courses.put(course.mapId(), course); save(); setupMobs.watch(course.mapId());
+        RaceCourse previous = course(course.mapId());
+        boolean inUse = current != null && current.mapId().equals(course.mapId())
+                && (busy() || !current.terminal());
+        if (inUse && (previous.maxAdvance() != course.maxAdvance() || !previous.finishName().equals(course.finishName()))) {
+            throw new IllegalStateException("You can change return settings now. Wait for the race to finish before changing checkpoints or the finish mob.");
+        }
+        requireMap(course.mapId());
+        RaceCourse saved = courses.put(course.mapId(), course);
+        try { save(); }
+        catch (RuntimeException failure) {
+            if (saved == null) courses.remove(course.mapId()); else courses.put(course.mapId(), saved);
+            throw failure;
+        }
+        if (inUse && session != null) session.applyReturnRules(course);
+        if (!inUse) setupMobs.watch(course.mapId());
     }
     public void create(String name, String mapId, int advance, int minutes, List<TournamentEntry> entries) {
         create(name, mapId, advance, minutes, entries, "");

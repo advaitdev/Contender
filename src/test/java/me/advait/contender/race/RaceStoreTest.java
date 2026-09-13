@@ -20,12 +20,33 @@ class RaceStoreTest {
                 """);
         var store = new RaceStore(folder.toFile());
         var saved = store.load();
-        assertEquals(6, saved.courses().get("old-default").returnHeight());
-        assertEquals(6, saved.courses().get("missing").returnHeight());
+        assertEquals(12, saved.courses().get("old-default").returnHeight());
+        assertEquals(12, saved.courses().get("missing").returnHeight());
         assertEquals(5, saved.courses().get("custom").returnHeight());
-        assertEquals(6, RaceCourse.defaults("new").returnHeight());
+        assertEquals(12, RaceCourse.defaults("new").returnHeight());
         store.save(saved.courses(), null, false);
         assertEquals(saved.courses(), store.load().courses());
+    }
+    @Test void versionTwoDefaultsUpgradeOnceAndNewCustomHeightsStaySaved() throws Exception {
+        java.nio.file.Files.writeString(folder.resolve("mace-race.yml"), """
+                version: 2
+                courses:
+                  three:
+                    return-height: 3
+                  six:
+                    return-height: 6
+                  custom:
+                    return-height: 9
+                """);
+        var store = new RaceStore(folder.toFile());
+        var courses = store.load().courses();
+        assertEquals(12, courses.get("three").returnHeight());
+        assertEquals(12, courses.get("six").returnHeight());
+        assertEquals(9, courses.get("custom").returnHeight());
+        store.save(Map.of("three", new RaceCourse("three", 15, "Finish", 3),
+                "six", new RaceCourse("six", 15, "Finish", 6)), null, false);
+        assertEquals(3, store.load().courses().get("three").returnHeight());
+        assertEquals(6, store.load().courses().get("six").returnHeight());
     }
     @Test void choosingThreeBlocksAfterTheUpgradeSurvivesReload() {
         var store = new RaceStore(folder.toFile());

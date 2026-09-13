@@ -2,7 +2,7 @@ package me.advait.contender.race;
 
 /** A course uses the map's first team spawn and the entities in its saved schematic. */
 public record RaceCourse(String mapId, int maxAdvance, String finishName, double returnHeight, boolean returnOnGround) {
-    public static final double DEFAULT_RETURN_HEIGHT = 6;
+    public static final double DEFAULT_RETURN_HEIGHT = 12;
     public RaceCourse(String mapId, int maxAdvance, String finishName, double returnHeight) {
         this(mapId, maxAdvance, finishName, returnHeight, true);
     }

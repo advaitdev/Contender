@@ -24,6 +24,28 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RaceSafetyTest {
+    @Test void activeGroundReturnRulesCanBeDisabledAndReenabledWithANewHeight() {
+        try (var f = new Fixture(true)) {
+            f.start();
+            clearInvocations(f.player);
+            f.at(1, 70, 1);
+            f.session.monitorRacers();
+            f.session.applyReturnRules(new RaceCourse("course", 15, "Finish", 12, false));
+            f.at(1, 64, 1);
+            f.session.monitorRacers();
+            verify(f.player, never()).teleport(any(Location.class));
+
+            f.session.applyReturnRules(new RaceCourse("course", 15, "Finish", 12, true));
+            f.at(1, 70, 1);
+            f.session.monitorRacers();
+            f.at(1, 64, 1);
+            f.session.monitorRacers();
+
+            verify(f.player).teleport(argThat((Location location) -> location.getY() == 76));
+            assertEquals(76, f.position.getY());
+            assertEquals(RaceRun.State.RUNNING, f.run.state());
+        }
+    }
     @Test void landingReturnsToLatestCheckpointAndTheStartDoesNotLoop() {
         try (var f = new Fixture(true)) {
             f.start(); clearInvocations(f.player);
@@ -175,7 +197,7 @@ class RaceSafetyTest {
         final Entity[] mobs;
         final RaceRun run;
         final RaceSession session;
-        Location position;
+        Location position, opponentPosition;
         Fixture(boolean returnOnGround) { this(returnOnGround, false); }
         Fixture(boolean returnOnGround, boolean multiplayer) {
             registry.when(RegistryAccess::registryAccess).thenReturn(mock(RegistryAccess.class, RETURNS_MOCKS));
@@ -196,15 +218,18 @@ class RaceSafetyTest {
             map.setTeam1Spawn(1, 64, 1, 0, 0); map.setTeam2Spawn(1, 64, 1, 0, 0);
             ArenaInstance instance = mock(ArenaInstance.class); when(instance.map()).thenReturn(map); when(instance.cell()).thenReturn(new BlockBounds(0, -64, 0, 100, 319, 100));
             at(1, 64, 1); when(player.getUniqueId()).thenReturn(id); when(player.isOnline()).thenReturn(true); when(player.getMaxHealth()).thenReturn(20d);
-            when(player.getGameMode()).thenReturn(GameMode.SURVIVAL); when(player.getInventory()).thenReturn(mock(PlayerInventory.class)); when(player.teleport(any(Location.class))).thenReturn(true);
+            when(player.getGameMode()).thenReturn(GameMode.SURVIVAL); when(player.getInventory()).thenReturn(mock(PlayerInventory.class));
+            when(player.teleport(any(Location.class))).thenAnswer(call -> { position = ((Location) call.getArgument(0)).clone(); return true; });
             when(player.getLocation()).thenAnswer(c -> position.clone()); when(player.getBoundingBox()).thenAnswer(c -> new BoundingBox(position.getX() - .3, position.getY(), position.getZ() - .3, position.getX() + .3, position.getY() + 1.8, position.getZ() + .3));
             bukkit.when(() -> Bukkit.getPlayer(id)).thenReturn(player);
             var roster = new ArrayList<RaceRun.Racer>(); roster.add(new RaceRun.Racer(id, "Alice"));
             if (multiplayer) {
                 when(opponent.getUniqueId()).thenReturn(opponentId); when(opponent.isOnline()).thenReturn(true);
                 when(opponent.getMaxHealth()).thenReturn(20d); when(opponent.getGameMode()).thenReturn(GameMode.SURVIVAL);
-                when(opponent.getInventory()).thenReturn(mock(PlayerInventory.class)); when(opponent.teleport(any(Location.class))).thenReturn(true);
-                when(opponent.getLocation()).thenAnswer(c -> position.clone()); bukkit.when(() -> Bukkit.getPlayer(opponentId)).thenReturn(opponent);
+                opponentPosition = position.clone();
+                when(opponent.getInventory()).thenReturn(mock(PlayerInventory.class));
+                when(opponent.teleport(any(Location.class))).thenAnswer(call -> { opponentPosition = ((Location) call.getArgument(0)).clone(); return true; });
+                when(opponent.getLocation()).thenAnswer(c -> opponentPosition.clone()); bukkit.when(() -> Bukkit.getPlayer(opponentId)).thenReturn(opponent);
                 roster.add(new RaceRun.Racer(opponentId, "Bob"));
             }
             run = new RaceRun(UUID.randomUUID(), "Race", "course", 15, 0, roster);

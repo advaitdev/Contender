@@ -72,7 +72,7 @@ public final class DuelDialogs {
                         Dialogs.option("ffa", "Free for All", setup.freeForAll))).width(FORM_WIDTH).build(),
                 DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8)
                         .initial((float) setup.wins).step(1f).width(FORM_WIDTH).build(),
-                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Sorting Time (seconds)"), 5, 60)
+                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items (seconds)"), 5, 60)
                         .initial((float) setup.sortSeconds).step(1f).width(FORM_WIDTH).build());
         var actions = new ArrayList<ActionButton>();
         Dialogs.navigationRow(actions,
@@ -129,8 +129,8 @@ public final class DuelDialogs {
         buttons.add(back(player, TEAM_WIDTH, p -> details(p, setup)));
         buttons.add(action(player, DialogIcon.NEXT, "Next: Review", ACCENT, TEAM_WIDTH, (p, view) -> review(p, setup, page)));
         Dialogs.navigationRow(buttons,
-                page > 0 ? action(player, DialogIcon.BACK, "Previous Page", MUTED, TEAM_WIDTH, (p, view) -> players(p, setup, page - 1)) : null,
-                page + 1 < pages ? action(player, DialogIcon.NEXT, "Next Page", ACCENT, TEAM_WIDTH, (p, view) -> players(p, setup, page + 1)) : null);
+                page > 0 ? action(player, DialogIcon.BACK, "Previous Page", TEXT, TEAM_WIDTH, (p, view) -> players(p, setup, page - 1)) : null,
+                page + 1 < pages ? action(player, DialogIcon.NEXT, "Next Page", TEXT, TEAM_WIDTH, (p, view) -> players(p, setup, page + 1)) : null);
         dialogs.show(player, "Choose Players", List.of(body(DialogText.muted(candidates.isEmpty() ? "No contestants are available right now."
                         : "Click a player under their team.\nClick a selected player again to remove them.")), body(DialogText.page(page + 1, pages))), List.of(), buttons, 2, NAV_WIDTH, null);
     }
@@ -168,7 +168,7 @@ public final class DuelDialogs {
         var contents = new ArrayList<DialogBody>();
         contents.add(body(DialogText.lines(DialogIcon.MAP.label(setup.map.getDisplayName()), KitIcons.label(setup.kit),
                 DialogText.detail("Win condition", "First to " + setup.wins + (setup.wins == 1 ? " round win" : " round wins")),
-                DialogText.detail("Sorting", setup.sortSeconds + " seconds"))));
+                DialogText.detail("Time to arrange items", setup.sortSeconds + " seconds"))));
         if (setup.freeForAll) contents.add(body(DialogText.muted("All available contestants join when you start.\nPlayers entered in a tournament are excluded.")));
         else { contents.add(body(roster(setup, 1))); contents.add(body(roster(setup, 2))); }
         dialogs.show(player, "Review Duel", contents, List.of(), List.of(action(player, DialogIcon.DUEL, "Start Duel", ACCENT, FORM_WIDTH, (p, view) -> {

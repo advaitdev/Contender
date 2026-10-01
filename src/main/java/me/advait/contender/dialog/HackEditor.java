@@ -73,7 +73,7 @@ final class HackEditor {
         buttons.add(dialogs.button(player, DialogIcon.EYE.label("Closet Set", TEXT), DialogText.muted("Small boosts to reach, knockback, attack speed and resistance. Hard to spot."), admin, CELL,
                 (p, view) -> apply(p, target, HackSettings.closet(), "Closet set applied.")));
         for (Extra extra : target.extras()) {
-            buttons.add(dialogs.button(player, extra.icon().label(extra.label(), ACCENT), DialogText.muted(extra.hint()), admin, CELL * 2 + 4,
+            buttons.add(dialogs.button(player, extra.icon().label(extra.label(), TEXT), DialogText.muted(extra.hint()), admin, CELL * 2 + 4,
                     (p, view) -> extra.action().accept(p)));
         }
         ActionButton exit = target.back() == null

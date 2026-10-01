@@ -30,21 +30,23 @@ public final class ArenaDialogs {
         List<ArenaMap> maps = new ArrayList<>(plugin.getMapManager().getMaps());
         int pages = Math.max(1, (maps.size() + PER_PAGE - 1) / PER_PAGE), page = Math.clamp(requestedPage, 0, pages - 1);
         List<ActionButton> buttons = new ArrayList<>();
-        buttons.add(dialogs.button(player, DialogIcon.SAVE.label("New Map from Selection", ACCENT), DialogText.muted("Select the arena with the WorldEdit wand first."),
-                true, WIDE, (p, view) -> create(p)));
+        buttons.add(dialogs.button(player, DialogIcon.SAVE.label("New Map", ACCENT), DialogText.muted("Save your WorldEdit selection as a map."),
+                true, NAV, (p, view) -> create(p)));
         for (ArenaMap map : maps.subList(page * PER_PAGE, Math.min(maps.size(), (page + 1) * PER_PAGE))) {
             int ready = plugin.getArenas().ready(map.getId());
-            Component label = DialogIcon.MAP.label(map.getDisplayName() + "  ", TEXT)
-                    .append(text(map.isComplete() ? ready + "/" + map.getCopies() + " ready" : "needs spawns", map.isComplete() ? MUTED : WARNING));
-            buttons.add(dialogs.button(player, label, DialogText.muted(plugin.getArenas().readiness(map.getId())), true, WIDE, (p, view) -> edit(p, map.getId())));
+            Component tooltip = DialogText.lines(DialogText.muted(map.isComplete() ? ready + " of " + map.getCopies() + " copies ready" : "Needs both team spawns"),
+                    DialogText.muted(plugin.getArenas().readiness(map.getId())));
+            buttons.add(dialogs.button(player, DialogIcon.MAP.label(map.getDisplayName(), map.isComplete() ? TEXT : WARNING), tooltip, true, NAV, (p, view) -> edit(p, map.getId())));
         }
         Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", MUTED), null, true, NAV, (p, view) -> open(p, page - 1)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", ACCENT), null, true, NAV, (p, view) -> open(p, page + 1)) : null, NAV);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, true, NAV, (p, view) -> open(p, page - 1)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, true, NAV, (p, view) -> open(p, page + 1)) : null, NAV);
         List<DialogBody> body = new ArrayList<>();
-        body.add(DialogBody.plainMessage(DialogText.muted("Each map is copied into its own arenas, so several matches can run at once."), 320));
+        Component intro = DialogText.muted("Each map is copied into its own arenas, so several matches can run at once.");
+        if (maps.stream().anyMatch(map -> !map.isComplete())) intro = DialogText.lines(intro, DialogText.muted("Maps in orange still need spawns."));
+        body.add(DialogBody.plainMessage(intro, 320));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
-        dialogs.show(player, "Maps", body, List.of(), buttons, 1, NAV,
+        dialogs.show(player, "Maps", body, List.of(), buttons, 2, NAV,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).tools(p)));
     }
 
@@ -108,10 +110,9 @@ public final class ArenaDialogs {
         }));
         buttons.add(dialogs.button(player, DialogIcon.NAME.label("Name and Copies", TEXT), null, true, WIDE, (p, view) -> settings(p, id)));
         buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("Delete Map", DANGER), null, true, WIDE, (p, view) -> confirmDelete(p, id)));
-        Dialogs.navigationRow(buttons,
-                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)),
-                dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, true, NAV, (p, view) -> edit(p, id)), NAV);
-        dialogs.show(player, map.getDisplayName(), List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV, null);
+        buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), DialogText.muted("Update the copy progress."), true, WIDE, (p, view) -> edit(p, id)));
+        dialogs.show(player, map.getDisplayName(), List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)));
     }
 
     private static Component spawnLine(String label, boolean set) {

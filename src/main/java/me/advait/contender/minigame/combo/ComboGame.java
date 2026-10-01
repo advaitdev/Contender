@@ -263,7 +263,8 @@ public final class ComboGame extends ArenaGame {
 
     /** The bot hit back or the player fell. */
     private void hitBack() {
-        if (hits == 0) { if (!live) return; retry(); return; }
+        // Includes falling off before the first hit: start the try again.
+        if (hits == 0) { retry(); return; }
         if (hits <= retries) {
             Player player = Bukkit.getPlayer(fighter);
             if (player != null) player.sendActionBar(Msg.text("Hit back at " + hits + ". Try again.", DialogPalette.WARNING));

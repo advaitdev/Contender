@@ -46,6 +46,7 @@ final class VoteReveal implements Activity, Listener {
     private final Map<UUID, Location> spots = new HashMap<>();
     private final List<Display> displays = new ArrayList<>();
     private boolean moving;
+    private UUID votedOut;
     private boolean finished;
 
     VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteBadges badges, boolean eliminate) {
@@ -133,7 +134,9 @@ final class VoteReveal implements Activity, Listener {
         if (ring.size() < 2) { conclude(leaders, top); return; }
         Theme theme = plugin.getThemes().current();
         UUID target = leaders.size() == 1 && ring.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
-        int targetIndex = target == null ? 0 : ring.indexOf(target);
+        // With a tie (or nobody here to land on) the beam would point at the wrong person.
+        if (target == null) { conclude(leaders, top); return; }
+        int targetIndex = ring.indexOf(target);
         int steps = ring.size() * 2 + targetIndex + 1;
         Location first = beamAt(ring.getFirst());
         BlockDisplay beam = Holograms.block(first, Material.WHITE_STAINED_GLASS.createBlockData(), Holograms.box(0.9f, 14f, 0.9f, 0), "vote_reveal");
@@ -152,10 +155,7 @@ final class VoteReveal implements Activity, Listener {
                 Player player = Bukkit.getPlayer(ring.get(index));
                 if (player != null) beam.teleport(beamAt(ring.get(index)));
                 for (Player viewer : onlinePlayers()) Sounds.TICK.play(viewer, last ? 2f : 1.2f);
-                if (last) {
-                    if (target == null) conclude(leaders, top);
-                    else tasks.later(16, () -> conclude(leaders, top));
-                }
+                if (last) tasks.later(16, () -> conclude(leaders, top));
             });
         }
     }
@@ -197,10 +197,8 @@ final class VoteReveal implements Activity, Listener {
                     Msg.text("was voted out with " + votes + (votes == 1 ? " vote" : " votes"), DialogPalette.MUTED), 5, 80, 20);
             Msg.broadcast(Msg.text(out.name(), DialogPalette.DANGER).append(Msg.text(" was voted out with " + votes + (votes == 1 ? " vote." : " votes."), DialogPalette.TEXT)));
             Sounds.ELIMINATED.playAll();
-            if (eliminate) tasks.later(100, () -> {
-                try { plugin.getRoleManager().setRole(out.id(), PlayerRole.SPECTATOR); }
-                catch (RuntimeException failure) { plugin.getLogger().warning("Could not make " + out.name() + " a spectator: " + failure.getMessage()); }
-            });
+            // Applied in finish(), once the reveal no longer holds the player, so their game mode changes too.
+            if (eliminate) votedOut = out.id();
         }
         plugin.getLogger().info("Vote results: " + String.join(", ", session.results().stream()
                 .map(tally -> tally.candidate().name() + " " + tally.votes()).toList()));
@@ -221,6 +219,10 @@ final class VoteReveal implements Activity, Listener {
         for (UUID id : gathered) plugin.getRegistry().release(id, this);
         gathered.clear();
         service.revealFinished(this);
+        if (votedOut != null) {
+            try { plugin.getRoleManager().setRole(votedOut, PlayerRole.SPECTATOR); }
+            catch (RuntimeException failure) { plugin.getLogger().warning("Could not make the voted-out player a spectator: " + failure.getMessage()); }
+        }
     }
 
     @Override public void forceStop(String reason) {

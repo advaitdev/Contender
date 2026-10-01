@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -82,20 +83,19 @@ public final class SabotageDialogs {
                 toggle("enabled", DialogIcon.SKULL, "Sabotages", service.enabled(), "On", "Off"),
                 toggle("affects_hackers", DialogIcon.PLAYERS, "Affects the Hackers Too", service.affectsHackers(), "Yes", "No"),
                 toggle("reveal", DialogIcon.EYE, "Show Who Sabotaged", service.revealHacker(), "Everyone sees", "Only directors see"),
-                DialogInput.numberRange("duration", DialogIcon.CLOCK.label("Length (0 = whole event)"), 0, 600)
-                        .initial((float) service.durationSeconds()).step(10f).width(WIDE).labelFormat("%s: %ss").build(),
-                DialogInput.numberRange("uses", DialogIcon.STAR.label("Sabotages per Hacker per Event"), 0, 10)
+                durationInput(service.durationSeconds()),
+                DialogInput.numberRange("uses", DialogIcon.STAR.label("Sabotages per Hacker per Event"), 0, 20)
                         .initial((float) service.usesPerHacker()).step(1f).width(WIDE).build(),
-                DialogInput.numberRange("cooldown", DialogIcon.REFRESH.label("Wait Between Sabotages"), 0, 300)
-                        .initial((float) service.cooldownSeconds()).step(5f).width(WIDE).labelFormat("%s: %ss").build(),
-                DialogInput.numberRange("max_active", DialogIcon.SETTINGS.label("Running at Once"), 1, 10)
+                DialogInput.numberRange("cooldown", DialogIcon.REFRESH.label("Wait Between Sabotages"), 0, 600)
+                        .initial((float) service.cooldownSeconds()).step(10f).width(WIDE).labelFormat("%s: %ss").build(),
+                DialogInput.numberRange("max_active", DialogIcon.SETTINGS.label("Sabotages at Once"), 1, 10)
                         .initial((float) service.maxActive()).step(1f).width(WIDE).build());
         List<ActionButton> buttons = new ArrayList<>();
-        buttons.add(dialogs.button(player, DialogIcon.SETTINGS.label("Choose Sabotages", TEXT), DialogText.muted("Pick which sabotages hackers can use."), true, WIDE,
+        buttons.add(dialogs.button(player, DialogIcon.SETTINGS.label("Choose Sabotages", TEXT), DialogText.muted("Pick which sabotages hackers can use."), true, NAV,
                 (p, view) -> { save(view); choose(p, back); }));
-        buttons.add(dialogs.button(player, DialogIcon.SKULL.label("Start One Now", TEXT), DialogText.muted("Trigger a sabotage yourself."), true, WIDE,
+        buttons.add(dialogs.button(player, DialogIcon.SKULL.label("Start One Now", TEXT), DialogText.muted("Trigger a sabotage yourself."), true, NAV,
                 (p, view) -> { save(view); force(p, back); }));
-        if (!service.active().isEmpty()) buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("End All Sabotages", DANGER), null, true, WIDE,
+        if (!service.active().isEmpty()) buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("End All", DANGER), DialogText.muted("Stop every running sabotage."), true, NAV,
                 (p, view) -> { save(view); plugin.getSabotage().endAll(true); settings(p, back); }));
         Dialogs.navigationRow(buttons,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)),
@@ -103,12 +103,30 @@ public final class SabotageDialogs {
         Component running = service.active().isEmpty() ? DialogText.muted("None running.")
                 : DialogText.detail("Running", String.join(", ", service.active().values().stream().map(a -> a.sabotage().name()).toList()));
         dialogs.show(player, "Sabotage Settings", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("Hackers trigger sabotages from /hacks while an event is running."), running), 320)), inputs, buttons, 1, NAV, null);
+                DialogText.muted("Hackers trigger sabotages from /hacks while an event is running."), running), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private void save(DialogResponseView view) {
-        plugin.getSabotage().configure(bool(view, "enabled"), bool(view, "affects_hackers"), Dialogs.number(view, "duration", 0, 600),
-                Dialogs.number(view, "uses", 0, 10), Dialogs.number(view, "cooldown", 0, 300), Dialogs.number(view, "max_active", 1, 10), bool(view, "reveal"));
+        int duration;
+        try { duration = Integer.parseInt(Dialogs.text(view, "duration")); }
+        catch (NumberFormatException invalid) { duration = plugin.getSabotage().durationSeconds(); }
+        plugin.getSabotage().configure(bool(view, "enabled"), bool(view, "affects_hackers"), duration,
+                Dialogs.number(view, "uses", 0, 20), Dialogs.number(view, "cooldown", 0, 600), Dialogs.number(view, "max_active", 1, 10), bool(view, "reveal"));
+    }
+
+    private static final int[] LENGTHS = {0, 30, 60, 120, 180, 300, 600, 900, 1800};
+
+    private static DialogInput durationInput(int current) {
+        List<Integer> lengths = new ArrayList<>(Arrays.stream(LENGTHS).boxed().toList());
+        if (!lengths.contains(current)) { lengths.add(current); lengths.sort(Integer::compare); }
+        return DialogInput.singleOption("duration", DialogIcon.CLOCK.label("Each Sabotage Lasts"), lengths.stream()
+                .map(seconds -> Dialogs.option(Integer.toString(seconds), seconds == 0 ? "The whole event" : length(seconds), seconds == current)).toList()).width(WIDE).build();
+    }
+
+    private static String length(int seconds) {
+        if (seconds % 60 != 0) return seconds + " seconds";
+        int minutes = seconds / 60;
+        return minutes + (minutes == 1 ? " minute" : " minutes");
     }
 
     private void choose(Player player, Consumer<Player> back) {

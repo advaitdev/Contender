@@ -123,7 +123,12 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     @Override public boolean started() { return state.ordinal() >= State.COUNTDOWN.ordinal(); }
     @Override public boolean finished() { return state == State.FINISHED || state == State.CANCELLED; }
     @Override public boolean cancelled() { return state == State.CANCELLED; }
-    @Override public boolean involves(UUID player) { return roster.containsKey(player); }
+    @Override public boolean involves(UUID player) {
+        Participant participant = roster.get(player);
+        if (participant == null || participant.status == Status.WITHDRAWN) return false;
+        // Once the game is under way, someone who went back to the lobby is no longer part of it.
+        return !started() || finished() || plugin.getRegistry().owner(player) == this || Bukkit.getPlayer(player) == null;
+    }
     @Override public String statusText() {
         return switch (state) {
             case READY -> "Ready"; case PREPARING -> "Preparing"; case COUNTDOWN -> "Starting";
@@ -162,9 +167,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         if (state == State.RUNNING && participant.status == Status.PLAYING) {
             broadcast(plugin.getNameTagManager().displayName(player).append(Msg.text(" left the game.", DialogPalette.WARNING)));
             playerLeft(participant);
-        } else if (state == State.COUNTDOWN && participant.status == Status.PLAYING) {
-            participant.status = Status.OUT;
         }
+        // During the countdown nothing changes yet: they can rejoin, or the game handles it when play starts.
     }
 
     @Override public void handleJoin(Player player) {
@@ -175,6 +179,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
             plugin.getSnapshots().restoreToLobby(player);
             return;
         }
+        // Back before the countdown ended: they're still where they spawned.
+        if (state == State.COUNTDOWN && participant.status == Status.PLAYING) return;
         playerReturned(player, participant);
     }
 
@@ -255,6 +261,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         List<Player> present = new ArrayList<>();
         for (Player player : players) {
             if (!player.isOnline() || player.isDead()) continue;
+            // Withdrawn while the arena or course was being prepared.
+            if (roster.get(player.getUniqueId()).status == Status.WITHDRAWN) continue;
             if (plugin.getRegistry().isWatching(player.getUniqueId())) plugin.getSpectate().stop(player.getUniqueId(), false);
             plugin.getRegistry().claim(player.getUniqueId(), this, ActivityRegistry.Involvement.PLAYING);
             plugin.getSnapshots().capture(player);
@@ -271,12 +279,20 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         plugin.getStages().refreshDisplays();
         countdown(countdownSeconds(), () -> {
             state = State.RUNNING;
+            // Anyone who disconnected during the countdown is handled by the game's own rules now.
+            for (Participant participant : List.copyOf(roster.values())) {
+                if (participant.status == Status.PLAYING && Bukkit.getPlayer(participant.id) == null) playerLeft(participant);
+            }
+            if (state != State.RUNNING) return;
             plugin.getStages().started(this);
             Set<UUID> audience = audience();
             Msg.actionBar(audience, Component.empty());
             Msg.title(audience, Component.text("Go!", plugin.getThemes().current().primary()), Component.empty(), 0, 16, 6);
             Sounds.GO.play(audience);
             begin();
+            if (state != State.RUNNING) return;
+            checkEnd();
+            if (state != State.RUNNING) return;
             tasks.repeat(20, 20, () -> {
                 if (state != State.RUNNING) return;
                 tick();
@@ -287,7 +303,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     }
 
     /** Shows a countdown on the action bar, with big numbers for the last three seconds. */
-    protected void countdown(int seconds, Runnable then) {
+    protected org.bukkit.scheduler.BukkitTask countdown(int seconds, Runnable then) {
         int[] left = {seconds};
         org.bukkit.scheduler.BukkitTask[] task = new org.bukkit.scheduler.BukkitTask[1];
         task[0] = tasks.repeat(0, 20, () -> {
@@ -302,6 +318,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
                 if (now <= 5) Sounds.TICK.play(audience);
             }
         });
+        return task[0];
     }
 
     /** Ends the game normally: shows the results, then returns everyone after a short celebration. */
@@ -318,6 +335,12 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     /** Stops immediately without a celebration. Results so far are kept. */
     public void cancel(String reason) {
         if (state == State.CANCELLED && closed) return;
+        // Already over: just skip the celebration and keep the result.
+        if (state == State.FINISHED) {
+            if (tasks != null) tasks.cancelAll();
+            close();
+            return;
+        }
         boolean wasLive = !closed;
         state = State.CANCELLED;
         if (tasks != null) tasks.cancelAll();
@@ -387,7 +410,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     public void withdraw(UUID player) {
         Participant participant = roster.get(player);
         if (participant == null || finished()) return;
-        participant.status = Status.WITHDRAWN;
+        // Someone who is already out (or done) keeps their result; they're only leaving to the lobby.
+        if (participant.status == Status.PLAYING || participant.status == Status.WAITING) participant.status = Status.WITHDRAWN;
         if (plugin.getRegistry().owner(player) == this) {
             plugin.getRegistry().release(player, this);
             Player online = Bukkit.getPlayer(player);

@@ -32,7 +32,8 @@ public final class MinigameService extends Module {
     }
 
     @Override protected void onDisable() {
-        if (current != null && !current.finished() && current.state() != Minigame.State.READY) current.cancel("The server is stopping.");
+        // A finished game still in its celebration is closed too, so its players get their items back.
+        if (current != null && current.state() != Minigame.State.READY) current.cancel("The server is stopping.");
         types.values().forEach(type -> { if (type instanceof AutoCloseable closeable) { try { closeable.close(); } catch (Exception ignored) { } } });
     }
 

@@ -92,10 +92,10 @@ public final class SabotageService extends Module implements StageService.Listen
     public boolean enabled() { return config.getBoolean("enabled"); }
     public boolean affectsHackers() { return config.getBoolean("affects-hackers"); }
     /** 0 means until the event ends. */
-    public int durationSeconds() { return Math.max(0, config.getInt("duration-seconds")); }
-    public int usesPerHacker() { return Math.max(0, config.getInt("uses-per-hacker")); }
-    public int cooldownSeconds() { return Math.max(0, config.getInt("cooldown-seconds")); }
-    public int maxActive() { return Math.max(1, config.getInt("max-active")); }
+    public int durationSeconds() { return Math.clamp(config.getInt("duration-seconds"), 0, 3600); }
+    public int usesPerHacker() { return Math.clamp(config.getInt("uses-per-hacker"), 0, 20); }
+    public int cooldownSeconds() { return Math.clamp(config.getInt("cooldown-seconds"), 0, 600); }
+    public int maxActive() { return Math.clamp(config.getInt("max-active"), 1, 10); }
     public boolean revealHacker() { return config.getBoolean("reveal-hacker"); }
     public boolean allowed(String id) { return config.getStringList("allowed").contains(id); }
 

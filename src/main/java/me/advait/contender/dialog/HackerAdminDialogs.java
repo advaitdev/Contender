@@ -121,8 +121,8 @@ public final class HackerAdminDialogs {
             }));
         }
         Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", MUTED), null, true, HALF, (p, view) -> choose(p, chosen, page - 1)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", ACCENT), null, true, HALF, (p, view) -> choose(p, chosen, page + 1)) : null, HALF);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, true, HALF, (p, view) -> choose(p, chosen, page - 1)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, true, HALF, (p, view) -> choose(p, chosen, page + 1)) : null, HALF);
         Dialogs.navigationRow(buttons,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, HALF, (p, view) -> open(p)),
                 dialogs.button(player, DialogIcon.SAVE.label("Save", ACCENT), DialogText.muted("Everyone online sees whether they were picked."), true, HALF, (p, view) -> {

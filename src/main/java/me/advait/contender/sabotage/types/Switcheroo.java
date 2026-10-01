@@ -31,17 +31,31 @@ public final class Switcheroo implements Sabotage {
         for (Duel duel : context.plugin().getDuels().duels()) {
             if (duel.phase() != Duel.Phase.FIGHTING || duel.teams().size() < 2) continue;
             Player first = pick(duel.teams().get(0), context), second2 = pick(duel.teams().get(1), context);
-            if (first == null || second2 == null) continue;
-            Location a = first.getLocation(), b = second2.getLocation();
-            Vector va = first.getVelocity(), vb = second2.getVelocity();
-            first.teleport(b);
-            second2.teleport(a);
-            first.setVelocity(vb);
-            second2.setVelocity(va);
-            for (Player player : List.of(first, second2)) {
-                Msg.title(player, Msg.text("Switcheroo!", DialogPalette.WARNING), Component.empty(), 0, 20, 5);
-                Sounds.WHOOSH.play(player);
+            if (first != null && second2 != null) swap(first, second2);
+        }
+        // Minigames have no teams: shuffle everyone still in play and swap them in pairs.
+        var game = context.plugin().getMinigames().current();
+        if (game != null && game.state() == me.advait.contender.minigame.Minigame.State.RUNNING) {
+            List<Player> pool = new ArrayList<>();
+            for (Player player : game.playing()) {
+                if (player.getGameMode() != org.bukkit.GameMode.SPECTATOR && !player.isDead() && context.affects(player)) pool.add(player);
             }
+            java.util.Collections.shuffle(pool);
+            for (int i = 0; i + 1 < pool.size(); i += 2) swap(pool.get(i), pool.get(i + 1));
+        }
+    }
+
+    private static void swap(Player first, Player second) {
+        if (!first.getWorld().equals(second.getWorld())) return;
+        Location a = first.getLocation(), b = second.getLocation();
+        Vector va = first.getVelocity(), vb = second.getVelocity();
+        first.teleport(b);
+        second.teleport(a);
+        first.setVelocity(vb);
+        second.setVelocity(va);
+        for (Player player : List.of(first, second)) {
+            Msg.title(player, Msg.text("Switcheroo!", DialogPalette.WARNING), Component.empty(), 0, 20, 5);
+            Sounds.WHOOSH.play(player);
         }
     }
 

@@ -76,13 +76,8 @@ public final class Dialogs {
         return button(owner, icon, label, true, action);
     }
     public ActionButton button(Player owner, DialogIcon icon, String label, boolean admin, BiConsumer<Player, DialogResponseView> action) {
-        var color = switch (icon) {
-            case SAVE, NEXT -> DialogPalette.ACCENT;
-            case CLOSE -> DialogPalette.DANGER;
-            case BACK -> DialogPalette.MUTED;
-            default -> DialogPalette.TEXT;
-        };
-        return button(owner, icon.label(label, color), admin, action);
+        // A plain control. Callers that need gold, muted or coral pass the color with the label.
+        return button(owner, icon.label(label, DialogPalette.TEXT), admin, action);
     }
     public ActionButton button(Player owner, Component label, boolean admin, BiConsumer<Player, DialogResponseView> action) {
         return button(owner, label, null, admin, action);

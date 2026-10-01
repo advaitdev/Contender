@@ -59,7 +59,7 @@ The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leade
 
 ## Votes
 
-`/startvote` opens the vote form, or start one directly with `/startvote <seconds> [live] [quick] [eliminate]`. Every candidate gets a number above their head, and players vote with `/vote <number>` or the vote menu. Nobody can vote for themselves.
+**Start a Vote** in `/tournament` (or `/startvote`) opens the vote form, or start one directly with `/startvote <seconds> [live] [quick] [eliminate]`. Every candidate gets a number above their head, and players vote with `/vote <number>` or the vote menu. Nobody can vote for themselves.
 
 - `live` shows running counts.
 - `quick` skips the reveal and posts the result in chat.
@@ -69,7 +69,7 @@ Set the reveal spot with `/setvotestage`. When the vote closes, candidates gathe
 
 ## Interviews
 
-Set the two marks once with `/setinterviewerposition` and `/setintervieweeposition`. `/interview <player>` brings you and that player to them; `/uninterview` sends both back where they were.
+Set the two marks once with `/setinterviewerposition` and `/setintervieweeposition`. **Interview a Player** in `/tournament` (or `/interview <player>`) brings you and that player to them. **End Interview** (or `/uninterview`) sends both back where they were.
 
 ## Hackers
 

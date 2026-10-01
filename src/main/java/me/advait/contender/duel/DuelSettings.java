@@ -16,7 +16,7 @@ public record DuelSettings(ArenaMap map, Kit kit, int winsNeeded, int sortSecond
         java.util.Objects.requireNonNull(map, "map");
         java.util.Objects.requireNonNull(kit, "kit");
         if (winsNeeded < 1 || winsNeeded > 8) throw new IllegalArgumentException("Choose 1 to 8 round wins.");
-        if (sortSeconds < 3 || sortSeconds > 60) throw new IllegalArgumentException("Choose a sorting time from 3 to 60 seconds.");
+        if (sortSeconds < 3 || sortSeconds > 60) throw new IllegalArgumentException("Choose 3 to 60 seconds to arrange items.");
         if (reconnectSeconds < 0 || reconnectSeconds > 600) throw new IllegalArgumentException("Choose a reconnect time from 0 to 600 seconds.");
     }
 }

@@ -5,7 +5,6 @@ import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.Contender;
 import me.advait.contender.role.PlayerRole;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import java.util.*;
@@ -21,7 +20,7 @@ public final class RoleDialogs {
         for (int i = page * 8; i < Math.min(page * 8 + 8, players.size()); i++) {
             Player target = players.get(i);
             buttons.add(dialogs.button(player, Component.textOfChildren(me.advait.contender.util.StringUtil.getPlayerHead(target),
-                    Component.text(" " + target.getName(), NamedTextColor.WHITE),
+                    Component.text(" " + target.getName(), DialogPalette.TEXT),
                     DialogText.muted(" · " + plugin.getRoleManager().getRole(target.getUniqueId()).label())), true,
                     (p, view) -> edit(p, target.getUniqueId(), target.getName())));
         }

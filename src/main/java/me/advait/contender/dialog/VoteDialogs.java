@@ -71,8 +71,8 @@ public final class VoteDialogs {
             }));
         }
         Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", MUTED), null, false, NAV, (p, view) -> open(p, page - 1, manage)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", ACCENT), null, false, NAV, (p, view) -> open(p, page + 1, manage)) : null, NAV);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, false, NAV, (p, view) -> open(p, page - 1, manage)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, false, NAV, (p, view) -> open(p, page + 1, manage)) : null, NAV);
         if (director) {
             Dialogs.navigationRow(buttons,
                     manage ? dialogs.button(player, DialogIcon.BACK.label("Done", MUTED), null, true, NAV, (p, view) -> open(p, page, false))
@@ -110,7 +110,7 @@ public final class VoteDialogs {
                 toggle("eliminate", DialogIcon.SKULL, "Voted-Out Player", false, "Becomes a spectator", "Stays a contestant"));
         List<ActionButton> buttons = new ArrayList<>();
         Dialogs.navigationRow(buttons,
-                dialogs.button(player, DialogIcon.BACK.label("Close", MUTED), null, true, NAV, (p, view) -> p.closeDialog()),
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).open(p)),
                 dialogs.button(player, DialogIcon.NEXT.label("Start Vote", ACCENT), null, true, NAV, (p, view) -> {
                     plugin.getVotes().start(new VoteService.Options(Dialogs.number(view, "seconds", 10, 600),
                             bool(view, "live"), bool(view, "ceremony"), bool(view, "eliminate")));

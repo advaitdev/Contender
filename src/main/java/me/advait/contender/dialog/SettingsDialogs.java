@@ -42,25 +42,28 @@ public final class SettingsDialogs {
     }
     private static DialogInput colors(String label, NamedTextColor selected) {
         return DialogInput.singleOption("color", Component.text(label), NamedTextColor.NAMES.keys().stream()
-                .map(name -> Dialogs.option(name, name.replace('_', ' '), NamedTextColor.NAMES.value(name).equals(selected))).toList()).build();
+                .map(name -> Dialogs.option(name, name.replace('_', ' '), NamedTextColor.NAMES.value(name).equals(selected))).toList()).width(300).build();
     }
     private void style(Player player, PlayerRole role) { style(player, role, RoleStyle.read(plugin.getConfig(), role)); }
     private void style(Player player, PlayerRole role, RoleStyle draft) {
         List<DialogInput> inputs = List.of(Dialogs.text("prefix", "Prefix", draft.prefix(), 32), colors("Prefix and name color", draft.color()));
         List<DialogBody> body = List.of(DialogBody.plainMessage(DialogText.muted(
-                "Applies to everyone with this role.\nLeave the prefix empty to show only their name.\n\nShow preview to see your edits. Save applies them."), 440),
+                "Applies to everyone with this role.\nLeave the prefix empty to show only their name.\n\nShow Preview checks your edits. Save applies them."), 440),
                 DialogBody.plainMessage(DialogText.heading("Nametag preview")),
                 DialogBody.plainMessage(draft.displayName(player.getName())));
-        dialogs.show(player, role.label() + " nametags", body, inputs,
-                List.of(dialogs.button(player, DialogIcon.PREVIEW, "Show preview", (p, view) -> style(p, role, roleDraft(view))),
-                        dialogs.button(player, DialogIcon.SAVE, "Save", (p, view) -> {
-                            roleDraft(view).write(plugin.getConfig(), role);
-                            plugin.saveConfig();
-                            plugin.getNameTagManager().refresh();
-                            plugin.getTabManager().refresh();
-                            Dialogs.tell(p, role.label() + " nametags updated.");
-                            open(p);
-                        }), dialogs.button(player, DialogIcon.BACK, "Back", (p, view) -> open(p))));
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogs.button(player, DialogIcon.PREVIEW.label("Show Preview", DialogPalette.TEXT), null, true, 150, (p, view) -> style(p, role, roleDraft(view))));
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", DialogPalette.MUTED), null, true, 150, (p, view) -> open(p)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save", DialogPalette.ACCENT), null, true, 150, (p, view) -> {
+                    roleDraft(view).write(plugin.getConfig(), role);
+                    plugin.saveConfig();
+                    plugin.getNameTagManager().refresh();
+                    plugin.getTabManager().refresh();
+                    Dialogs.tell(p, role.label() + " nametags updated.");
+                    open(p);
+                }), 150);
+        dialogs.show(player, role.label() + " Nametags", body, inputs, buttons, 2, 150, null);
     }
     static RoleStyle roleDraft(DialogResponseView view) {
         return new RoleStyle(Dialogs.text(view, "prefix"), RoleStyle.parseColor(Dialogs.text(view, "color")));
@@ -79,14 +82,15 @@ public final class SettingsDialogs {
                 "Leave the title blank to use the tournament name.\nPreview checks your edits. Save applies them for everyone."), 320),
                 DialogBody.plainMessage(DialogText.lines(DialogIcon.PREVIEW.label("Title Preview", DialogPalette.ACCENT),
                         draft.header(tournament == null ? null : tournament.name())), 320));
-        dialogs.show(player, "Tab Title", body, inputs,
-                List.of(dialogs.button(player, DialogIcon.PREVIEW.label("Show Preview"), null, true, 150,
-                                (p, view) -> tab(p, tabDraft(view), back)),
-                        dialogs.button(player, DialogIcon.SAVE.label("Save", DialogPalette.ACCENT), null, true, 150, (p, view) -> {
-                            tabDraft(view).write(plugin.getConfig()); plugin.saveConfig(); plugin.getTabManager().refresh();
-                            Dialogs.tell(p, "Tab settings updated."); back.accept(p);
-                        })), 2, 150, dialogs.button(player, DialogIcon.BACK.label("Back", DialogPalette.MUTED), null, true, 150,
-                        (p, view) -> back.accept(p)));
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogs.button(player, DialogIcon.PREVIEW.label("Show Preview"), null, true, 150, (p, view) -> tab(p, tabDraft(view), back)));
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", DialogPalette.MUTED), null, true, 150, (p, view) -> back.accept(p)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save", DialogPalette.ACCENT), null, true, 150, (p, view) -> {
+                    tabDraft(view).write(plugin.getConfig()); plugin.saveConfig(); plugin.getTabManager().refresh();
+                    Dialogs.tell(p, "Tab settings updated."); back.accept(p);
+                }), 150);
+        dialogs.show(player, "Tab Title", body, inputs, buttons, 2, 150, null);
     }
     public void board(Player player) { board(player, this::open); }
     public void board(Player player, Consumer<Player> back) {

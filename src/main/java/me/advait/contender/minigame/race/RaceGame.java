@@ -77,6 +77,8 @@ public final class RaceGame extends Minigame {
             if (seen.add(key)) loads.add(world.getChunkAtAsync(point));
         }
         return CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new)).thenRun(() -> {
+            // Cancelled while the chunks loaded: cleanup has already run, so leave nothing behind.
+            if (state != State.PREPARING) return;
             for (var load : loads) { Chunk chunk = load.join(); if (chunk.addPluginChunkTicket(plugin)) tickets.add(chunk); }
             spawnMobs();
         });

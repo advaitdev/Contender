@@ -61,9 +61,9 @@ public final class BracketDialogs {
                 (p, response) -> new SettingsDialogs(plugin).tab(p)));
         else buttons.add(button(player, DialogIcon.REFRESH, "Refresh", TEXT, (p, response) -> open(p)));
         if (layout.pages() > 1) {
-            Dialogs.navigationRow(buttons, layout.page() > 0 ? button(player, DialogIcon.BACK, "Previous", MUTED, (p, response) -> {
+            Dialogs.navigationRow(buttons, layout.page() > 0 ? button(player, DialogIcon.BACK, "Previous", TEXT, (p, response) -> {
                 sameEvent(event.id()); manager.setView(p, new BracketLayout.View(view.round(), layout.page() - 1, view.standings())); open(p);
-            }) : null, layout.page() + 1 < layout.pages() ? button(player, DialogIcon.NEXT, "Next", ACCENT, (p, response) -> {
+            }) : null, layout.page() + 1 < layout.pages() ? button(player, DialogIcon.NEXT, "Next", TEXT, (p, response) -> {
                 sameEvent(event.id()); manager.setView(p, new BracketLayout.View(view.round(), layout.page() + 1, view.standings())); open(p);
             }) : null, 150);
         }
@@ -107,8 +107,8 @@ public final class BracketDialogs {
             return;
         }
         if (columns > 1) Dialogs.navigationRow(buttons,
-                selected > 0 ? button(player, DialogIcon.BACK, "Previous", MUTED, (p, response) -> preview(p, eventId, selected - 1)) : null,
-                selected + 1 < columns ? button(player, DialogIcon.NEXT, "Next", ACCENT, (p, response) -> preview(p, eventId, selected + 1)) : null, 150);
+                selected > 0 ? button(player, DialogIcon.BACK, "Previous", TEXT, (p, response) -> preview(p, eventId, selected - 1)) : null,
+                selected + 1 < columns ? button(player, DialogIcon.NEXT, "Next", TEXT, (p, response) -> preview(p, eventId, selected + 1)) : null, 150);
         dialogs.show(player, event.hasRounds() ? "Bracket Preview" : "Leaderboard", List.of(DialogBody.plainMessage(body, 450)), List.of(), buttons, 2, 150, null);
     }
 }

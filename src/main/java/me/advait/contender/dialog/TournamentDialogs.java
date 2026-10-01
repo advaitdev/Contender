@@ -111,6 +111,16 @@ public final class TournamentDialogs {
             if (!canCreate) buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate", TEXT,
                     "Watch a match in progress.", p -> new SpectateDialogs(plugin).open(p)));
         }
+        boolean voting = plugin.getVotes().isActive();
+        buttons.add(menuAction(player, DialogIcon.STAR, voting ? "Vote in Progress" : "Start a Vote", TEXT,
+                voting ? "See the votes, remove players or end it." : "Everyone votes someone out.", p -> {
+                    if (plugin.getVotes().isActive()) new VoteDialogs(plugin).open(p); else new VoteDialogs(plugin).start(p);
+                }));
+        boolean interviewing = plugin.getInterviews().active();
+        buttons.add(menuAction(player, DialogIcon.BELL, interviewing ? "End Interview" : "Interview a Player", TEXT,
+                interviewing ? "Send everyone back where they were." : "Bring a player to the interview room.", p -> {
+                    if (plugin.getInterviews().active()) { plugin.getInterviews().end(); open(p); } else interviewee(p);
+                }));
         buttons.add(menuAction(player, DialogIcon.SETTINGS, "Setup Tools", TEXT,
                 "Maps, kits, minigames, displays and the lobby.", this::tools));
         buttons.add(menuAction(player, DialogIcon.SKULL, "Hacker Controls", TEXT,
@@ -144,6 +154,27 @@ public final class TournamentDialogs {
             buttons.add(menuAction(player, type.icon(), type.name(), TEXT, type.description(), type::openSetup));
         }
         menu(player, "Minigames", DialogText.muted(buttons.isEmpty() ? "No minigame needs setup." : "Set up a minigame before creating it."), buttons, this::tools);
+    }
+    private void interviewee(Player player) {
+        var interviews = plugin.getInterviews();
+        if (interviews.position("interviewee") == null || interviews.position("interviewer") == null) {
+            menu(player, "Interview a Player", DialogText.muted("Set both spots in the interview room first."), List.of(
+                    menuAction(player, DialogIcon.BELL, "Interview Room", ACCENT, "Set where you and the player stand.", this::interview)), this::open);
+            return;
+        }
+        List<ActionButton> buttons = new ArrayList<>();
+        for (Player target : Bukkit.getOnlinePlayers()) {
+            if (target.equals(player)) continue;
+            boolean free = plugin.getRegistry().isFree(target.getUniqueId());
+            Component label = Component.textOfChildren(me.advait.contender.util.StringUtil.getPlayerHead(target), text(" " + target.getName(), free ? TEXT : MUTED));
+            buttons.add(dialogs.button(player, label, DialogText.muted(free ? "Bring them to the interview room." : "Busy right now."), true, INPUT_WIDTH, (p, response) -> {
+                Player chosen = Bukkit.getPlayer(target.getUniqueId());
+                if (chosen == null) throw new IllegalStateException(target.getName() + " left.");
+                plugin.getInterviews().start(chosen, p);
+                p.closeDialog();
+            }));
+        }
+        menu(player, "Interview a Player", DialogText.muted(buttons.isEmpty() ? "Nobody else is online." : "Choose who to interview. You both go back afterwards with /uninterview."), buttons, this::open);
     }
     private void interview(Player player) {
         var interviews = plugin.getInterviews();
@@ -263,7 +294,7 @@ public final class TournamentDialogs {
                 .initial((float) (draft.bracketRounds() == 0 ? full : Math.min(draft.bracketRounds(), full))).step(1f).width(INPUT_WIDTH).build());
         inputs.addAll(List.of(
                 DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8).initial((float) (draft.bestOf() / 2 + 1)).step(1f).width(INPUT_WIDTH).build(),
-                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Sorting Time (seconds)"), 5, 60).initial((float) draft.delay()).step(1f).width(INPUT_WIDTH).build(),
+                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items (seconds)"), 5, 60).initial((float) draft.delay()).step(1f).width(INPUT_WIDTH).build(),
                 DialogInput.numberRange("parallel", DialogIcon.TOURNAMENT.label("Matches at Once"), 1, 100).initial((float) draft.parallel()).step(1f).width(INPUT_WIDTH).build(),
                 DialogInput.singleOption("schedule", DialogIcon.BOARD.label("Schedule"), List.of(
                         Dialogs.option("free", "As arenas become free", !draft.waitForRound()),
@@ -300,7 +331,7 @@ public final class TournamentDialogs {
                         DialogText.detail("Matches", Integer.toString(count / 2 * draft.bracketRounds())),
                         DialogText.detail("Scoring", "1 point per match won"),
                         DialogText.detail("Win condition", "First to " + (draft.bestOf() / 2 + 1) + " round wins"),
-                        DialogText.detail("Sorting", draft.delay() + " seconds"), DialogText.detail("Matches at once", Integer.toString(draft.parallel())),
+                        DialogText.detail("Time to arrange items", draft.delay() + " seconds"), DialogText.detail("Matches at once", Integer.toString(draft.parallel())),
                         DialogText.detail("Schedule", draft.waitForRound() ? "Finish each bracket round" : "As arenas become free")))),
                 body(DialogText.muted("Create saves the bracket. Start it from the tournament menu when you are ready.")));
         form(player, 4, contents, List.of(),
@@ -358,8 +389,8 @@ public final class TournamentDialogs {
         }
         // Match menus use two columns so paging remains on its own paired row.
         Dialogs.navigationRow(buttons,
-                page > 0 ? action(player, DialogIcon.BACK, "Previous Page", MUTED, 220, "View earlier matches.", (p, view) -> matches(p, id, selectedPage - 1)) : null,
-                page + 1 < pages ? action(player, DialogIcon.NEXT, "Next Page", ACCENT, 220, "View later matches.", (p, view) -> matches(p, id, selectedPage + 1)) : null);
+                page > 0 ? action(player, DialogIcon.BACK, "Previous Page", TEXT, 220, "View earlier matches.", (p, view) -> matches(p, id, selectedPage - 1)) : null,
+                page + 1 < pages ? action(player, DialogIcon.NEXT, "Next Page", TEXT, 220, "View later matches.", (p, view) -> matches(p, id, selectedPage + 1)) : null);
         dialogs.show(player, "Matches", List.of(body(text(tournament.name(), TEXT)), body(DialogText.page(page + 1, pages))), List.of(), buttons, 2, NAV_WIDTH,
                 nav(player, DialogIcon.BACK, "Back", MUTED, "Return to the tournament menu.", (p, response) -> open(p)));
     }

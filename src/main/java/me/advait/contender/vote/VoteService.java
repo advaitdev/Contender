@@ -124,7 +124,13 @@ public final class VoteService extends Module {
             reveal.play();
         } else {
             announce(closing);
-            tasks.later(200, badges::clear);
+            List<VoteSession.Candidate> leaders = closing.leaders();
+            if (options.eliminate() && leaders.size() == 1) {
+                try { plugin.getRoleManager().setRole(leaders.getFirst().id(), PlayerRole.SPECTATOR); }
+                catch (RuntimeException failure) { plugin.getLogger().warning("Could not make " + leaders.getFirst().name() + " a spectator: " + failure.getMessage()); }
+            }
+            // Leave the final counts up for a moment, unless a new vote has started by then.
+            tasks.later(200, () -> { if (session == null && reveal == null) badges.clear(); });
         }
     }
 

@@ -27,16 +27,23 @@ class LagDelayTest {
         channel.finishAndReleaseAll();
     }
 
-    @Test void removingTheHandlerStillDeliversHeldPackets() {
+    @Test void removingTheHandlerReleasesHeldPacketsFirst() {
         EmbeddedChannel channel = new EmbeddedChannel();
         channel.pipeline().addLast("lag", new LagInjector.Delay(20));
         channel.writeOutbound("held");
+        channel.writeInbound("held in");
         channel.pipeline().remove("lag");
+        channel.writeOutbound("after");
+        channel.writeInbound("after in");
+        assertEquals("held", channel.readOutbound());
+        assertEquals("after", channel.readOutbound());
+        assertEquals("held in", channel.readInbound());
+        assertEquals("after in", channel.readInbound());
+        // The timers that would have released them find nothing left to send.
         channel.advanceTimeBy(25, TimeUnit.MILLISECONDS);
         channel.runScheduledPendingTasks();
-        assertEquals("held", channel.readOutbound());
-        channel.writeOutbound("direct");
-        assertEquals("direct", channel.readOutbound());
+        assertNull(channel.readOutbound());
+        assertNull(channel.readInbound());
         channel.finishAndReleaseAll();
     }
 }

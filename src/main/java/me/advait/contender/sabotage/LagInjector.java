@@ -6,8 +6,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import org.bukkit.entity.Player;
 
+import io.netty.util.ReferenceCountUtil;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.channels.ClosedChannelException;
+import java.util.ArrayDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -73,17 +77,46 @@ public final class LagInjector {
         }
     }
 
-    /** Delays every packet by the same amount, so their order never changes. */
+    /**
+     * Delays every packet by the same amount, so their order never changes. Packets still held when the
+     * handler is removed are released at once, before anything sent afterwards.
+     */
     static final class Delay extends ChannelDuplexHandler {
+        private record Write(Object message, ChannelPromise promise) { }
         private final long millis;
+        // Only touched on the channel's event loop.
+        private final ArrayDeque<Object> reads = new ArrayDeque<>();
+        private final ArrayDeque<Write> writes = new ArrayDeque<>();
+
         Delay(long millis) { this.millis = millis; }
 
         @Override public void channelRead(ChannelHandlerContext context, Object message) {
-            context.executor().schedule(() -> context.fireChannelRead(message), millis, TimeUnit.MILLISECONDS);
+            reads.add(message);
+            context.executor().schedule(() -> {
+                Object next = reads.poll();
+                if (next != null) context.fireChannelRead(next);
+            }, millis, TimeUnit.MILLISECONDS);
         }
 
         @Override public void write(ChannelHandlerContext context, Object message, ChannelPromise promise) {
-            context.executor().schedule(() -> context.writeAndFlush(message, promise), millis, TimeUnit.MILLISECONDS);
+            writes.add(new Write(message, promise));
+            context.executor().schedule(() -> {
+                Write next = writes.poll();
+                if (next != null) context.writeAndFlush(next.message(), next.promise());
+            }, millis, TimeUnit.MILLISECONDS);
+        }
+
+        @Override public void handlerRemoved(ChannelHandlerContext context) {
+            boolean open = context.channel().isActive();
+            for (Object read; (read = reads.poll()) != null; ) {
+                if (open) context.fireChannelRead(read); else ReferenceCountUtil.release(read);
+            }
+            boolean wrote = false;
+            for (Write write; (write = writes.poll()) != null; ) {
+                if (open) { context.write(write.message(), write.promise()); wrote = true; }
+                else { ReferenceCountUtil.release(write.message()); write.promise().tryFailure(new ClosedChannelException()); }
+            }
+            if (wrote) context.flush();
         }
     }
 }

@@ -72,7 +72,9 @@ public final class SnapshotStore {
         data.set(key + ".exhaustion", player.getExhaustion());
         data.set(key + ".level", player.getLevel());
         data.set(key + ".exp", player.getExp());
-        data.set(key + ".effects", new ArrayList<>(player.getActivePotionEffects()));
+        // Hidden endless effects belong to running sabotages, which put them back while they last.
+        data.set(key + ".effects", new ArrayList<>(player.getActivePotionEffects().stream()
+                .filter(effect -> !(effect.isInfinite() && !effect.hasIcon() && !effect.hasParticles())).toList()));
         data.set(key + ".flight", player.getAllowFlight());
         data.set(key + ".flying", player.isFlying());
         data.set(key + ".slot", player.getInventory().getHeldItemSlot());

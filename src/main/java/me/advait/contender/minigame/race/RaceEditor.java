@@ -54,6 +54,8 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
     private final Consumer<Player> openSettings;
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final Map<String, List<LivingEntity>> previews = new HashMap<>();
+    // Keeps far-off checkpoints loaded so their preview mobs don't vanish while someone builds.
+    private final Map<String, Set<Chunk>> previewChunks = new HashMap<>();
     private BukkitTask particles;
 
     private static final class Session {
@@ -79,6 +81,8 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
         forceStop("Plugin stopping");
         previews.values().forEach(list -> list.forEach(Entity::remove));
         previews.clear();
+        previewChunks.values().forEach(set -> set.forEach(chunk -> chunk.removePluginChunkTicket(plugin)));
+        previewChunks.clear();
         org.bukkit.event.HandlerList.unregisterAll(this);
     }
 
@@ -112,6 +116,9 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
     // ---- Sessions ------------------------------------------------------------------------------
 
     public void start(Player player, RaceCourse course) {
+        if (plugin.getMinigames().current() instanceof RaceGame game && game.started() && !game.finished() && game.course().id().equals(course.id())) {
+            throw new IllegalStateException("This course is being raced. Edit it after the race.");
+        }
         if (!plugin.getRegistry().isFree(player.getUniqueId()) && plugin.getRegistry().owner(player.getUniqueId()) != this) {
             throw new IllegalStateException("Finish what you're playing or watching first.");
         }
@@ -189,18 +196,23 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
     public void refreshPreview(String courseId) {
         List<LivingEntity> old = previews.remove(courseId);
         if (old != null) old.forEach(Entity::remove);
+        Set<Chunk> held = previewChunks.remove(courseId);
+        if (held != null) held.forEach(chunk -> chunk.removePluginChunkTicket(plugin));
         RaceCourse course = courses.get(courseId);
         if (course == null || course.world() == null || !courseBeingEdited(courseId)) return;
         Theme theme = plugin.getThemes().current();
         List<LivingEntity> spawned = new ArrayList<>();
+        Set<Chunk> chunks = new HashSet<>();
         List<RaceCourse.Checkpoint> points = course.checkpoints();
         for (int i = 0; i < points.size(); i++) {
             Location at = points.get(i).at(course.world());
-            if (!at.isChunkLoaded()) at.getChunk();
+            Chunk chunk = at.getChunk();
+            if (chunks.add(chunk)) chunk.addPluginChunkTicket(plugin);
             spawned.add(RaceMobs.spawn(at, points.get(i).type(), Component.text(course.label(i), i == points.size() - 1 ? theme.primary() : theme.secondary()),
                     PREVIEW + ":" + courseId, true));
         }
         previews.put(courseId, spawned);
+        previewChunks.put(courseId, chunks);
     }
 
     private void drawPaths() {

@@ -76,6 +76,7 @@ public final class GauntletGame extends ArenaGame {
     private final Map<UUID, Integer> best = new HashMap<>();
     private UUID champion, challenger;
     private boolean live, frozen;
+    private org.bukkit.scheduler.BukkitTask fightCountdown;
     private int fought, streak;
 
     GauntletGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit, int totalFights) {
@@ -113,7 +114,7 @@ public final class GauntletGame extends ArenaGame {
         if (state != State.RUNNING) return;
         if (fought >= totalFights) { finish(); return; }
         queue.removeIf(id -> !ready(id));
-        if (champion != null && !ready(champion)) champion = null;
+        if (champion != null && !ready(champion)) { champion = null; streak = 0; }
         if (champion == null) champion = queue.pollFirst();
         challenger = queue.pollFirst();
         if (champion == null || challenger == null) { finish(); return; }
@@ -126,7 +127,9 @@ public final class GauntletGame extends ArenaGame {
         Msg.title(audience(), title, subtitle, 4, 40, 6);
         frozen = true;
         live = true;
-        countdown(3, () -> {
+        fightCountdown = countdown(3, () -> {
+            fightCountdown = null;
+            if (!live || champion == null || challenger == null) return;
             frozen = false;
             Msg.title(Set.of(champion, challenger), Component.text("Fight!", theme.primary()), Component.empty(), 0, 14, 6);
             Sounds.GO.play(audience());
@@ -143,6 +146,7 @@ public final class GauntletGame extends ArenaGame {
     private void conclude(UUID winnerId, UUID loserId) {
         live = false;
         frozen = false;
+        if (fightCountdown != null) { tasks.cancel(fightCountdown); fightCountdown = null; }
         Participant winner = participant(winnerId);
         winner.score++;
         streak = winnerId.equals(champion) ? streak + 1 : 1;
@@ -150,7 +154,7 @@ public final class GauntletGame extends ArenaGame {
         winner.value = (int) winner.score + " wins";
         fought++;
         Player loser = Bukkit.getPlayer(loserId);
-        if (loser != null) {
+        if (loser != null && plugin.getRegistry().owner(loserId) == this) {
             plugin.getDeathEffect().play(loser);
             bench(loser);
         }
@@ -166,6 +170,17 @@ public final class GauntletGame extends ArenaGame {
         }
         plugin.getStages().refreshDisplays();
         tasks.later(60, this::nextFight);
+    }
+
+    @Override public void withdraw(UUID player) {
+        boolean inFight = live && (player.equals(champion) || player.equals(challenger));
+        UUID other = player.equals(champion) ? challenger : champion;
+        super.withdraw(player);
+        queue.remove(player);
+        if (state != State.RUNNING) return;
+        // The fight can't go on without them: the other fighter wins it.
+        if (inFight && other != null) conclude(other, player);
+        else if (player.equals(champion)) { champion = null; streak = 0; }
     }
 
     @Override protected void playerLeft(Participant participant) {

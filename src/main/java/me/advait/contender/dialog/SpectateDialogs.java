@@ -53,8 +53,8 @@ public final class SpectateDialogs {
         else body.add(DialogBody.plainMessage(DialogText.muted("Choose a match to watch. You'll be in Spectator mode."), 320));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
         Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", MUTED), null, false, NAV, (p, view) -> open(p, page - 1)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", ACCENT), null, false, NAV, (p, view) -> open(p, page + 1)) : null, NAV);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, false, NAV, (p, view) -> open(p, page - 1)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, false, NAV, (p, view) -> open(p, page + 1)) : null, NAV);
         Dialogs.navigationRow(buttons,
                 dialogs.button(player, DialogIcon.SPAWN.label("Lobby", TEXT), DialogText.muted("Stop watching and go back."), false, NAV, (p, view) -> {
                     p.closeDialog();

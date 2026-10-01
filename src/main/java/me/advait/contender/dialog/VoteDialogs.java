@@ -71,17 +71,17 @@ public final class VoteDialogs {
             }));
         }
         Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, false, NAV, (p, view) -> open(p, page - 1, manage)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, false, NAV, (p, view) -> open(p, page + 1, manage)) : null, NAV);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, false, CELL, (p, view) -> open(p, page - 1, manage)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, false, CELL, (p, view) -> open(p, page + 1, manage)) : null, CELL);
         if (director) {
             Dialogs.navigationRow(buttons,
-                    manage ? dialogs.button(player, DialogIcon.BACK.label("Done", MUTED), null, true, NAV, (p, view) -> open(p, page, false))
-                            : dialogs.button(player, DialogIcon.SETTINGS.label("Remove Players", TEXT), DialogText.muted("Take someone off the ballot."), true, NAV, (p, view) -> open(p, 0, true)),
-                    dialogs.button(player, DialogIcon.STAR.label("End Vote Now", ACCENT), DialogText.muted("Close voting and show the results."), true, NAV, (p, view) -> {
+                    manage ? dialogs.button(player, DialogIcon.BACK.label("Done", MUTED), null, true, CELL, (p, view) -> open(p, page, false))
+                            : dialogs.button(player, DialogIcon.SETTINGS.label("Remove Players", TEXT), DialogText.muted("Take someone off the ballot."), true, CELL, (p, view) -> open(p, 0, true)),
+                    dialogs.button(player, DialogIcon.STAR.label("End Vote Now", ACCENT), DialogText.muted("Close voting and show the results."), true, CELL, (p, view) -> {
                         require(session);
                         p.closeDialog();
                         plugin.getVotes().end();
-                    }), NAV);
+                    }), CELL);
         }
         long seconds = Math.max(0, (session.endsAt() - System.currentTimeMillis()) / 1000);
         List<DialogBody> body = new ArrayList<>();
@@ -92,7 +92,7 @@ public final class VoteDialogs {
                 : canVote ? "Pick someone's number. Click it again to undo." : "You can watch the vote, but only contestants can vote."), 340));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
         // Escape runs the footer button, so the footer stays a plain Close and Refresh goes in the grid.
-        Dialogs.navigationRow(buttons, null, dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, NAV, (p, view) -> open(p, page, manage)), NAV);
+        Dialogs.navigationRow(buttons, null, dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, CELL, (p, view) -> open(p, page, manage)), CELL);
         dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV, null);
     }
 

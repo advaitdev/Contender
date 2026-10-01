@@ -69,7 +69,13 @@ public final class MinigameDialogs {
         for (Minigame.Participant participant : game.roster()) {
             if (participant.status == Minigame.Status.WITHDRAWN) continue;
             Component label = Component.textOfChildren(StringUtil.getPlayerHead(participant.id), text(" " + participant.name, TEXT),
-                    text("  " + participant.status.name().toLowerCase(java.util.Locale.ROOT), MUTED));
+                    text("  " + switch (participant.status) {
+                        case PLAYING -> "In play";
+                        case OUT -> "Out";
+                        case DONE -> "Done";
+                        case WAITING -> "Waiting";
+                        case WITHDRAWN -> "Withdrawn";
+                    }, MUTED));
             buttons.add(dialogs.button(player, label, DialogText.muted("Withdraw " + participant.name + ". They go back to the lobby."), true, WIDE,
                     (p, view) -> { require(game).withdraw(participant.id); players(p, game); }));
         }

@@ -17,6 +17,9 @@ public final class StringUtil {
 
     /** Dynamic fallback when only a UUID is known. */
     public static Component getPlayerHead(UUID uuid) {
+        // An online player's skin is already known; a bare UUID would show a blank head in dialogs.
+        Player online = org.bukkit.Bukkit.getPlayer(uuid);
+        if (online != null) return getPlayerHead(online);
         return Component.object(ObjectContents.playerHead(uuid))
                 .color(NamedTextColor.WHITE).shadowColor(ShadowColor.none());
     }

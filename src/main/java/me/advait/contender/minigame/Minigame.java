@@ -163,7 +163,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
 
     @Override public void handleQuit(Player player) {
         Participant participant = roster.get(player.getUniqueId());
-        if (participant == null) return;
+        // Everyone leaves when the server stops; that's a cancellation, not a result.
+        if (participant == null || Bukkit.isStopping()) return;
         if (state == State.RUNNING && participant.status == Status.PLAYING) {
             broadcast(plugin.getNameTagManager().displayName(player).append(Msg.text(" left the game.", DialogPalette.WARNING)));
             playerLeft(participant);

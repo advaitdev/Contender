@@ -505,7 +505,7 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
 
     @Override public void handleQuit(Player player) {
         DuelTeam team = teamOf.get(player.getUniqueId());
-        if (team == null || isOver()) return;
+        if (team == null || isOver() || Bukkit.isStopping()) return;
         Msg.send(audience(), plugin.getNameTagManager().displayName(player).append(Msg.text(" left the match.", DialogPalette.WARNING)));
         if (phase == Phase.FIGHTING) { team.down(player.getUniqueId()); checkRound(); }
         else team.down(player.getUniqueId());

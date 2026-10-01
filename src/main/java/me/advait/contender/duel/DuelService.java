@@ -60,10 +60,10 @@ public final class DuelService extends Module {
             if (player.isDead()) throw new IllegalStateException(name + " must respawn first.");
         }
         if (!settings.map().isComplete()) throw new IllegalStateException("Set both team spawns for " + settings.map().getDisplayName() + " first.");
-        // Watchers are pulled out of the match they are watching, without a trip to the lobby.
-        for (UUID id : seen) if (plugin.getRegistry().isWatching(id)) plugin.getSpectate().stop(id, false);
         ArenaCopy arena = plugin.getArenas().lease(settings.map().getId(), null);
         if (arena == null) throw new IllegalStateException("No arena copy is free. " + plugin.getArenas().readiness(settings.map().getId()));
+        // Only once the arena is secured: watchers leave the match they're watching, without a trip to the lobby.
+        for (UUID id : seen) if (plugin.getRegistry().isWatching(id)) plugin.getSpectate().stop(id, false);
         Duel duel = null;
         try {
             duel = new Duel(plugin, this, settings, arena, sides, names, label, onResult);
@@ -137,7 +137,8 @@ public final class DuelService extends Module {
             HurtRules.removeHealthDamage(event);
             return;
         }
-        double remaining = victim.getHealth() + victim.getAbsorptionAmount() - event.getFinalDamage();
+        // Final damage is already reduced by absorption, so only health is left to compare.
+        double remaining = victim.getHealth() - event.getFinalDamage();
         if (remaining > 0) return;
         if (holdsTotem(victim)) return; // Let vanilla resolve the totem; a real death is handled below.
         event.setCancelled(true);
@@ -173,6 +174,10 @@ public final class DuelService extends Module {
         event.setKeepLevel(true);
         event.setDroppedExp(0);
         event.deathMessage(null);
+        // Never let the death go through: a player left on the respawn screen can't be moved or hit.
+        var max = player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+        event.setReviveHealth(max == null ? 20 : max.getValue());
+        event.setCancelled(true);
         duel.eliminate(player, player.getKiller());
     }
 

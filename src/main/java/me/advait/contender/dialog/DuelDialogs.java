@@ -101,7 +101,14 @@ public final class DuelDialogs {
     private boolean available(UUID id) {
         Player player = Bukkit.getPlayer(id);
         return player != null && player.isOnline() && plugin.getRoleManager().isContestant(id)
-                && !plugin.getRegistry().isPlaying(id);
+                && !plugin.getRegistry().isPlaying(id) && !inEvent(id);
+    }
+    /** Entered in a running tournament or minigame, so a side match would hold it up. A paused one is fine. */
+    private boolean inEvent(UUID id) {
+        var tournament = plugin.getTournaments().current();
+        if (tournament != null && tournament.isRunning() && tournament.isReserved(id)) return true;
+        var game = plugin.getMinigames().current();
+        return game != null && game.started() && !game.finished() && game.involves(id);
     }
     private List<Candidate> candidates(DuelSetup setup) {
         Map<UUID, Candidate> candidates = new LinkedHashMap<>();
@@ -169,7 +176,7 @@ public final class DuelDialogs {
         contents.add(body(DialogText.lines(DialogIcon.MAP.label(setup.map.getDisplayName()), KitIcons.label(setup.kit),
                 DialogText.detail("Win condition", "First to " + setup.wins + (setup.wins == 1 ? " round win" : " round wins")),
                 DialogText.detail("Time to arrange items", setup.sortSeconds + " seconds"))));
-        if (setup.freeForAll) contents.add(body(DialogText.muted("All available contestants join when you start.\nPlayers entered in a tournament are excluded.")));
+        if (setup.freeForAll) contents.add(body(DialogText.muted("All free contestants join when you start.\nPlayers in a running event are left out.")));
         else { contents.add(body(roster(setup, 1))); contents.add(body(roster(setup, 2))); }
         dialogs.show(player, "Review Duel", contents, List.of(), List.of(action(player, DialogIcon.DUEL, "Start Duel", ACCENT, FORM_WIDTH, (p, view) -> {
             if (started.contains(setup)) throw new IllegalStateException("This duel has already started.");

@@ -173,7 +173,8 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         if (isProtected(victim)) { event.setCancelled(true); return; }
         boolean fromPlayer = attacker(event) != null;
         if (fromPlayer ? kit.isPvpHurt() : kit.isPveHurt()) { HurtRules.removeHealthDamage(event); return; }
-        if (victim.getHealth() + victim.getAbsorptionAmount() - event.getFinalDamage() > 0) return;
+        // Final damage is already reduced by absorption.
+        if (victim.getHealth() - event.getFinalDamage() > 0) return;
         if (victim.getInventory().getItemInMainHand().getType() == Material.TOTEM_OF_UNDYING
                 || victim.getInventory().getItemInOffHand().getType() == Material.TOTEM_OF_UNDYING) return;
         event.setCancelled(true);
@@ -195,6 +196,10 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         event.getDrops().clear();
         event.setDroppedExp(0);
         event.deathMessage(null);
+        // Revive instead of dying, so nobody is left on the respawn screen.
+        var max = player.getAttribute(Attribute.MAX_HEALTH);
+        event.setReviveHealth(max == null ? 20 : max.getValue());
+        event.setCancelled(true);
         if (fighting(player)) killed(player, player.getKiller());
     }
 

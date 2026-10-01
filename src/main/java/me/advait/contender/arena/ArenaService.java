@@ -117,7 +117,11 @@ public final class ArenaService extends Module {
     public World world() { return world; }
     public boolean isArenaWorld(World candidate) { return world != null && world.equals(candidate); }
     public List<ArenaCopy> copies(String mapId) { return List.copyOf(pools.getOrDefault(mapId, List.of())); }
-    public int ready(String mapId) { return (int) copies(mapId).stream().filter(c -> c.status() == ArenaCopy.Status.READY).count(); }
+    /** Copies {@link #lease} would hand out right now. */
+    public int ready(String mapId) {
+        if (closed || saving.contains(mapId)) return 0;
+        return (int) copies(mapId).stream().filter(c -> c.status() == ArenaCopy.Status.READY && !c.retired()).count();
+    }
     public boolean isSaving(String mapId) { return saving.contains(mapId); }
 
     public ArenaCopy copyAt(Location location) {
@@ -218,8 +222,20 @@ public final class ArenaService extends Module {
         long now = System.currentTimeMillis();
         ArenaCopy next = null;
         boolean forRound = false;
-        for (ArenaCopy candidate : urgent.keySet()) {
-            if (candidate.status() == ArenaCopy.Status.IN_USE) { next = candidate; forRound = true; break; }
+        for (ArenaCopy candidate : List.copyOf(urgent.keySet())) {
+            if (candidate.status() != ArenaCopy.Status.IN_USE) continue;
+            String mapId = candidate.mapId();
+            String broken = maps.getMap(mapId) == null ? "The map was deleted."
+                    : templateFailures.containsKey(mapId) && !templateRetryDue(mapId, now) ? templateFailures.get(mapId) : null;
+            if (broken != null) {
+                // Fail the reset now (the match plays on after a few tries) instead of blocking every other copy.
+                List<CompletableFuture<Void>> waiting = urgent.remove(candidate);
+                if (waiting != null) waiting.forEach(future -> future.completeExceptionally(new IllegalStateException(broken)));
+                continue;
+            }
+            next = candidate;
+            forRound = true;
+            break;
         }
         if (next == null) next = nextBackgroundCopy(now);
         if (next == null) return;
@@ -260,6 +276,8 @@ public final class ArenaService extends Module {
             if (loaded != null) return loaded;
         }
         if (templateLoads.containsKey(map.getId())) return null;
+        // After a failed load, wait for the retry time instead of trying again every few ticks.
+        if (templateFailures.containsKey(map.getId()) && !templateRetryDue(map.getId(), System.currentTimeMillis())) return null;
         CompletableFuture<Clipboard> load = schematic == null ? capture(map) : readSchematic(schematic);
         templateLoads.put(map.getId(), load);
         load.whenComplete((clipboard, failure) -> {
@@ -283,7 +301,7 @@ public final class ArenaService extends Module {
         BlockBounds bounds = copy.layout().getBounds();
         long started = System.nanoTime();
         chunks.run(world, bounds, () -> {
-            clearEntities(copy);
+            clearAllEntities(copy);
             var target = BukkitAdapter.adapt(world);
             return async(() -> {
                 try (EditSession session = WorldEdit.getInstance().newEditSessionBuilder().world(target).changeSetNull().build()) {
@@ -322,12 +340,33 @@ public final class ArenaService extends Module {
         return true;
     }
 
-    /** Removes dropped items, projectiles and other loose entities left in a copy. Players and Contender's own displays stay. */
-    public void clearEntities(ArenaCopy copy) {
+    /** Removes every entity in a copy before pasting it again. Players and Contender's own displays stay. */
+    private void clearAllEntities(ArenaCopy copy) {
         for (Entity entity : world.getEntities()) {
             if (entity instanceof Player || me.advait.contender.util.Tags.isManaged(entity)) continue;
             if (copy.contains(entity.getLocation())) entity.remove();
         }
+    }
+
+    /**
+     * Removes what a match leaves lying around (items, arrows, pearls, XP, primed TNT, falling blocks and the like)
+     * without a paste. The map's own item frames, paintings, armor stands and displays stay.
+     */
+    public void clearEntities(ArenaCopy copy) {
+        for (Entity entity : world.getEntities()) {
+            if (entity instanceof Player || me.advait.contender.util.Tags.isManaged(entity)) continue;
+            if (!loose(entity) || !copy.contains(entity.getLocation())) continue;
+            entity.remove();
+        }
+    }
+
+    private static boolean loose(Entity entity) {
+        return entity instanceof org.bukkit.entity.Item || entity instanceof org.bukkit.entity.Projectile
+                || entity instanceof org.bukkit.entity.ExperienceOrb || entity instanceof org.bukkit.entity.TNTPrimed
+                || entity instanceof org.bukkit.entity.FallingBlock || entity instanceof org.bukkit.entity.AreaEffectCloud
+                || entity instanceof org.bukkit.entity.EvokerFangs || entity instanceof org.bukkit.entity.EnderCrystal
+                || entity instanceof org.bukkit.entity.Vehicle || entity instanceof org.bukkit.entity.Tameable
+                || entity instanceof org.bukkit.entity.Mannequin;
     }
 
     // ---- Map editing ---------------------------------------------------------------------------

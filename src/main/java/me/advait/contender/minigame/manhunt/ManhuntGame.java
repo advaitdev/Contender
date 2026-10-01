@@ -234,7 +234,8 @@ public final class ManhuntGame extends Minigame {
         if (source != null && !source.equals(victim) && ours(source) && team(source.getUniqueId()) == team(victim.getUniqueId())) { event.setCancelled(true); return; }
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); out(victim); return; }
         if (kit != null && (source != null ? kit.isPvpHurt() : kit.isPveHurt())) { HurtRules.removeHealthDamage(event); return; }
-        if (victim.getHealth() + victim.getAbsorptionAmount() - event.getFinalDamage() > 0) return;
+        // Final damage is already reduced by absorption.
+        if (victim.getHealth() - event.getFinalDamage() > 0) return;
         if (victim.getInventory().getItemInMainHand().getType() == Material.TOTEM_OF_UNDYING
                 || victim.getInventory().getItemInOffHand().getType() == Material.TOTEM_OF_UNDYING) return;
         event.setCancelled(true);
@@ -259,6 +260,10 @@ public final class ManhuntGame extends Minigame {
         event.setKeepLevel(true);
         event.getDrops().clear();
         event.setDroppedExp(0);
+        // Revive instead of dying, so nobody is left on the respawn screen.
+        var max = player.getAttribute(Attribute.MAX_HEALTH);
+        event.setReviveHealth(max == null ? 20 : max.getValue());
+        event.setCancelled(true);
         if (active(player)) out(player);
     }
 

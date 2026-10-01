@@ -266,7 +266,9 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
                 Player online = Bukkit.getPlayer(player);
                 if (online != null) {
                     online.closeInventory();
-                    loadouts.put(player, online.getInventory().getContents().clone());
+                    // Inventory items are live views; copy each one so later rounds start with the full loadout.
+                    loadouts.put(player, java.util.Arrays.stream(online.getInventory().getContents())
+                            .map(item -> item == null ? null : item.clone()).toArray(ItemStack[]::new));
                 }
             }
         }

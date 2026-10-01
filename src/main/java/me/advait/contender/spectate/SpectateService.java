@@ -112,9 +112,24 @@ public final class SpectateService extends Module implements Activity {
     public void onMove(PlayerMoveEvent event) {
         if (event instanceof PlayerTeleportEvent || !event.hasChangedPosition()) return;
         Spectatable target = watching.get(event.getPlayer().getUniqueId());
-        if (target != null && !target.contains(event.getTo())) {
-            Location back = target.contains(event.getFrom()) ? event.getFrom() : target.spectatorSpawn();
-            event.setTo(back);
+        if (target == null) return;
+        Location to = event.getTo();
+        boolean tooLow = to.getY() < to.getWorld().getMinHeight();
+        if (tooLow || !target.contains(to)) {
+            Location back = !tooLow && target.contains(event.getFrom()) ? event.getFrom() : target.spectatorSpawn();
+            if (back != null) event.setTo(back);
+        }
+    }
+
+    /** Watchers never take damage; one who slips into the void goes back to the spectator spawn. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDamage(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        Spectatable target = watching.get(player.getUniqueId());
+        if (target == null) return;
+        event.setCancelled(true);
+        if (event.getCause() == org.bukkit.event.entity.EntityDamageEvent.DamageCause.VOID && target.spectatorSpawn() != null) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> { if (watching.get(player.getUniqueId()) == target) move(player, target.spectatorSpawn()); });
         }
     }
 

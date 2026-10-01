@@ -204,4 +204,33 @@ public final class ArenaListener implements Listener {
             }
         });
     }
+
+    // ---- Map decorations -----------------------------------------------------------------------
+    // Item frames, paintings, armor stands and displays come from the template. A reset without a paste
+    // keeps them, so nobody may break, rotate, fill or empty them during a match.
+
+    private boolean decoration(org.bukkit.entity.Entity entity) {
+        return arenas.isArenaWorld(entity.getWorld()) && !me.advait.contender.util.Tags.isManaged(entity)
+                && (entity instanceof org.bukkit.entity.Hanging || entity instanceof org.bukkit.entity.ArmorStand || entity instanceof org.bukkit.entity.Display);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHangingBreak(org.bukkit.event.hanging.HangingBreakEvent event) {
+        if (decoration(event.getEntity())) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDecorationDamage(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (decoration(event.getEntity())) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDecorationUse(PlayerInteractEntityEvent event) {
+        if (decoration(event.getRightClicked()) && event.getPlayer().getGameMode() != GameMode.CREATIVE) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onArmorStand(PlayerArmorStandManipulateEvent event) {
+        if (decoration(event.getRightClicked()) && event.getPlayer().getGameMode() != GameMode.CREATIVE) event.setCancelled(true);
+    }
 }

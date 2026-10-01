@@ -26,8 +26,9 @@ public final class RaceMobs {
             entityClass = type.getEntityClass();
         }
         if (at.getWorld().getDifficulty() == Difficulty.PEACEFUL && Enemy.class.isAssignableFrom(entityClass)) {
-            // Hostile mobs disappear in Peaceful.
+            // Hostile mobs are removed in Peaceful, even persistent ones.
             at.getWorld().setDifficulty(Difficulty.EASY);
+            org.bukkit.Bukkit.getLogger().info("[Contender] Set " + at.getWorld().getName() + " to Easy so hostile race checkpoints stay.");
         }
         Entity spawned = at.getWorld().spawn(at, entityClass, entity -> {
             Tags.managed(entity, owner);

@@ -42,13 +42,21 @@ final class SpectatorAvatars {
         transport = created;
     }
 
-    /** Spectators to draw: watchers and players knocked out of the current round. */
+    /** Spectators to draw: watchers, players knocked out of a round, and minigame players sitting out. */
     private Map<UUID, Spectatable> owners() {
         Map<UUID, Spectatable> owners = new HashMap<>(service.watching());
         for (Duel duel : plugin.getDuels().duels()) {
             for (UUID id : duel.players()) {
                 Player player = Bukkit.getPlayer(id);
                 if (player != null && player.getGameMode() == GameMode.SPECTATOR) owners.put(id, duel);
+            }
+        }
+        var game = plugin.getMinigames().current();
+        if (game != null && game.started() && !game.finished()) {
+            for (var participant : game.roster()) {
+                if (plugin.getRegistry().owner(participant.id) != game) continue;
+                Player player = Bukkit.getPlayer(participant.id);
+                if (player != null && player.getGameMode() == GameMode.SPECTATOR) owners.put(participant.id, game);
             }
         }
         return owners;

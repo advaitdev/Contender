@@ -69,7 +69,7 @@ Set the reveal spot with `/setvotestage`. When the vote closes, candidates gathe
 
 ## Interviews
 
-Set the two marks once with `/setinterviewerposition` and `/setintervieweeposition`. **Interview a Player** in `/tournament` (or `/interview <player>`) brings you and that player to them. **End Interview** (or `/uninterview`) sends both back where they were.
+Set the two marks once with `/setinterviewerposition` and `/setintervieweeposition`. Each saves where you stand and which way you face. **Interview a Player** in `/tournament` (or `/interview <player>`) brings you and that player to them. **End Interview** (or `/uninterview`) sends both back where they were.
 
 ## Hackers
 

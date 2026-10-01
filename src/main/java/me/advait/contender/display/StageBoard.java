@@ -144,7 +144,7 @@ public final class StageBoard extends Module {
         for (int index = 0; index < rows.size(); index++) {
             if (!PlainTextComponentSerializer.plainText().serialize(rows.get(index).boardText()).isBlank()) used = Math.max(used, index % ROWS + 1);
         }
-        int newRows = Math.clamp(used, 4, ROWS);
+        int newRows = Math.clamp(used, 1, ROWS);
         int pixels = Math.max(170, rows.stream().mapToInt(row -> TabText.width(row.boardText())).max().orElse(170) + 12);
         if (columns != newColumns || columnPixels != pixels || rowsPerColumn != newRows || cells.isEmpty()) {
             destroyDisplays();

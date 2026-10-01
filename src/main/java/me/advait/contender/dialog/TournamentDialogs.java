@@ -188,10 +188,10 @@ public final class TournamentDialogs {
                 DialogText.detail("Your spot", interviews.position("interviewer") == null ? "Not set" : "Saved", interviews.position("interviewer") == null ? WARNING : SUCCESS),
                 DialogText.muted("Then use /interview <player> and /uninterview."));
         menu(player, "Interview Room", status, List.of(
-                menuAction(player, DialogIcon.SPAWN, "Set Interviewee Spot Here", TEXT, "Where the interviewed player stands.", p -> {
+                menuAction(player, DialogIcon.SPAWN, "Set Interviewee Spot Here", TEXT, "Stand on the spot, facing the way they should look.", p -> {
                     plugin.getInterviews().setPosition("interviewee", p.getLocation()); Dialogs.tell(p, "Interviewee spot saved."); interview(p);
                 }),
-                menuAction(player, DialogIcon.SPAWN, "Set Your Spot Here", TEXT, "Where you stand during interviews.", p -> {
+                menuAction(player, DialogIcon.SPAWN, "Set Your Spot Here", TEXT, "Stand on the spot, facing the way you'll look.", p -> {
                     plugin.getInterviews().setPosition("interviewer", p.getLocation()); Dialogs.tell(p, "Your spot saved."); interview(p);
                 })), this::tools);
     }

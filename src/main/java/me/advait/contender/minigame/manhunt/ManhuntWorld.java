@@ -159,6 +159,8 @@ public final class ManhuntWorld {
                     break;
                 }
             }
+            // The inner side first: players face the island with the pillar's crystal behind them.
+            positions.sort(Comparator.comparingDouble(spot -> spot.getX() * spot.getX() + spot.getZ() * spot.getZ()));
             if (!positions.isEmpty()) pillars.add(List.copyOf(positions));
         }
     }

@@ -275,6 +275,7 @@ public final class RaceGame extends Minigame {
         plugin.getCelebrations().fireworks(racer.getLocation(), 3);
         Msg.title(racer, Component.text("Finished", theme.primary()), Msg.text(time(time) + "  ·  #" + participant.place, DialogPalette.TEXT), 2, 50, 10);
         Sounds.VICTORY.play(racer);
+        racer.sendActionBar(Msg.text("Finished  ·  " + time(time), DialogPalette.ACCENT));
         tasks.later(1, () -> { if (racer.isOnline()) { racer.getInventory().clear(); racer.setGameMode(GameMode.SPECTATOR); } });
         checkEnd();
     }

@@ -95,8 +95,22 @@ public class MapManager {
         return maps.containsKey(id);
     }
 
+    /** A file-safe id derived from a display name, for example "The Mines" becomes "the_mines". */
+    public static String idFor(String name) {
+        String id = name.strip().toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        return id.length() > 40 ? id.substring(0, 40) : id;
+    }
+
+    public void delete(String id) {
+        if (maps.remove(id) != null) writeAll();
+    }
+
     public void save(ArenaMap map) {
         maps.put(map.getId(), map);
+        writeAll();
+    }
+
+    private void writeAll() {
         YamlConfiguration config = new YamlConfiguration();
         for (ArenaMap entry : maps.values()) {
             String path = "maps." + entry.getId();

@@ -69,7 +69,7 @@ public class ChatSettings {
         config.set("mute-lobby-voice-chat", muteLobbyVoiceChat);
         try {
             config.save(file);
-            plugin.refreshVoiceRouting();
+
         } catch (IOException e) {
             plugin.getLogger().warning("Could not save chat_settings.yml: " + e.getMessage());
         }

@@ -6,8 +6,8 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import me.advait.contender.Contender;
+import me.advait.contender.stage.Stage;
 import me.advait.contender.tab.BracketLayout;
-import me.advait.contender.tab.TabManager;
 import me.advait.contender.tab.TabStyle;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -34,19 +34,18 @@ public final class BracketDialogs {
 
     public void open(Player player) {
         var manager = plugin.getTabManager();
-        var event = manager.event();
+        Stage event = plugin.getStages().current();
         if (event == null || event.cancelled()) {
-            dialogs.show(player, "Leaderboard", DialogText.muted("No tournament is selected."), List.of(), List.of());
+            dialogs.show(player, "Leaderboard", DialogText.muted("No event is selected."), List.of(), List.of());
             return;
         }
-        if (event.minigame()) { preview(player, event.id(), 0); return; }
-        var tournament = plugin.getTournamentManager().current();
+        if (!event.hasRounds()) { preview(player, event.id(), 0); return; }
         var view = manager.view(player);
         var layout = manager.layout(player);
-        if (tournament == null || layout == null) return;
+        if (layout == null) return;
         var options = new ArrayList<SingleOptionDialogInput.OptionEntry>();
         options.add(Dialogs.option("0", "Follow Current Round", view.round() == 0));
-        for (int i = 1; i <= BracketLayout.rounds(tournament); i++) options.add(Dialogs.option(Integer.toString(i), "Round " + i, view.round() == i));
+        for (int i = 1; i <= event.rounds(); i++) options.add(Dialogs.option(Integer.toString(i), "Round " + i, view.round() == i));
         List<DialogInput> inputs = List.of(DialogInput.singleOption("round", DialogIcon.TOURNAMENT.label("Round", TEXT), options).width(300).build());
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(button(player, DialogIcon.TOURNAMENT, "Show Round", ACCENT, (p, response) -> {
@@ -71,16 +70,16 @@ public final class BracketDialogs {
         Component body = DialogText.paragraphs(DialogText.heading(layout.caption()),
                 DialogText.muted("Choose a view, then hold Tab.\nThis only changes your view."),
                 DialogText.lines(DialogText.detail("Offline", "X if any teammate is offline"),
-                        DialogText.detail("Points", "Win 3 · Draw 1"), DialogText.muted("Ties use round difference.")));
+                        DialogText.detail("Points", "1 per match won"), DialogText.muted("Ties are ordered by round difference.")));
         if (!manager.supportsBracket()) body = DialogText.paragraphs(body,
                 DialogText.muted("The tab bracket is unavailable on this server.\nYou can still open the preview."));
         dialogs.show(player, "Tab Bracket", List.of(DialogBody.plainMessage(body, 320)), inputs, buttons, 2, 150, null);
     }
 
-    private TabManager.Event sameEvent(UUID id) {
-        var current = plugin.getTabManager().event();
+    private Stage sameEvent(UUID id) {
+        Stage current = plugin.getStages().current();
         if (current == null || current.cancelled() || !current.id().equals(id))
-            throw new IllegalStateException("The tournament has changed. Open /bracket again.");
+            throw new IllegalStateException("The event has changed. Open /bracket again.");
         return current;
     }
 
@@ -91,14 +90,14 @@ public final class BracketDialogs {
         int columns = Math.max(1, (layout.rows().size() + 19) / 20);
         int selected = Math.clamp(column, 0, columns - 1);
         Component body = TabStyle.read(plugin.getConfig()).header(event.name())
-                .appendNewline().append(DialogText.muted(event.minigame() ? event.caption() + " | " + event.status() : layout.caption())).appendNewline();
+                .appendNewline().append(DialogText.muted(event.hasRounds() ? layout.caption() : event.caption(layout) + " | " + event.statusText())).appendNewline();
         for (int i = selected * 20; i < Math.min(layout.rows().size(), (selected + 1) * 20); i++) {
             var row = layout.rows().get(i);
             body = body.appendNewline().append(row.boardText());
             if (row.latency() < 0) body = body.append(Component.text(" X", NamedTextColor.GRAY));
         }
         var buttons = new ArrayList<ActionButton>();
-        if (!event.minigame()) {
+        if (event.hasRounds()) {
             buttons.add(button(player, DialogIcon.BACK, "Back", MUTED, (p, response) -> open(p)));
             buttons.add(button(player, DialogIcon.REFRESH, "Refresh", TEXT, (p, response) -> preview(p, eventId, selected)));
         } else if (columns == 1) {
@@ -110,6 +109,6 @@ public final class BracketDialogs {
         if (columns > 1) Dialogs.navigationRow(buttons,
                 selected > 0 ? button(player, DialogIcon.BACK, "Previous", MUTED, (p, response) -> preview(p, eventId, selected - 1)) : null,
                 selected + 1 < columns ? button(player, DialogIcon.NEXT, "Next", ACCENT, (p, response) -> preview(p, eventId, selected + 1)) : null, 150);
-        dialogs.show(player, event.minigame() ? "Leaderboard" : "Bracket Preview", List.of(DialogBody.plainMessage(body, 450)), List.of(), buttons, 2, 150, null);
+        dialogs.show(player, event.hasRounds() ? "Bracket Preview" : "Leaderboard", List.of(DialogBody.plainMessage(body, 450)), List.of(), buttons, 2, 150, null);
     }
 }

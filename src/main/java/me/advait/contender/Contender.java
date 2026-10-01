@@ -1,258 +1,186 @@
 package me.advait.contender;
 
-import me.advait.contender.tab.TabManager;
-import me.advait.contender.dialog.BracketDialogs;
+import me.advait.contender.activity.ActivityRegistry;
+import me.advait.contender.activity.SnapshotStore;
+import me.advait.contender.arena.ArenaListener;
+import me.advait.contender.arena.ArenaService;
 import me.advait.contender.chat.ChatListener;
 import me.advait.contender.chat.ChatManager;
 import me.advait.contender.chat.ChatSettings;
-import me.advait.contender.command.*;
-import me.advait.contender.duel.DuelManager;
-import me.advait.contender.duel.RoundResetProtection;
-import me.advait.contender.arena.ArenaManager;
-import me.advait.contender.tournament.TournamentManager;
-import me.advait.contender.dialog.ArenaDialogs;
-import me.advait.contender.dialog.TournamentDialogs;
-import me.advait.contender.dialog.DuelDialogs;
-import me.advait.contender.role.RoleManager;
-import me.advait.contender.nametag.NameTagManager;
-import me.advait.contender.tier.TierService;
+import me.advait.contender.command.Commands;
+import me.advait.contender.core.Module;
+import me.advait.contender.display.Celebrations;
+import me.advait.contender.display.StageBoard;
+import me.advait.contender.display.Themes;
+import me.advait.contender.duel.DeathEffect;
+import me.advait.contender.duel.DuelService;
 import me.advait.contender.gui.GUIListener;
+import me.advait.contender.hacker.HackerService;
+import me.advait.contender.interview.InterviewService;
 import me.advait.contender.kit.KitManager;
 import me.advait.contender.lobby.LobbyListener;
-import me.advait.contender.lobby.LobbyManager;
+import me.advait.contender.lobby.LobbyService;
 import me.advait.contender.map.MapManager;
-import me.advait.contender.spectator.PaperAllayAvatar;
-import me.advait.contender.spectator.AllayAvatar;
-import me.advait.contender.spectator.SpectatorControls;
+import me.advait.contender.minigame.MinigameService;
+import me.advait.contender.nametag.NameTagManager;
 import me.advait.contender.pvp.PvPListener;
 import me.advait.contender.pvp.PvPSettings;
-import me.advait.contender.runnable.ImmediateRespawnRunnable;
-import me.advait.contender.spectator.ArenaProtectionListener;
-import me.advait.contender.vote.VoteListener;
-import me.advait.contender.vote.VoteManager;
-import me.advait.contender.world.LeafDecayListener;
-import org.bukkit.Bukkit;
+import me.advait.contender.role.RoleManager;
+import me.advait.contender.sabotage.SabotageService;
+import me.advait.contender.spectate.SpectateService;
+import me.advait.contender.stage.StageService;
+import me.advait.contender.tab.TabManager;
+import me.advait.contender.tier.TierService;
+import me.advait.contender.tournament.TournamentService;
+import me.advait.contender.voice.VoiceService;
+import me.advait.contender.vote.VoteService;
+import me.advait.contender.world.ManagedWorlds;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
 
+/**
+ * Contender: duels, round robins, minigames and the "secret hacker" show tools.
+ * Services are created first, then modules are enabled in order and disabled in reverse.
+ */
 public final class Contender extends JavaPlugin {
+    private final List<Module> modules = new ArrayList<>();
 
-    private me.advait.contender.hacker.HackerManager hackerManager;
-    private me.advait.contender.race.RaceManager raceManager;
-    private me.advait.contender.minigame.MinigameManager minigameManager;
-    private me.advait.contender.manhunt.ManhuntManager manhuntManager;
-    private me.advait.contender.combo.ComboManager comboManager;
-    private DuelManager duelManager;
-    private KitManager kitManager;
-    private MapManager mapManager;
-    private me.advait.contender.world.ManagedWorlds managedWorlds;
-    private ArenaManager arenaManager;
-    private TournamentManager tournamentManager;
-    private VoteManager voteManager;
-    private LobbyManager lobbyManager;
-    private PaperAllayAvatar.Transport allayTransport;
-    private SpectatorControls spectatorControls;
+    private RoleManager roles;
+    private TierService tiers;
+    private KitManager kits;
+    private MapManager maps;
+    private ManagedWorlds managedWorlds;
+    private LobbyService lobby;
+    private SnapshotStore snapshots;
     private ChatSettings chatSettings;
     private PvPSettings pvpSettings;
-    private RoleManager roleManager;
-    private TierService tierService;
-    private NameTagManager nameTagManager;
-    private TabManager tabManager;
-    private me.advait.contender.voice.VoiceRouting voiceRouting;
-    private final me.advait.contender.voice.VoiceDiagnostics voiceDiagnostics = new me.advait.contender.voice.VoiceDiagnostics();
+    private Themes themes;
+    private Celebrations celebrations;
+    private DeathEffect deathEffect;
+
+    private ActivityRegistry registry;
+    private StageService stages;
+    private NameTagManager nameTags;
+    private ArenaService arenas;
+    private DuelService duels;
+    private SpectateService spectate;
+    private TournamentService tournaments;
+    private MinigameService minigames;
+    private VoteService votes;
+    private HackerService hackers;
+    private SabotageService sabotage;
+    private InterviewService interviews;
+    private TabManager tab;
+    private StageBoard board;
+    private VoiceService voice;
 
     @Override
     public void onEnable() {
-        for (var player : getServer().getOnlinePlayers()) {
-            try { RoundResetProtection.recover(player); }
-            catch (RuntimeException failure) { getLogger().log(java.util.logging.Level.SEVERE, "Could not restore round-reset gravity for " + player.getName(), failure); }
-        }
-        roleManager = new RoleManager(this);
-        tierService = new TierService(this);
-        nameTagManager = new NameTagManager(this);
-        allayTransport = new PaperAllayAvatar.Transport();
-        lobbyManager = new LobbyManager(this);
-        kitManager = new KitManager(this);
-        mapManager = new MapManager(this);
-        managedWorlds = new me.advait.contender.world.ManagedWorlds(this);
-        arenaManager = new ArenaManager(this, mapManager);
-        duelManager = new DuelManager(this);
-        voteManager = new VoteManager(this, duelManager);
+        saveDefaultConfig();
+        roles = new RoleManager(this);
+        tiers = new TierService(this);
+        lobby = new LobbyService(this);
+        kits = new KitManager(this);
+        maps = new MapManager(this);
+        managedWorlds = new ManagedWorlds(this);
+        snapshots = new SnapshotStore(this);
         chatSettings = new ChatSettings(this);
         pvpSettings = new PvPSettings(this);
-        tournamentManager = new TournamentManager(this);
-        raceManager = new me.advait.contender.race.RaceManager(this);
-        minigameManager = new me.advait.contender.minigame.MinigameManager(this);
-        manhuntManager = new me.advait.contender.manhunt.ManhuntManager(this);
-        comboManager = new me.advait.contender.combo.ComboManager(this);
-        minigameManager.register(new me.advait.contender.minigame.RaceMode(this));
-        minigameManager.register(manhuntManager);
-        minigameManager.register(comboManager);
-        hackerManager = new me.advait.contender.hacker.HackerManager(this);
+        themes = new Themes(this);
+        celebrations = new Celebrations(this);
+        deathEffect = new DeathEffect(this);
 
-        loadConfiguredWorlds();
-        arenaManager.initialize();
+        registry = add(new ActivityRegistry(this));
+        stages = add(new StageService(this));
+        nameTags = add(new NameTagManager(this));
+        arenas = add(new ArenaService(this, maps));
+        duels = add(new DuelService(this));
+        spectate = add(new SpectateService(this));
+        hackers = add(new HackerService(this));
+        sabotage = add(new SabotageService(this));
+        tournaments = add(new TournamentService(this));
+        minigames = add(new MinigameService(this));
+        votes = add(new VoteService(this));
+        interviews = add(new InterviewService(this));
+        tab = add(new TabManager(this));
+        board = add(new StageBoard(this));
+        voice = add(new VoiceService(this));
 
-        registerListeners();
-        registerCommands();
-        registerRunnables();
-        tabManager = new TabManager(this);
-        spectatorControls = new SpectatorControls(this);
-        spectatorControls.enable();
-        hackerManager.enable();
-        raceManager.enable();
-        manhuntManager.enable();
-        comboManager.enable();
-        tournamentManager.enable();
-        nameTagManager.enable();
-        tabManager.enable();
-        for (var player : getServer().getOnlinePlayers()) roleManager.applySpectatorRole(player);
-
-        voiceRouting = new me.advait.contender.voice.VoiceRouting(this);
-        voiceRouting.enable();
-        // Keep the role snapshot for game chat, but register no Simple Voice Chat packet handlers.
-        voiceDiagnostics.useNormalVoiceChat();
-
-        getLogger().info("Contender enabled.");
+        loadWorlds();
+        for (Listener listener : List.of(managedWorlds, celebrations, deathEffect, new LobbyListener(this, lobby),
+                new ArenaListener(this, arenas), new ChatListener(this), new ChatManager(this), new PvPListener(this), new GUIListener(this),
+                new me.advait.contender.command.QuickActions(this))) {
+            getServer().getPluginManager().registerEvents(listener, this);
+        }
+        for (Module module : modules) {
+            try { module.enable(); }
+            catch (RuntimeException | LinkageError failure) {
+                getLogger().log(Level.SEVERE, "Could not start " + module.getClass().getSimpleName() + ". That feature is unavailable.", failure);
+            }
+        }
+        new Commands(this).register();
+        for (var player : getServer().getOnlinePlayers()) lobby.applyRoleMode(player);
+        getLogger().info("Contender " + getPluginMeta().getVersion() + " enabled.");
     }
 
     @Override
     public void onDisable() {
-        if (comboManager != null) comboManager.disable();
-        if (manhuntManager != null) manhuntManager.disable();
-        if (raceManager != null) raceManager.disable();
-        if (hackerManager != null) hackerManager.disable();
-        if (voiceRouting != null) voiceRouting.disable();
-        if (tabManager != null) tabManager.disable();
-        if (nameTagManager != null) nameTagManager.disable();
-        if (tierService != null) tierService.close();
-        if (tournamentManager != null) tournamentManager.disable();
-        if (voteManager != null && voteManager.isVoteActive()) {
-            voteManager.getActiveSession().end();
-        }
-        if (voteManager != null) voteManager.timer().hide();
-        if (duelManager != null) {
-            duelManager.shutdown();
-        }
-        if (spectatorControls != null) spectatorControls.disable();
-        if (arenaManager != null) arenaManager.shutdown();
-    }
-
-    private void registerListeners() {
-        getServer().getPluginManager().registerEvents(new RoundResetProtection.RecoveryListener(), this);
-        getServer().getPluginManager().registerEvents(managedWorlds, this);
-        getServer().getPluginManager().registerEvents(new LeafDecayListener(), this);
-        getServer().getPluginManager().registerEvents(new ChatListener(), this);
-        getServer().getPluginManager().registerEvents(
-                new ChatManager(chatSettings, duelManager, roleManager, () -> voiceRouting), this);
-        getServer().getPluginManager().registerEvents(
-                new PvPListener(pvpSettings, duelManager, roleManager, minigameManager), this);
-        getServer().getPluginManager().registerEvents(
-                new ArenaProtectionListener(duelManager, arenaManager, raceManager), this);
-        getServer().getPluginManager().registerEvents(
-                new GUIListener(this), this);
-        getServer().getPluginManager().registerEvents(
-                new VoteListener(voteManager), this);
-        getServer().getPluginManager().registerEvents(
-                new LobbyListener(this, lobbyManager), this);
-    }
-
-    private void registerCommands() {
-        var commands = new PaperCommands(this);
-        commands.command("votetimer").setExecutor((sender, command, label, args) -> {
-            if (!(sender instanceof org.bukkit.entity.Player player)) return true;
-            if (!player.hasPermission("contender.master")) return true;
-            try {
-                if (args.length == 1 && args[0].equalsIgnoreCase("remove")) { voteManager.timer().remove(); me.advait.contender.dialog.Dialogs.tell(player, "Vote timer removed."); }
-                else if (args.length == 0) { voteManager.timer().place(player); me.advait.contender.dialog.Dialogs.tell(player, "Timer placed. It appears during votes."); }
-                else me.advait.contender.dialog.Dialogs.tell(player, "Use /votetimer or /votetimer remove.");
-            } catch (IllegalArgumentException failure) { me.advait.contender.dialog.Dialogs.tell(player, failure.getMessage()); }
-            return true;
-        });
-        commands.command("hacks").setExecutor(new DialogCommand(false, hackerManager.dialogs()::open));
-        var pickHacker = new PickHackerCommand(this);
-        commands.command("pickhacker").setExecutor(pickHacker);
-        commands.command("pickhacker").setTabCompleter(pickHacker);
-        commands.command("setlobby").setExecutor(new DialogCommand(true, player -> {
-            getLobbyManager().setLobbyLocation(player.getLocation());
-            me.advait.contender.dialog.Dialogs.tell(player, "Lobby set here.");
-        }));
-        commands.command("lobby").setExecutor(new DialogCommand(false, player -> getLobbyManager().returnToLobby(player)));
-        commands.command("bracket").setExecutor(new DialogCommand(false, new BracketDialogs(this)::open));
-        RoleCommand roleCommand = new RoleCommand(this);
-        commands.command("role").setExecutor(roleCommand);
-        commands.command("role").setTabCompleter(roleCommand);
-        commands.command("tier").setExecutor(new TierCommand(this));
-        commands.command("arena").setExecutor(new DialogCommand(true, new ArenaDialogs(this)::open));
-        commands.command("tournament").setExecutor(new DialogCommand(true, new TournamentDialogs(this)::open));
-        commands.command("cancelall").setExecutor(new CancelAllCommand(this));
-        commands.command("spectate").setExecutor(new DialogCommand(false, new DuelDialogs(this)::spectate));
-        var duelCmd = commands.command("duel");
-        if (duelCmd != null) duelCmd.setExecutor(new DuelCommand(this, duelManager));
-
-        var contenderCmd = commands.command("contender");
-        if (contenderCmd != null) contenderCmd.setExecutor(new ContenderCommand(this));
-
-        CancelDuelCommand cancelDuelCommand = new CancelDuelCommand(this);
-        commands.command("cancelduel").setExecutor(cancelDuelCommand);
-        commands.command("cancelduel").setTabCompleter(cancelDuelCommand);
-
-        var endDuelCmd = commands.command("endduel");
-        if (endDuelCmd != null) endDuelCmd.setExecutor(new EndDuelCommand(duelManager));
-
-        var startVoteCmd = commands.command("startvote");
-        if (startVoteCmd != null) startVoteCmd.setExecutor(new StartVoteCommand(voteManager));
-
-        var endVoteCmd = commands.command("endvote");
-        if (endVoteCmd != null) endVoteCmd.setExecutor(new EndVoteCommand(voteManager));
-
-        var voteCmd = commands.command("vote");
-        if (voteCmd != null) voteCmd.setExecutor(new VoteCommand(this));
-
-        var optionsCmd = commands.command("options");
-        if (optionsCmd != null) optionsCmd.setExecutor(new OptionsCommand(this));
-        commands.register();
-    }
-
-    private void registerRunnables() {
-        Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new ImmediateRespawnRunnable(), 0, 20);
-    }
-
-    public me.advait.contender.hacker.HackerManager getHackerManager() { return hackerManager; }
-    public void refreshHackerAttributes() { if (hackerManager != null && hackerManager.isEnabled()) hackerManager.refresh(); }
-    public me.advait.contender.race.RaceManager getRaceManager() { return raceManager; }
-    public me.advait.contender.minigame.MinigameManager getMinigameManager() { return minigameManager; }
-    public me.advait.contender.manhunt.ManhuntManager getManhuntManager() { return manhuntManager; }
-    public me.advait.contender.combo.ComboManager getComboManager() { return comboManager; }
-    public DuelManager getDuelManager() { return duelManager; }
-    public KitManager getKitManager() { return kitManager; }
-    public MapManager getMapManager() { return mapManager; }
-    public me.advait.contender.world.ManagedWorlds getManagedWorlds() { return managedWorlds; }
-    public void loadConfiguredWorlds() {
-        java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        getServer().getWorlds().forEach(world -> names.add(world.getName()));
-        names.add(lobbyManager.getLobbyWorldName());
-        mapManager.getMaps().forEach(map -> names.add(map.getWorldName()));
-        for (String name : names) {
-            try { managedWorlds.loadExisting(name); }
-            catch (RuntimeException failure) {
-                getLogger().warning("Could not load saved world '" + name + "': " + failure.getMessage());
+        for (int i = modules.size() - 1; i >= 0; i--) {
+            try { modules.get(i).disable(); }
+            catch (RuntimeException | LinkageError failure) {
+                getLogger().log(Level.SEVERE, "Could not stop " + modules.get(i).getClass().getSimpleName() + " cleanly.", failure);
             }
         }
+        modules.clear();
+        if (tiers != null) tiers.close();
     }
-    public ArenaManager getArenaManager() { return arenaManager; }
-    public TournamentManager getTournamentManager() { return tournamentManager; }
-    public VoteManager getVoteManager() { return voteManager; }
-    public LobbyManager getLobbyManager() { return lobbyManager; }
-    public AllayAvatar createSpectatorAvatar(org.bukkit.entity.Player player) { return new PaperAllayAvatar(allayTransport, player); }
-    public SpectatorControls getSpectatorControls() { return spectatorControls; }
+
+    private <T extends Module> T add(T module) {
+        modules.add(module);
+        return module;
+    }
+
+    /** Loads the lobby and every source map's world, so templates and spawns resolve. */
+    public void loadWorlds() {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        names.add(lobby.worldName());
+        maps.getMaps().forEach(map -> names.add(map.getWorldName()));
+        for (String name : names) {
+            if (getServer().getWorld(name) != null) continue;
+            try { managedWorlds.loadExisting(name); }
+            catch (RuntimeException failure) { getLogger().warning("Could not load world '" + name + "': " + failure.getMessage()); }
+        }
+    }
+
+    public RoleManager getRoleManager() { return roles; }
+    public TierService getTierService() { return tiers; }
+    public KitManager getKitManager() { return kits; }
+    public MapManager getMapManager() { return maps; }
+    public ManagedWorlds getManagedWorlds() { return managedWorlds; }
+    public LobbyService getLobby() { return lobby; }
+    public SnapshotStore getSnapshots() { return snapshots; }
     public ChatSettings getChatSettings() { return chatSettings; }
     public PvPSettings getPvpSettings() { return pvpSettings; }
-    public RoleManager getRoleManager() { return roleManager; }
-    public TierService getTierService() { return tierService; }
-    public NameTagManager getNameTagManager() { return nameTagManager; }
-    public TabManager getTabManager() { return tabManager; }
-    public me.advait.contender.voice.VoiceRouting getVoiceRouting() { return voiceRouting; }
-    public me.advait.contender.voice.VoiceDiagnostics getVoiceDiagnostics() { return voiceDiagnostics; }
-    public void refreshVoiceRouting() { if (voiceRouting != null) voiceRouting.refresh(); }
+    public Themes getThemes() { return themes; }
+    public Celebrations getCelebrations() { return celebrations; }
+    public DeathEffect getDeathEffect() { return deathEffect; }
+    public ActivityRegistry getRegistry() { return registry; }
+    public StageService getStages() { return stages; }
+    public NameTagManager getNameTagManager() { return nameTags; }
+    public ArenaService getArenas() { return arenas; }
+    public DuelService getDuels() { return duels; }
+    public SpectateService getSpectate() { return spectate; }
+    public TournamentService getTournaments() { return tournaments; }
+    public MinigameService getMinigames() { return minigames; }
+    public VoteService getVotes() { return votes; }
+    public HackerService getHackers() { return hackers; }
+    public SabotageService getSabotage() { return sabotage; }
+    public InterviewService getInterviews() { return interviews; }
+    public TabManager getTabManager() { return tab; }
+    public StageBoard getBoard() { return board; }
+    public VoiceService getVoice() { return voice; }
 }

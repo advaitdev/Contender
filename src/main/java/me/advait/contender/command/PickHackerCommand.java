@@ -24,7 +24,7 @@ public final class PickHackerCommand implements CommandExecutor, TabCompleter {
                 if (target == null) throw new IllegalArgumentException("Couldn't find " + name + ". They need to join the server once first.");
                 players.add(target);
             }
-            plugin.getHackerManager().pick(players);
+            plugin.getHackers().pick(players);
             sender.sendMessage(Component.text(clear ? "Hacker selection cleared." : "Hackers selected: " + String.join(", ", players.stream().map(OfflinePlayer::getName).toList()) + ".", NamedTextColor.GREEN));
         } catch (RuntimeException failure) { sender.sendMessage(Component.text(Dialogs.message(failure), NamedTextColor.RED)); }
         return true;

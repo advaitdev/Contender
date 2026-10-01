@@ -130,7 +130,7 @@ public final class KitEditorGUI {
                         ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
                 "<color:" + MessageUtil.MUTED + ">Enabled: always hidden from contestants</color>",
-                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within " + me.advait.contender.spectator.SpectatorVisibility.HIDE_DISTANCE_BLOCKS + " blocks</color>",
+                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within " + 10 + " blocks</color>",
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 

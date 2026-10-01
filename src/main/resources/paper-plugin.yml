@@ -15,8 +15,8 @@ dependencies:
       join-classpath: true
 permissions:
   contender.master:
-    description: Allows access to duel management and hacker selection
+    description: Run events and use every director tool
     default: op
   contender.admin:
-    description: Allows lobby, chat, voice and PvP settings, and configured admin bypasses
+    description: Lobby, chat and PvP settings, and admin bypasses
     default: op

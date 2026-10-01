@@ -38,7 +38,29 @@ public enum DialogIcon {
     BOOTS("items", "item/diamond_boots"),
     JUMP("items", "item/rabbit_foot"),
     STEP("items", "item/feather"),
-    REMOVE("items", "item/shears");
+    REMOVE("items", "item/shears"),
+    SLIME("items", "item/slime_ball"),
+    HEART("items", "item/glistering_melon_slice"),
+    SKULL("blocks", "block/wither_rose"),
+    LIGHTNING("blocks", "block/lightning_rod"),
+    STAR("items", "item/nether_star"),
+    CLOCK("items", "item/clock_00"),
+    EYE("items", "item/ender_eye"),
+    GLOW("items", "item/glow_ink_sac"),
+    WIND("items", "item/wind_charge"),
+    BLAZE("items", "item/blaze_powder"),
+    SUGAR("items", "item/sugar"),
+    PHANTOM("items", "item/phantom_membrane"),
+    FIREWORK("items", "item/firework_rocket"),
+    BELL("items", "item/bell"),
+    SPYGLASS("items", "item/spyglass"),
+    BOW("items", "item/bow"),
+    TARGET("blocks", "block/target_side"),
+    CROWN("items", "item/golden_helmet"),
+    RACE("items", "item/elytra"),
+    COMPASS("items", "item/compass_00"),
+    BRUSH("items", "item/brush"),
+    TNT("items", "item/fire_charge");
 
     private final String atlas;
     private final String texture;

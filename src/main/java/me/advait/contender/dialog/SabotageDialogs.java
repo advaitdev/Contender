@@ -1,0 +1,149 @@
+package me.advait.contender.dialog;
+
+import io.papermc.paper.dialog.DialogResponseView;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import me.advait.contender.Contender;
+import me.advait.contender.sabotage.Sabotage;
+import me.advait.contender.sabotage.SabotageService;
+import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
+import static me.advait.contender.dialog.DialogPalette.*;
+
+/** The hacker's sabotage menu and the director's sabotage settings. */
+public final class SabotageDialogs {
+    private static final int CELL = 170, NAV = 150, WIDE = 300;
+    private final Contender plugin;
+    private final Dialogs dialogs;
+
+    public SabotageDialogs(Contender plugin) {
+        this.plugin = plugin;
+        this.dialogs = new Dialogs(plugin);
+    }
+
+    // ---- Hacker --------------------------------------------------------------------------------
+
+    public void open(Player player) {
+        SabotageService service = plugin.getSabotage();
+        if (!service.available(player)) { player.closeDialog(); Dialogs.error(player, "Sabotages aren't available right now."); return; }
+        String general = service.blocked(player, null);
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(DialogText.muted("Change the rules for everyone in this event.\nNobody will know it was you."), 340));
+        Component status = DialogText.detail("Sabotages left", Integer.toString(service.usesLeft(player.getUniqueId())), ACCENT);
+        if (general != null) status = DialogText.lines(status, text(general, WARNING));
+        if (!service.active().isEmpty()) status = DialogText.lines(status, DialogText.detail("Running", String.join(", ",
+                service.active().values().stream().map(active -> active.sabotage().name()).toList())));
+        body.add(DialogBody.plainMessage(status, 340));
+        List<ActionButton> buttons = new ArrayList<>();
+        for (Sabotage sabotage : service.all()) {
+            if (!service.allowed(sabotage.id())) continue;
+            String reason = service.blocked(player, sabotage);
+            Component label = sabotage.icon().label(sabotage.name(), reason == null ? TEXT : MUTED);
+            Component tooltip = reason == null ? DialogText.muted(sabotage.description()) : DialogText.lines(DialogText.muted(sabotage.description()), text(reason, WARNING));
+            buttons.add(dialogs.button(player, label, tooltip, false, CELL, (p, view) -> confirm(p, sabotage)));
+        }
+        if (buttons.isEmpty()) body.add(DialogBody.plainMessage(DialogText.muted("The director hasn't allowed any sabotages."), 340));
+        ActionButton exit = plugin.getHackers().isHacker(player.getUniqueId())
+                ? dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, false, NAV, (p, view) -> new HackerDialogs(plugin).open(p))
+                : null;
+        dialogs.show(player, "Sabotage", body, List.of(), buttons, 2, NAV, exit);
+    }
+
+    private void confirm(Player player, Sabotage sabotage) {
+        String reason = plugin.getSabotage().blocked(player, sabotage);
+        if (reason != null) throw new IllegalStateException(reason);
+        SabotageService service = plugin.getSabotage();
+        String duration = service.durationSeconds() == 0 ? "until this event ends" : "for " + service.durationSeconds() + " seconds";
+        List<DialogBody> body = List.of(
+                DialogBody.plainMessage(sabotage.icon().label(sabotage.name(), ACCENT), 300),
+                DialogBody.plainMessage(text(sabotage.description(), TEXT), 300),
+                DialogBody.plainMessage(DialogText.muted("Lasts " + duration + (service.affectsHackers() ? ", and affects you too." : ". You are not affected.")), 300));
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, false, NAV, (p, view) -> open(p)),
+                dialogs.button(player, DialogIcon.SKULL.label("Sabotage", ACCENT), null, false, NAV, (p, view) -> {
+                    plugin.getSabotage().trigger(p, sabotage);
+                    p.closeDialog();
+                }), NAV);
+        dialogs.show(player, "Sabotage?", body, List.of(), buttons, 2, NAV, null);
+    }
+
+    // ---- Director ------------------------------------------------------------------------------
+
+    public void settings(Player player, Consumer<Player> back) {
+        SabotageService service = plugin.getSabotage();
+        List<DialogInput> inputs = List.of(
+                toggle("enabled", DialogIcon.SKULL, "Sabotages", service.enabled(), "On", "Off"),
+                toggle("affects_hackers", DialogIcon.PLAYERS, "Affects the Hackers Too", service.affectsHackers(), "Yes", "No"),
+                toggle("reveal", DialogIcon.EYE, "Show Who Sabotaged", service.revealHacker(), "Everyone sees", "Only directors see"),
+                DialogInput.numberRange("duration", DialogIcon.CLOCK.label("Length (0 = whole event)"), 0, 600)
+                        .initial((float) service.durationSeconds()).step(10f).width(WIDE).labelFormat("%s: %ss").build(),
+                DialogInput.numberRange("uses", DialogIcon.STAR.label("Sabotages per Hacker per Event"), 0, 10)
+                        .initial((float) service.usesPerHacker()).step(1f).width(WIDE).build(),
+                DialogInput.numberRange("cooldown", DialogIcon.REFRESH.label("Wait Between Sabotages"), 0, 300)
+                        .initial((float) service.cooldownSeconds()).step(5f).width(WIDE).labelFormat("%s: %ss").build(),
+                DialogInput.numberRange("max_active", DialogIcon.SETTINGS.label("Running at Once"), 1, 10)
+                        .initial((float) service.maxActive()).step(1f).width(WIDE).build());
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogs.button(player, DialogIcon.SETTINGS.label("Choose Sabotages", TEXT), DialogText.muted("Pick which sabotages hackers can use."), true, WIDE,
+                (p, view) -> { save(view); choose(p, back); }));
+        buttons.add(dialogs.button(player, DialogIcon.SKULL.label("Start One Now", TEXT), DialogText.muted("Trigger a sabotage yourself."), true, WIDE,
+                (p, view) -> { save(view); force(p, back); }));
+        if (!service.active().isEmpty()) buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("End All Sabotages", DANGER), null, true, WIDE,
+                (p, view) -> { save(view); plugin.getSabotage().endAll(true); settings(p, back); }));
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save", ACCENT), null, true, NAV, (p, view) -> { save(view); Dialogs.tell(p, "Sabotage settings saved."); back.accept(p); }), NAV);
+        Component running = service.active().isEmpty() ? DialogText.muted("None running.")
+                : DialogText.detail("Running", String.join(", ", service.active().values().stream().map(a -> a.sabotage().name()).toList()));
+        dialogs.show(player, "Sabotage Settings", List.of(DialogBody.plainMessage(DialogText.lines(
+                DialogText.muted("Hackers trigger sabotages from /hacks while an event is running."), running), 320)), inputs, buttons, 1, NAV, null);
+    }
+
+    private void save(DialogResponseView view) {
+        plugin.getSabotage().configure(bool(view, "enabled"), bool(view, "affects_hackers"), Dialogs.number(view, "duration", 0, 600),
+                Dialogs.number(view, "uses", 0, 10), Dialogs.number(view, "cooldown", 0, 300), Dialogs.number(view, "max_active", 1, 10), bool(view, "reveal"));
+    }
+
+    private void choose(Player player, Consumer<Player> back) {
+        SabotageService service = plugin.getSabotage();
+        List<ActionButton> buttons = new ArrayList<>();
+        for (Sabotage sabotage : service.all()) {
+            boolean on = service.allowed(sabotage.id());
+            Component label = sabotage.icon().label(sabotage.name(), on ? TEXT : MUTED);
+            if (on) label = label.append(Component.space()).append(DialogIcon.SAVE.sprite());
+            buttons.add(dialogs.button(player, label, DialogText.muted(sabotage.description() + (on ? "\nClick to turn off." : "\nClick to turn on.")), true, CELL,
+                    (p, view) -> { plugin.getSabotage().setAllowed(sabotage.id(), !plugin.getSabotage().allowed(sabotage.id())); choose(p, back); }));
+        }
+        dialogs.show(player, "Choose Sabotages", List.of(DialogBody.plainMessage(DialogText.muted("Checked sabotages appear in the hackers' menu."), 340)),
+                List.of(), buttons, 2, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> settings(p, back)));
+    }
+
+    private void force(Player player, Consumer<Player> back) {
+        SabotageService service = plugin.getSabotage();
+        List<ActionButton> buttons = new ArrayList<>();
+        for (Sabotage sabotage : service.all()) {
+            boolean running = service.active().containsKey(sabotage.id());
+            Component label = sabotage.icon().label(sabotage.name(), running ? ACCENT : TEXT);
+            buttons.add(dialogs.button(player, label, DialogText.muted(running ? "Running. Click to end it." : sabotage.description()), true, CELL, (p, view) -> {
+                if (plugin.getSabotage().active().containsKey(sabotage.id())) plugin.getSabotage().end(sabotage.id(), true);
+                else plugin.getSabotage().force(sabotage, p.getUniqueId());
+                force(p, back);
+            }));
+        }
+        dialogs.show(player, "Start a Sabotage", List.of(DialogBody.plainMessage(DialogText.muted("Starts right away for everyone in the event. Click a running one to end it."), 340)),
+                List.of(), buttons, 2, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> settings(p, back)));
+    }
+
+    private static DialogInput toggle(String key, DialogIcon icon, String label, boolean value, String yes, String no) {
+        return DialogInput.singleOption(key, icon.label(label), List.of(Dialogs.option("true", yes, value), Dialogs.option("false", no, !value))).width(WIDE).build();
+    }
+
+    private static boolean bool(DialogResponseView view, String key) { return Dialogs.text(view, key).equals("true"); }
+}

@@ -75,17 +75,16 @@ public final class TournamentDialogs {
 
     public void open(Player player) {
         rosterViews.remove(player.getUniqueId());
-        if (plugin.getMinigameManager() != null) {
-            var mode = plugin.getMinigameManager().selected();
-            if (mode != null) { mode.open(player); return; }
-        } else if (plugin.getRaceManager() != null && plugin.getRaceManager().displayed() != null) { new RaceDialogs(plugin).open(player); return; }
-        var manager = plugin.getTournamentManager();
+        var stage = plugin.getStages().current();
+        var game = plugin.getMinigames().current();
+        if (game != null && stage == game) { new MinigameDialogs(plugin).control(player, game); return; }
+        var manager = plugin.getTournaments();
         Tournament tournament = manager.current();
         boolean canCreate = tournament == null || tournament.isComplete() || tournament.isCancelled();
         List<ActionButton> buttons = new ArrayList<>();
         // The main action always comes first, including after a completed or cancelled stage.
-        if (canCreate) buttons.add(menuAction(player, DialogIcon.TOURNAMENT, "New Tournament", ACCENT,
-                "Choose a map, enter the roster, and set up the matches.", this::formats));
+        if (canCreate) buttons.add(menuAction(player, DialogIcon.TOURNAMENT, "New Event", ACCENT,
+                "Start a round robin or a minigame.", this::formats));
         else buttons.add(menuAction(player, tournament.isRunning() ? DialogIcon.PAUSE : DialogIcon.NEXT,
                 tournament.isRunning() ? "Pause Tournament" : "Start Tournament", ACCENT,
                 tournament.isRunning() ? "Let active matches finish and pause new ones." : "Start available matches from this bracket.", p -> {
@@ -93,8 +92,8 @@ public final class TournamentDialogs {
                     if (tournament.isRunning()) manager.pause(); else manager.resume();
                     open(p);
                 }));
-        Component contents = DialogText.paragraphs(text("No tournament selected", TEXT),
-                DialogText.muted("Choose who plays and how many bracket rounds to run."));
+        Component contents = DialogText.paragraphs(text("No event selected", TEXT),
+                DialogText.muted("Create a round robin or a minigame to begin."));
         if (tournament != null) {
             var map = plugin.getMapManager().getMap(tournament.mapId());
             var kit = plugin.getKitManager().getKit(tournament.kitId());
@@ -109,71 +108,93 @@ public final class TournamentDialogs {
                     "Scores, match settings, and spectating.", p -> matches(p, tournament.id(), 0)));
             buttons.add(menuAction(player, DialogIcon.BOARD, "Bracket & Standings", TEXT,
                     "Choose the round or standings shown in your tab list.", p -> new BracketDialogs(plugin).open(p)));
+            if (!canCreate) buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate", TEXT,
+                    "Watch a match in progress.", p -> new SpectateDialogs(plugin).open(p)));
         }
         buttons.add(menuAction(player, DialogIcon.SETTINGS, "Setup Tools", TEXT,
-                "Maps, kits, the tournament board, and the lobby.", this::tools));
+                "Maps, kits, minigames, displays and the lobby.", this::tools));
+        buttons.add(menuAction(player, DialogIcon.SKULL, "Hacker Controls", TEXT,
+                "Pick the hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin).open(p)));
         if (!canCreate) buttons.add(menuAction(player, DialogIcon.CLOSE, "Cancel Tournament", DANGER,
                 "Stop the tournament and end its active matches.", p -> confirmCancel(p, tournament.id())));
         menu(player, "Tournament", contents, buttons, null);
     }
     public void tools(Player player) {
-        menu(player, "Setup Tools", DialogText.muted("Prepare the server before you start a tournament."), List.of(
-                menuAction(player, DialogIcon.MACE, "Minigames", TEXT, "Prepare race courses, the End world, and Combo arenas.", this::minigameTools),
-                menuAction(player, DialogIcon.MAP, "Maps & Kits", TEXT, "Create maps and edit the kits used in matches.", this::assets),
-                menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board and set the lobby return point.", this::venue),
-                menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title shown above tab and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools)),
-                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop all events, including interrupted games.", this::confirmCancelAll)), this::open);
+        menu(player, "Setup Tools", DialogText.muted("Prepare the server before an event."), List.of(
+                menuAction(player, DialogIcon.MAP, "Maps", TEXT, "Save arenas and set their spawns.", p -> new ArenaDialogs(plugin).open(p)),
+                menuAction(player, DialogIcon.DUEL, "Kits", TEXT, "Create kits or change their items and rules.", this::editKits),
+                menuAction(player, DialogIcon.MACE, "Minigames", TEXT, "Race courses, the Manhunt world, and other game setup.", this::minigameTools),
+                menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board, timer and vote stage. Set the lobby.", this::venue),
+                menuAction(player, DialogIcon.BELL, "Interview Room", TEXT, "Set where hackers are interviewed.", this::interview),
+                menuAction(player, DialogIcon.GLOW, "Display Colors", TEXT, "Choose the color scheme for boards and effects.", p -> new SettingsDialogs(plugin).theme(p, this::tools)),
+                menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title above the tab list and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools)),
+                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop every event, match and vote.", this::confirmCancelAll)), this::open);
     }
     private void confirmCancelAll(Player player) {
-        menu(player, "Force Cancel All?", DialogText.muted("Stop every tournament, minigame, duel, and vote.\nPlayers will be returned to the lobby.\n\nUse this if an interrupted event is stuck."), List.of(
-                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop all events now.", p -> {
+        menu(player, "Force Cancel All?", DialogText.muted("Stops every event, match, vote and interview.\nEveryone returns to the lobby with their own items.\n\nUse this if something is stuck."), List.of(
+                menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop everything now.", p -> {
                     p.closeDialog();
-                    new me.advait.contender.command.CancelAllCommand(plugin).cancel(p);
+                    me.advait.contender.command.Commands.cancelAll(plugin, p);
                 })), this::tools);
     }
     private void minigameTools(Player player) {
-        menu(player, "Minigames", DialogText.muted("Prepare each mode before creating the event."), List.of(
-                menuAction(player, DialogIcon.MACE, "Race Courses", TEXT, "Set up checkpoints and race rules.", p -> new RaceDialogs(plugin).courses(p, 0)),
-                menuAction(player, DialogIcon.DUEL, "Race Kits", TEXT, "Edit the default race loadout or a saved kit.", p -> new RaceDialogs(plugin).kits(p)),
-                menuAction(player, DialogIcon.CRYSTAL, "Manhunt World", TEXT, "Prepare an End world and its pillar spawns.", p -> plugin.getManhuntManager().setupDialog(p)),
-                menuAction(player, DialogIcon.AXE, "Combo Arenas", TEXT, "Set the player and bot spawns in a saved map.", p -> plugin.getComboManager().setupDialog(p))), this::tools);
+        List<ActionButton> buttons = new ArrayList<>();
+        for (var type : plugin.getMinigames().types()) {
+            if (!type.hasSetup()) continue;
+            buttons.add(menuAction(player, type.icon(), type.name(), TEXT, type.description(), type::openSetup));
+        }
+        menu(player, "Minigames", DialogText.muted(buttons.isEmpty() ? "No minigame needs setup." : "Set up a minigame before creating it."), buttons, this::tools);
     }
-    private void assets(Player player) {
-        menu(player, "Maps & Kits", DialogText.muted("Maps need both team spawns. Kits need to be saved before they can be selected."), List.of(
-                menuAction(player, DialogIcon.MAP, "Maps", TEXT, "Selections, spawns, and arena copies.", p -> new ArenaDialogs(plugin).open(p)),
-                menuAction(player, DialogIcon.DUEL, "Edit Kits", TEXT, "Create a kit or change its items and rules.", this::editKits)), this::tools);
+    private void interview(Player player) {
+        var interviews = plugin.getInterviews();
+        Component status = DialogText.lines(
+                DialogText.detail("Interviewee's spot", interviews.position("interviewee") == null ? "Not set" : "Saved", interviews.position("interviewee") == null ? WARNING : SUCCESS),
+                DialogText.detail("Your spot", interviews.position("interviewer") == null ? "Not set" : "Saved", interviews.position("interviewer") == null ? WARNING : SUCCESS),
+                DialogText.muted("Then use /interview <player> and /uninterview."));
+        menu(player, "Interview Room", status, List.of(
+                menuAction(player, DialogIcon.SPAWN, "Set Interviewee Spot Here", TEXT, "Where the interviewed player stands.", p -> {
+                    plugin.getInterviews().setPosition("interviewee", p.getLocation()); Dialogs.tell(p, "Interviewee spot saved."); interview(p);
+                }),
+                menuAction(player, DialogIcon.SPAWN, "Set Your Spot Here", TEXT, "Where you stand during interviews.", p -> {
+                    plugin.getInterviews().setPosition("interviewer", p.getLocation()); Dialogs.tell(p, "Your spot saved."); interview(p);
+                })), this::tools);
     }
     private void venue(Player player) {
-        var manager = plugin.getTournamentManager();
-        menu(player, "Board & Lobby", DialogText.muted("Placement uses your current position and the direction you are facing."), List.of(
-                menuAction(player, DialogIcon.BOARD, "Place Board Here", TEXT, "Place or move the tournament board in front of you.", p -> {
-                    manager.board().place(p); manager.board().update(manager.current(), manager.playing());
-                    p.closeDialog(); Dialogs.tell(p, "Tournament board placed in front of you.");
+        var board = plugin.getBoard();
+        var votes = plugin.getVotes();
+        menu(player, "Board & Lobby", DialogText.muted("Everything is placed from where you stand and the way you face."), List.of(
+                menuAction(player, DialogIcon.BOARD, "Place Board Here", TEXT, "Show the bracket on a big board in front of you.", p -> {
+                    board.place(p); p.closeDialog(); Dialogs.tell(p, "Board placed in front of you.");
                 }),
-                menuAction(player, DialogIcon.SPAWN, "Set Lobby Here", TEXT, "Players return to this position after their matches.", p -> {
-                    plugin.getLobbyManager().setLobbyLocation(p.getLocation()); Dialogs.tell(p, "Lobby set here."); venue(p);
+                menuAction(player, DialogIcon.SPAWN, "Set Lobby Here", TEXT, "Players return here after their games.", p -> {
+                    plugin.getLobby().setLocation(p.getLocation()); Dialogs.tell(p, "Lobby set here."); venue(p);
                 }),
-                menuAction(player, DialogIcon.REFRESH, "Place Vote Timer Here", TEXT, "Show a large timer here during votes.", p -> { plugin.getVoteManager().timer().place(p); p.closeDialog(); Dialogs.tell(p, "Timer placed. It appears during votes."); }),
-                menuAction(player, DialogIcon.CLOSE, "Remove Vote Timer", DANGER, "Remove the timer location.", p -> { plugin.getVoteManager().timer().remove(); venue(p); }),
-                menuAction(player, DialogIcon.BOARD, "Board Appearance", TEXT, "Change the board background opacity.", p -> new SettingsDialogs(plugin).board(p, this::venue)),
-                menuAction(player, DialogIcon.CLOSE, "Remove Board", DANGER, "Remove the board while keeping the tournament.", p -> { manager.board().remove(); venue(p); })), this::tools);
+                menuAction(player, DialogIcon.CLOCK, "Place Vote Timer Here", TEXT, "A big countdown during votes.", p -> {
+                    votes.placeTimer(p); p.closeDialog(); Dialogs.tell(p, "Vote timer placed.");
+                }),
+                menuAction(player, DialogIcon.STAR, "Set Vote Stage Here", TEXT, "Candidates gather in a circle here for the results.", p -> {
+                    votes.setStage(p.getLocation()); Dialogs.tell(p, "Vote stage set. Candidates will stand in a circle around this spot."); venue(p);
+                }),
+                menuAction(player, DialogIcon.BOARD, "Board Background", TEXT, "Make the board background more or less see-through.", p -> new SettingsDialogs(plugin).board(p, this::venue)),
+                menuAction(player, DialogIcon.CLOSE, "Remove Board", DANGER, "Take the board down.", p -> { board.remove(); venue(p); }),
+                menuAction(player, DialogIcon.CLOSE, "Remove Vote Timer", DANGER, "Forget the timer position.", p -> { votes.removeTimer(); venue(p); })), this::tools);
     }
     private Tournament current(UUID id) {
-        Tournament tournament = plugin.getTournamentManager().current();
+        Tournament tournament = plugin.getTournaments().current();
         if (tournament == null || !tournament.id().equals(id)) throw new IllegalStateException("That tournament is no longer selected.");
         return tournament;
     }
     public void formats(Player player) {
-        menu(player, "Tournament Format", DialogText.muted("Choose how this stage will run."), List.of(
-                menuAction(player, DialogIcon.DUEL, "Round Robin", ACCENT, "Schedule duels and rank players by their results.", this::create),
-                menuAction(player, DialogIcon.MACE, "Mace Race", TEXT, "Race through checkpoints and rank players by finish time.", p -> new RaceDialogs(plugin).create(p)),
-                menuAction(player, DialogIcon.CRYSTAL, "Manhunt", TEXT, "Runners face hunters in the End. Both teams have one life.", p -> plugin.getManhuntManager().createDialog(p)),
-                menuAction(player, DialogIcon.AXE, "Combo", TEXT, "Take turns against a sword bot and rank each player's longest combo.", p -> plugin.getComboManager().createDialog(p))), this::open);
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(menuAction(player, DialogIcon.DUEL, "Round Robin", ACCENT, "Everyone plays everyone. One point per match won.", this::create));
+        for (var type : plugin.getMinigames().types()) {
+            buttons.add(menuAction(player, type.icon(), type.name(), TEXT, type.description(), type::openCreate));
+        }
+        menu(player, "New Event", DialogText.muted("Choose what to play next."), buttons, this::open);
     }
     private void create(Player player) { create(player, null); }
     private void editKits(Player player) {
-        player.closeDialog();
-        new KitDialogs(plugin).open(player, this::open);
+        new KitDialogs(plugin).open(player, this::tools);
     }
     private void create(Player player, Draft initial) {
         rosterViews.remove(player.getUniqueId());
@@ -187,8 +208,8 @@ public final class TournamentDialogs {
                     menuAction(player, DialogIcon.DUEL, "Edit Kits", TEXT, "Create and save a kit.", this::editKits)), this::open);
             return;
         }
-        Draft draft = initial == null ? new Draft("Tournament", maps.getFirst().getId(), kits.getFirst().getId(), false, false, 3,
-                String.join(", ", Bukkit.getOnlinePlayers().stream().filter(p -> plugin.getDuelManager().isEligible(p.getUniqueId())).map(Player::getName).toList()), 10, 20, 0) : initial;
+        Draft draft = initial == null ? new Draft("Round Robin", maps.getFirst().getId(), kits.getFirst().getId(), false, false, 3,
+                String.join(", ", Bukkit.getOnlinePlayers().stream().filter(p -> plugin.getRoleManager().isContestant(p.getUniqueId())).map(Player::getName).toList()), 10, 20, 0) : initial;
         List<DialogInput> inputs = List.of(
                 DialogInput.text("name", DialogIcon.NAME.label("Tournament Name")).initial(draft.name()).maxLength(64).width(INPUT_WIDTH).build(),
                 DialogInput.singleOption("map", DialogIcon.MAP.label("Map"), maps.stream().map(m -> Dialogs.option(m.getId(), m.getDisplayName(), m.getId().equals(draft.map()))).toList()).width(INPUT_WIDTH).build(),
@@ -277,6 +298,7 @@ public final class TournamentDialogs {
                 body(section(DialogIcon.DUEL, "Match Rules", DialogText.lines(
                         DialogText.detail("Bracket rounds", draft.bracketRounds() + " of " + RoundRobinSchedule.fullRounds(count)),
                         DialogText.detail("Matches", Integer.toString(count / 2 * draft.bracketRounds())),
+                        DialogText.detail("Scoring", "1 point per match won"),
                         DialogText.detail("Win condition", "First to " + (draft.bestOf() / 2 + 1) + " round wins"),
                         DialogText.detail("Sorting", draft.delay() + " seconds"), DialogText.detail("Matches at once", Integer.toString(draft.parallel())),
                         DialogText.detail("Schedule", draft.waitForRound() ? "Finish each bracket round" : "As arenas become free")))),
@@ -291,7 +313,7 @@ public final class TournamentDialogs {
         var result = RosterParser.parseAsync(names, draft.teams(), PlayerIdentityResolver::resolve);
         UUID owner = player.getUniqueId(); UUID request = UUID.randomUUID();
         if (!rosterViews.replace(owner, form, request)) return;
-        Tournament previous = plugin.getTournamentManager().current();
+        Tournament previous = plugin.getTournaments().current();
         menu(player, "Checking Players", DialogText.muted("Checking the roster before saving your bracket."), List.of(
                 menuAction(player, DialogIcon.BACK, "Back to Roster", MUTED, "Stop the lookup and edit the roster.", p -> {
                     if (rosterViews.remove(owner, request)) roster(p, draft, names, delay, parallel, null);
@@ -306,10 +328,10 @@ public final class TournamentDialogs {
                     }
                     if (failure != null) { roster(player, draft, names, delay, parallel, Dialogs.message(failure)); return; }
                     try {
-                        if (plugin.getTournamentManager().current() != previous) throw new IllegalStateException("The selected tournament changed. Open /tournament to check it.");
+                        if (plugin.getTournaments().current() != previous) throw new IllegalStateException("The selected tournament changed. Open /tournament to check it.");
                         Tournament tournament = new Tournament(UUID.randomUUID(), draft.name(), draft.map(), draft.kit(), entries,
                                 draft.teams(), draft.waitForRound(), draft.bestOf(), delay, parallel, draft.bracketRounds());
-                        plugin.getTournamentManager().create(tournament);
+                        plugin.getTournaments().create(tournament);
                         open(player); Dialogs.tell(player, "Tournament saved. Start it when you're ready.");
                     } catch (Exception error) { roster(player, draft, names, delay, parallel, Dialogs.message(error)); }
                 });
@@ -321,7 +343,7 @@ public final class TournamentDialogs {
     private void confirmCancel(Player player, UUID id) {
         menu(player, "Cancel Tournament?", DialogText.paragraphs(text(current(id).name(), TEXT),
                 DialogText.muted("Active matches will end.\nThe remaining matches will not be played.")), List.of(
-                menuAction(player, DialogIcon.CLOSE, "Cancel Tournament", DANGER, "End this tournament.", p -> { current(id); plugin.getTournamentManager().cancel(); open(p); })), this::open);
+                menuAction(player, DialogIcon.CLOSE, "Cancel Tournament", DANGER, "End this tournament.", p -> { current(id); plugin.getTournaments().cancel(); open(p); })), this::open);
     }
     private void matches(Player player, UUID id, int page) {
         Tournament tournament = current(id);
@@ -356,13 +378,19 @@ public final class TournamentDialogs {
             inputs.add(DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8)
                     .initial((float) (match.bestOf() / 2 + 1)).step(1f).width(INPUT_WIDTH).build());
             buttons.add(action(player, DialogIcon.SAVE, "Save Win Condition", ACCENT, INPUT_WIDTH, "Apply this to the waiting match.", (p, view) -> {
-                current(id); plugin.getTournamentManager().setBestOf(match, Dialogs.number(view, "wins", 1, 8) * 2 - 1); match(p, id, number, page);
+                current(id); plugin.getTournaments().setBestOf(match, Dialogs.number(view, "wins", 1, 8) * 2 - 1); match(p, id, number, page);
             }));
             buttons.add(menuAction(player, DialogIcon.PLAYERS, "Award a Win", TEXT, "Choose the winner of a forfeit.", p -> award(p, id, match, page)));
         }
-        var duel = plugin.getTournamentManager().playing().get(number);
-        if (duel != null && !tournament.isCancelled()) buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate Match", ACCENT,
-                "Join this match as a spectator.", p -> { current(id); plugin.getDuelManager().spectate(p, duel); p.closeDialog(); }));
+        var duel = plugin.getTournaments().playing().get(number);
+        if (duel != null && !tournament.isCancelled()) {
+            buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate Match", ACCENT,
+                    "Join this match as a spectator.", p -> { current(id); plugin.getSpectate().watch(p, duel); p.closeDialog(); }));
+            buttons.add(menuAction(player, DialogIcon.SAVE, "End Match Now", TEXT,
+                    "Finish with the current score.", p -> { current(id); duel.endNow(); matches(p, id, page); }));
+            buttons.add(menuAction(player, DialogIcon.CLOSE, "Cancel Match", DANGER,
+                    "Stop without a result. It goes back in the queue and the tournament pauses.", p -> { current(id); plugin.getTournaments().cancelMatch(duel); matches(p, id, page); }));
+        }
         dialogs.show(player, "Match #" + number, List.of(body(contents)), inputs, buttons, 1, NAV_WIDTH,
                 nav(player, DialogIcon.BACK, "Back", MUTED, "Return to the match list.", (p, response) -> matches(p, id, page)));
     }
@@ -377,7 +405,7 @@ public final class TournamentDialogs {
         Tournament tournament = current(id); String name = tournament.entries().get(side == 1 ? match.first() : match.second()).name();
         menu(player, "Confirm Forfeit", DialogText.lines(DialogText.detail("Winner", name),
                 DialogText.detail("Match", "#" + match.number())), List.of(menuAction(player, DialogIcon.SAVE, "Award Win", ACCENT,
-                "Record this match as a forfeit.", p -> { current(id); plugin.getTournamentManager().award(match, side); matches(p, id, page); })),
+                "Record this match as a forfeit.", p -> { current(id); plugin.getTournaments().award(match, side); matches(p, id, page); })),
                 p -> award(p, id, match, page));
     }
 }

@@ -18,6 +18,7 @@ public final class Tournament {
     private final int rounds;
     private boolean running;
     private boolean cancelled;
+    private boolean started;
 
     public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
                       boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel) {
@@ -69,7 +70,11 @@ public final class Tournament {
     public void resume() {
         if (isComplete() || cancelled) throw new IllegalStateException("This tournament has ended.");
         running = true;
+        started = true;
     }
+    /** Play has begun at least once (survives restarts). */
+    public boolean started() { return started || matches.stream().anyMatch(m -> m.status() != TournamentMatch.Status.WAITING); }
+    void restoreStarted(boolean value) { started = value; }
     public void pause() { running = false; }
     public void cancel() { cancelled = true; running = false; }
     public String statusText() { return cancelled ? "Cancelled" : isComplete() ? "Finished" : running ? "Playing" : "Paused"; }
@@ -107,7 +112,8 @@ public final class Tournament {
                 else if (score.winner() == (first ? 1 : 2)) wins++;
                 else losses++;
             }
-            result.add(new Standing(entries.get(i), played, wins, draws, losses, wins * 3 + draws, difference));
+            // One point per match won. Round difference only breaks ties in the order shown.
+            result.add(new Standing(entries.get(i), played, wins, draws, losses, wins, difference));
         }
         result.sort(Comparator.comparingInt(Standing::points).reversed()
                 .thenComparing(Comparator.comparingInt(Standing::roundDifference).reversed())

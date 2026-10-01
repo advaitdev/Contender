@@ -1,8 +1,10 @@
 package me.advait.contender.tab;
 
+import me.advait.contender.display.Theme;
 import me.advait.contender.tournament.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import java.util.*;
 import java.util.function.Function;
 
@@ -36,6 +38,10 @@ public final class BracketLayout {
     }
     public static Layout render(Tournament tournament, Map<Integer, Score> liveScores, Function<UUID, Presence> presence,
                                 List<UUID> roster, View view) {
+        return render(tournament, liveScores, presence, roster, view, me.advait.contender.display.Themes.byId("ocean"));
+    }
+    public static Layout render(Tournament tournament, Map<Integer, Score> liveScores, Function<UUID, Presence> presence,
+                                List<UUID> roster, View view, Theme theme) {
         int round = view.round() == 0 ? currentRound(tournament) : Math.clamp(view.round(), 1, rounds(tournament));
         List<TournamentMatch> matches = tournament.matches().stream().filter(m -> m.round() == round).toList();
         int contentPages = view.standings() ? pages(tournament.entries().size(), 57) : pages(matches.size(), MATCHES_PER_PAGE);
@@ -43,10 +49,10 @@ public final class BracketLayout {
         int pageCount = Math.max(contentPages, rosterPages);
         int page = Math.floorMod(view.page(), pageCount);
         List<TabRow> rows = new ArrayList<>();
-        if (view.standings()) standings(rows, tournament, presence, page % contentPages);
-        else matches(rows, tournament, matches, liveScores, presence, round, page % contentPages);
+        if (view.standings()) standings(rows, tournament, presence, page % contentPages, theme);
+        else matches(rows, tournament, matches, liveScores, presence, round, page % contentPages, theme);
         int start = (page % rosterPages) * ROSTER_PER_PAGE;
-        rows.add(label("Players (" + roster.size() + ")", NamedTextColor.GOLD));
+        rows.add(label("Players (" + roster.size() + ")", theme.primary()));
         for (int i = start; i < Math.min(start + ROSTER_PER_PAGE, roster.size()); i++) {
             Presence player = presence.apply(roster.get(i));
             rows.add(new TabRow(player.display(), player.latency(), player.texture(), player.signature(), withHead(player, player.display()), null));
@@ -55,13 +61,13 @@ public final class BracketLayout {
         return new Layout(rows, round, page, pageCount, view.standings());
     }
     private static void matches(List<TabRow> rows, Tournament tournament, List<TournamentMatch> matches,
-                                Map<Integer, Score> liveScores, Function<UUID, Presence> presence, int round, int page) {
+                                Map<Integer, Score> liveScores, Function<UUID, Presence> presence, int round, int page, Theme theme) {
         int scoreWidth = scoreWidth(tournament, presence);
         int start = page * MATCHES_PER_PAGE;
         int end = Math.min(start + MATCHES_PER_PAGE, matches.size());
         int columns = Math.max(1, (end - start + MATCHES_PER_COLUMN - 1) / MATCHES_PER_COLUMN);
         for (int column = 0; column < columns; column++) {
-            rows.add(label("Round " + round, NamedTextColor.GOLD));
+            rows.add(label("Round " + round, theme.primary()));
             for (int i = start + column * MATCHES_PER_COLUMN; i < Math.min(start + (column + 1) * MATCHES_PER_COLUMN, end); i++) {
                 TournamentMatch match = matches.get(i);
                 boolean cancelled = tournament.isCancelled() && match.status() != TournamentMatch.Status.FINISHED;
@@ -70,16 +76,16 @@ public final class BracketLayout {
                     case PLAYING -> "Playing";
                     case FINISHED -> match.result().reason() == me.advait.contender.duel.DuelResult.Reason.FORFEIT ? "Forfeit" : "Finished";
                 };
-                NamedTextColor statusColor = cancelled ? NamedTextColor.RED : switch (match.status()) {
-                    case WAITING -> NamedTextColor.YELLOW; case PLAYING -> NamedTextColor.GREEN; case FINISHED -> NamedTextColor.AQUA;
+                TextColor statusColor = cancelled ? NamedTextColor.RED : switch (match.status()) {
+                    case WAITING -> theme.muted(); case PLAYING -> NamedTextColor.GREEN; case FINISHED -> theme.secondary();
                 };
                 rows.add(TabRow.label(Component.text("#" + match.number() + " ", NamedTextColor.GRAY)
                         .append(Component.text(status, statusColor))).match(match.number()));
                 Score score = match.result() != null ? new Score(match.result().team1Score(), match.result().team2Score())
                         : liveScores.getOrDefault(match.number(), new Score(0, 0));
-                rows.add(side(tournament.entries().get(match.first()), score.first(), match, 1, tournament.teams(), presence, scoreWidth));
-                rows.add(side(tournament.entries().get(match.second()), score.second(), match, 2, tournament.teams(), presence, scoreWidth));
-                rows.add(label("----------------------", NamedTextColor.DARK_AQUA));
+                rows.add(side(tournament.entries().get(match.first()), score.first(), match, 1, tournament.teams(), presence, scoreWidth, theme));
+                rows.add(side(tournament.entries().get(match.second()), score.second(), match, 2, tournament.teams(), presence, scoreWidth, theme));
+                rows.add(label("----------------------", theme.accent()));
             }
             pad(rows);
         }
@@ -101,21 +107,21 @@ public final class BracketLayout {
         return Math.max(124, tournament.entries().stream().mapToInt(entry -> TabText.width(entryName(entry, tournament.teams(), presence)) + 16).max().orElse(124));
     }
     private static TabRow side(TournamentEntry entry, int score, TournamentMatch match, int side, boolean teams,
-                               Function<UUID, Presence> presence, int width) {
+                               Function<UUID, Presence> presence, int width, Theme theme) {
         List<Presence> players = entry.players().stream().map(presence).toList();
-        NamedTextColor color = match.result() != null && Objects.equals(match.result().winner(), side) ? NamedTextColor.GREEN : NamedTextColor.GOLD;
+        TextColor color = match.result() != null && Objects.equals(match.result().winner(), side) ? NamedTextColor.GREEN : theme.primary();
         Component text = TabText.scored(entryName(entry, teams, presence), Integer.toString(score), color, width);
         return new TabRow(text, latency(players),
                 !teams ? players.getFirst().texture() : TabSkin.SPACER, !teams ? players.getFirst().signature() : TabSkin.SIGNATURE,
                 !teams ? withHead(players.getFirst(), text) : text, match.number());
     }
-    private static void standings(List<TabRow> rows, Tournament tournament, Function<UUID, Presence> presence, int page) {
+    private static void standings(List<TabRow> rows, Tournament tournament, Function<UUID, Presence> presence, int page, Theme theme) {
         var standings = tournament.standings();
         int width = scoreWidth(tournament, presence) + 24;
         int start = page * 57, end = Math.min(start + 57, standings.size());
         int columns = Math.max(1, (end - start + 18) / 19);
         for (int column = 0; column < columns; column++) {
-            rows.add(label("Standings             Pts", NamedTextColor.GOLD));
+            rows.add(label("Standings          Wins", theme.primary()));
             for (int i = start + column * 19; i < Math.min(start + (column + 1) * 19, end); i++) {
                 Tournament.Standing standing = standings.get(i);
                 int rank = i + 1;
@@ -124,7 +130,7 @@ public final class BracketLayout {
                 List<Presence> players = standing.entry().players().stream().map(presence).toList();
                 Component name = Component.text(rank + ". ", NamedTextColor.GRAY)
                         .append(entryName(standing.entry(), tournament.teams(), presence));
-                Component text = TabText.scored(name, Integer.toString(standing.points()), NamedTextColor.GOLD, width);
+                Component text = TabText.scored(name, Integer.toString(standing.points()), theme.primary(), width);
                 rows.add(new TabRow(text, latency(players), !tournament.teams() ? players.getFirst().texture() : TabSkin.SPACER,
                         !tournament.teams() ? players.getFirst().signature() : TabSkin.SIGNATURE,
                         !tournament.teams() ? withHead(players.getFirst(), text) : text, null));
@@ -139,6 +145,6 @@ public final class BracketLayout {
         return TabText.scored(name, score, color);
     }
     private static int pages(int count, int size) { return Math.max(1, (count + size - 1) / size); }
-    private static TabRow label(String text, NamedTextColor color) { return TabRow.label(Component.text(text, color)); }
+    private static TabRow label(String text, TextColor color) { return TabRow.label(Component.text(text, color)); }
     private static void pad(List<TabRow> rows) { while (rows.size() % 20 != 0) rows.add(TabRow.label(Component.empty())); }
 }

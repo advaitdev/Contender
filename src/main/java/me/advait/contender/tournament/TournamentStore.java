@@ -21,6 +21,7 @@ public final class TournamentStore {
         yaml.set("max-parallel", tournament.maxParallel());
         yaml.set("bracket-rounds", tournament.rounds());
         yaml.set("cancelled", tournament.isCancelled());
+        yaml.set("started", tournament.started());
         List<Map<String, Object>> entries = new ArrayList<>();
         for (TournamentEntry entry : tournament.entries()) {
             Map<String, String> names = new LinkedHashMap<>();
@@ -65,6 +66,7 @@ public final class TournamentStore {
             }
         }
         if (yaml.getBoolean("cancelled")) tournament.cancel();
+        tournament.restoreStarted(yaml.getBoolean("started"));
         // Resume is explicit after a restart; unfinished matches return to the queue.
         return tournament;
     }

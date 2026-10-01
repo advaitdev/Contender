@@ -9,6 +9,8 @@
   rc.py chat "<message>"          send chat
   rc.py wait <title> [seconds]    wait until a screen with this title (substring) is open
   rc.py waitclosed [seconds]      wait until no screen is open
+  rc.py use <slot>                select a hotbar slot (0-8) and right-click with it
+  rc.py attack                    left-click whatever the crosshair is on
   rc.py hud on|off                show or hide the HUD (like F1)
   rc.py close                     press Escape on the open screen (via /dialog clear fallback)
 """
@@ -113,6 +115,8 @@ def main(argv):
     elif op in ("cmd", "chat"):
         body = {"type": "command", "command": argv[1]} if op == "cmd" else {"type": "chat", "message": argv[1]}
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", body)))
+    elif op == "use":
+        print(json.dumps(call("POST", "/v1/actors/Render_1/actions", {"type": "useHotbar", "slot": int(argv[1])})))
     elif op == "attack":
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", {"type": "attack"})))
     elif op == "close":

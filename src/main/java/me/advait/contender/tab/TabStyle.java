@@ -13,8 +13,11 @@ public record TabStyle(String title, NamedTextColor color, boolean enabled) {
         java.util.Objects.requireNonNull(color);
     }
     public Component header(String tournamentName) {
-        String heading = title.isBlank() ? tournamentName == null ? "Contender" : tournamentName : title;
-        return Component.text("\n" + heading + "\n", color);
+        return Component.text("\n" + heading(tournamentName) + "\n", color);
+    }
+    /** The title text alone: the custom title, otherwise the event name. */
+    public String heading(String tournamentName) {
+        return title.isBlank() ? tournamentName == null ? "Contender" : tournamentName : title;
     }
     public static TabStyle read(ConfigurationSection config) {
         var color = RoleStyle.lenientColor(config.getString("tablist.color"), net.kyori.adventure.text.format.NamedTextColor.GOLD, "tablist.color");

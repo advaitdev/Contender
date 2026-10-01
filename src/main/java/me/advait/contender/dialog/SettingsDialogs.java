@@ -130,7 +130,7 @@ public final class SettingsDialogs {
                 Component.text("Alice ", current.secondary()).append(Component.text("2", current.primary())),
                 Component.text("------------", current.accent()));
         dialogs.show(player, "Display Colors", List.of(DialogBody.plainMessage(DialogText.muted(
-                "Used by the board, vote numbers, match holograms, the tab bracket and fireworks."), 320),
+                "Colors for the board, holograms and fireworks."), 320),
                 DialogBody.plainMessage(preview, 320)), List.of(), buttons, 2, 150,
                 dialogs.button(player, DialogIcon.BACK.label("Back", DialogPalette.MUTED), null, true, 150, (p, view) -> back.accept(p)));
     }

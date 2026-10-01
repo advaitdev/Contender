@@ -157,7 +157,9 @@ public final class StageBoard extends Module {
                 double x = (column - (columns - 1) / 2.0) * (width + gap);
                 cells.add(cell(x, -row * ROW_HEIGHT, width));
             }
-            cells.add(cell(0, 0.75 * SCALE, (width + gap) * columns));
+            Cell title = cell(0, 0.95 * SCALE, (width + gap) * columns);
+            title.display.setTransformationMatrix(new Matrix4f().scaling(SCALE * 1.8f));
+            cells.add(title);
             cells.add(cell(0, -rowsPerColumn * ROW_HEIGHT - 0.2 * SCALE, (width + gap) * columns));
             for (int row = 0; row < 3; row++) for (int side = 0; side < 2; side++) {
                 cells.add(cell((side == 0 ? -1 : 1) * 2.1 * SCALE, -rowsPerColumn * ROW_HEIGHT - (0.7 + row * 0.4) * SCALE, 4 * SCALE));
@@ -172,7 +174,7 @@ public final class StageBoard extends Module {
             set(cells.get(i), row.boardText().append(TabText.padding(columnPixels - 12 - TabText.width(row.boardText()))), target);
         }
         int offset = columns * rowsPerColumn;
-        set(cells.get(offset++), TabStyle.read(plugin.getConfig()).header(stage == null ? null : stage.name()), null);
+        set(cells.get(offset++), Component.text(TabStyle.read(plugin.getConfig()).heading(stage == null ? null : stage.name()), theme.primary()), null);
         Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
         set(cells.get(offset++), caption, null);
         if (!bracket || layout == null) {

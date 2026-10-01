@@ -27,6 +27,14 @@ public interface Spectatable {
     /** What watchers face when they arrive, or null to keep the spawn's facing. */
     default Location focus() { return null; }
 
+    /** The spectator spawn, turned to face {@link #focus()}. */
+    default Location watchSpot() {
+        Location spawn = spectatorSpawn();
+        Location focus = focus();
+        if (spawn == null || focus == null || focus.getWorld() != spawn.getWorld() || focus.distanceSquared(spawn) <= 1) return spawn;
+        return spawn.clone().setDirection(focus.toVector().subtract(spawn.toVector()));
+    }
+
     /** Hide watcher avatars from competitors entirely. */
     default boolean hidesAvatars() { return false; }
 }

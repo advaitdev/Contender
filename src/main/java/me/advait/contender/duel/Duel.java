@@ -403,7 +403,8 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         victim.setGameMode(GameMode.SPECTATOR);
         heal(victim);
         victim.setFireTicks(0);
-        if (at.getY() < layout().getBounds().minY() || !arena.contains(at)) teleport(victim, spectatorSpawn());
+        // Knocked off the map (or below its floor): watch the rest of the round from the spectator spawn.
+        if (!arena.insideMap(at) || at.getY() < layout().getBounds().minY() + 1) teleport(victim, watchSpot());
         else victim.setVelocity(new Vector(0, 0.4, 0));
         var theme = plugin.getThemes().current();
         Component message = killer != null && !killer.equals(victim)
@@ -560,7 +561,7 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
             default -> {
                 // Watch until the next round starts.
                 player.setGameMode(GameMode.SPECTATOR);
-                teleport(player, spectatorSpawn());
+                teleport(player, watchSpot());
             }
         }
     }

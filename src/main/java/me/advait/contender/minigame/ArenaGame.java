@@ -120,7 +120,13 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
     protected void bench(Player player) {
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
-        player.setVelocity(new Vector(0, 0.3, 0));
+        // Knocked off the map or below its floor: watch from the spectator spawn instead of under the arena.
+        if (offMap(player.getLocation()) && spectatorSpawn() != null) player.teleport(watchSpot());
+        else player.setVelocity(new Vector(0, 0.3, 0));
+    }
+
+    @Override protected boolean offMap(Location at) {
+        return arena != null && (!arena.insideMap(at) || at.getY() < arena.layout().getBounds().minY() + 1);
     }
 
     // ---- ArenaActivity -------------------------------------------------------------------------
@@ -168,7 +174,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         if (!(event.getEntity() instanceof Player victim) || !ours(victim)) return;
         if (!fighting(victim)) {
             event.setCancelled(true);
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(spectatorSpawn()));
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(watchSpot()));
             return;
         }
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); killed(victim, lastAttacker(victim)); return; }

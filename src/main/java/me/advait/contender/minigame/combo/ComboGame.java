@@ -129,7 +129,7 @@ public final class ComboGame extends ArenaGame {
         roster.putAll(shuffled);
         for (Player player : players) {
             bench(player);
-            player.teleport(spectatorSpawn());
+            player.teleport(watchSpot());
         }
         for (Participant participant : roster.values()) participant.value = "Waiting";
         broadcast(Msg.text("Turn order: " + String.join(", ", roster.values().stream().filter(p -> p.status == Status.PLAYING).map(p -> p.name).toList()), DialogPalette.MUTED));
@@ -329,7 +329,7 @@ public final class ComboGame extends ArenaGame {
             Player online = Bukkit.getPlayer(id);
             if (online != null) {
                 bench(online);
-                online.teleport(spectatorSpawn());
+                online.teleport(watchSpot());
             }
             nextTurn = tick + 50;
             plugin.getStages().refreshDisplays();

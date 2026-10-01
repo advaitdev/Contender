@@ -122,7 +122,7 @@ public final class DuelService extends Module {
         if (duel.phase() != Duel.Phase.FIGHTING || !duel.isAlive(victim.getUniqueId())) {
             event.setCancelled(true);
             if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
-                tasks.later(1, () -> duel.teleport(victim, duel.phase() == Duel.Phase.FIGHTING ? duel.spectatorSpawn() : spawnFor(duel, victim)));
+                tasks.later(1, () -> duel.teleport(victim, duel.phase() == Duel.Phase.FIGHTING ? duel.watchSpot() : spawnFor(duel, victim)));
             }
             return;
         }
@@ -186,7 +186,7 @@ public final class DuelService extends Module {
         Player player = event.getPlayer();
         Duel duel = duelOf(player.getUniqueId());
         if (duel == null) return;
-        event.setRespawnLocation(duel.spectatorSpawn());
+        event.setRespawnLocation(duel.watchSpot());
         tasks.later(1, () -> {
             if (!player.isOnline() || duelOf(player.getUniqueId()) != duel) return;
             player.getInventory().clear();

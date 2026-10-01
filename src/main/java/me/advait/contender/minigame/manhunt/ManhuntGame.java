@@ -228,7 +228,7 @@ public final class ManhuntGame extends Minigame {
         if (!(event.getEntity() instanceof Player victim) || !ours(victim)) return;
         if (!active(victim)) {
             event.setCancelled(true);
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(spectatorSpawn()));
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(watchSpot()));
             return;
         }
         if (source != null && !source.equals(victim) && ours(source) && team(source.getUniqueId()) == team(victim.getUniqueId())) { event.setCancelled(true); return; }

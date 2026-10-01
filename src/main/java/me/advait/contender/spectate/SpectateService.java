@@ -60,11 +60,7 @@ public final class SpectateService extends Module implements Activity {
             registry.claim(id, this, ActivityRegistry.Involvement.WATCHING);
             plugin.getSnapshots().capture(player);
         }
-        Location spawn = target.spectatorSpawn();
-        Location focus = target.focus();
-        if (spawn != null && focus != null && focus.getWorld() == spawn.getWorld() && focus.distanceSquared(spawn) > 1) {
-            spawn = spawn.clone().setDirection(focus.toVector().subtract(spawn.toVector()));
-        }
+        Location spawn = target.watchSpot();
         player.setGameMode(GameMode.SPECTATOR);
         if (spawn == null || !move(player, spawn)) {
             if (fresh) {

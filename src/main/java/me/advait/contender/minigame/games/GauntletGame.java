@@ -98,7 +98,7 @@ public final class GauntletGame extends ArenaGame {
         queue.addAll(order);
         for (Player player : players) {
             bench(player);
-            player.teleport(spectatorSpawn());
+            player.teleport(watchSpot());
         }
         broadcast(Msg.text("Order: " + String.join(", ", order.stream().map(id -> participant(id).name).toList()), DialogPalette.MUTED));
     }

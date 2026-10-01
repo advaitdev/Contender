@@ -101,7 +101,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     /** Called when a claimed participant comes back while the game runs. Default: watch from the spectator spawn. */
     protected void playerReturned(Player player, Participant participant) {
         player.setGameMode(GameMode.SPECTATOR);
-        player.teleport(spectatorSpawn());
+        player.teleport(watchSpot());
     }
 
     /** Ends the game when its win condition is met. Default: one or no players left. */
@@ -110,6 +110,9 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     }
 
     protected int minimumPlayers() { return 1; }
+
+    /** Whether a spot is off the playing area (for example knocked off the side), so a player out there watches from the spectator spawn. */
+    protected boolean offMap(Location location) { return false; }
 
     protected int countdownSeconds() { return 10; }
 
@@ -400,7 +403,8 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         plugin.getDeathEffect().play(player);
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
-        player.setVelocity(new Vector(0, 0.3, 0));
+        if (offMap(player.getLocation()) && spectatorSpawn() != null) player.teleport(watchSpot());
+        else player.setVelocity(new Vector(0, 0.3, 0));
         if (message != null) broadcast(message);
         Sounds.ELIMINATED.play(audience());
         Msg.title(player, Msg.text("Out", DialogPalette.DANGER), Msg.text("You can keep watching", DialogPalette.MUTED), 2, 30, 8);

@@ -83,7 +83,7 @@ public final class VoteService extends Module {
                 left <= 10 ? DialogPalette.DANGER : DialogPalette.TEXT));
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (plugin.getRegistry().isPlaying(player.getUniqueId())) continue; // Don't cover a fight's action bar.
-            player.sendActionBar(bar);
+            Msg.status(player, bar);
             if (left <= 5 && left > 0) Sounds.TICK.play(player);
         }
         if (session.liveCounts()) for (VoteSession.Candidate candidate : session.candidates()) badges.showCount(candidate, session.votesFor(candidate.id()));

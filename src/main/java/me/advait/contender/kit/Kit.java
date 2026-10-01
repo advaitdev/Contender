@@ -58,19 +58,24 @@ public class Kit {
     /** An independent copy for editing, so running matches keep the saved kit until the copy is saved. */
     public Kit copy() {
         Kit copy = new Kit(id);
-        copy.displayName = displayName;
-        copy.contents = cloneArray(contents);
-        copy.armor = cloneArray(armor);
-        copy.offhand = offhand == null ? null : offhand.clone();
-        copy.icon = icon;
-        copy.allowBlockPlace = allowBlockPlace;
-        copy.allowBlockBreak = allowBlockBreak;
-        copy.naturalRegen = naturalRegen;
-        copy.spectatorInvisible = spectatorInvisible;
-        copy.noClear = noClear;
-        copy.pvpHurt = pvpHurt;
-        copy.pveHurt = pveHurt;
+        copy.copyFrom(this);
         return copy;
+    }
+
+    /** Takes on another kit's items and rules, so games already holding this kit get the change. */
+    public void copyFrom(Kit other) {
+        displayName = other.displayName;
+        contents = cloneArray(other.contents);
+        armor = cloneArray(other.armor);
+        offhand = other.offhand == null ? null : other.offhand.clone();
+        icon = other.icon;
+        allowBlockPlace = other.allowBlockPlace;
+        allowBlockBreak = other.allowBlockBreak;
+        naturalRegen = other.naturalRegen;
+        spectatorInvisible = other.spectatorInvisible;
+        noClear = other.noClear;
+        pvpHurt = other.pvpHurt;
+        pveHurt = other.pveHurt;
     }
 
     private ItemStack[] cloneArray(ItemStack[] original) {

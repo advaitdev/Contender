@@ -314,7 +314,7 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
                 int next = player.isSneaking() ? index - 1 : index + 1;
                 session.type = RaceMobs.TYPES.get(Math.floorMod(next, RaceMobs.TYPES.size()));
                 player.getInventory().setItem(1, typeTool(session.type));
-                player.sendActionBar(Msg.text("New checkpoints: " + pretty(session.type), DialogPalette.ACCENT));
+                Msg.notice(player, Msg.text("New checkpoints: " + pretty(session.type), DialogPalette.ACCENT));
                 Sounds.CLICK.play(player);
             }
             case "move" -> {
@@ -353,12 +353,12 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
             }
             case "move" -> {
                 session.moving = index;
-                player.sendActionBar(Msg.text("Picked up " + course.label(index) + ". Right-click to place it.", DialogPalette.ACCENT));
+                Msg.notice(player, Msg.text("Picked up " + course.label(index) + ". Right-click to place it.", DialogPalette.ACCENT));
                 Sounds.CLICK.play(player);
             }
             case "insert" -> {
                 session.insertBefore = index;
-                player.sendActionBar(Msg.text("Right-click to add a checkpoint before " + course.label(index) + ".", DialogPalette.ACCENT));
+                Msg.notice(player, Msg.text("Right-click to add a checkpoint before " + course.label(index) + ".", DialogPalette.ACCENT));
                 Sounds.CLICK.play(player);
             }
             case "remove" -> {

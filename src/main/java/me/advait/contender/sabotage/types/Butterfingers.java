@@ -31,7 +31,7 @@ public final class Butterfingers implements Sabotage {
             for (int slot = 0; slot < 9; slot++) hotbar.add(inventory.getItem(slot));
             Collections.shuffle(hotbar);
             for (int slot = 0; slot < 9; slot++) inventory.setItem(slot, hotbar.get(slot));
-            player.sendActionBar(Msg.text("Butterfingers!", DialogPalette.WARNING));
+            Msg.notice(player, Msg.text("Butterfingers!", DialogPalette.WARNING));
             Sounds.POP.play(player);
         }
     }

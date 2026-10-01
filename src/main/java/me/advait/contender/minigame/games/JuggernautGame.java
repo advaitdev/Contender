@@ -185,7 +185,7 @@ public final class JuggernautGame extends ArenaGame {
             Set<UUID> others = new HashSet<>(audience());
             others.remove(juggernaut);
             Msg.actionBar(others, Component.text(holder.getName(), theme.primary()).append(Msg.text(" is the Juggernaut  ·  " + clock, DialogPalette.MUTED)));
-            holder.sendActionBar(Component.text("You're the Juggernaut", theme.primary()).append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
+            Msg.status(holder, Component.text("You're the Juggernaut", theme.primary()).append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
             holder.getWorld().spawnParticle(Particle.DUST, holder.getLocation().add(0, 1, 0), 6, 0.4, 0.6, 0.4, 0,
                     new Particle.DustOptions(theme.primaryColor(), 1.2f));
         } else {

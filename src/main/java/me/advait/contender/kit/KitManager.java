@@ -130,8 +130,11 @@ public class KitManager {
         catch (RuntimeException e) { plugin.getLogger().severe("Failed to save kits.yml: " + e.getMessage()); }
     }
 
+    /** Saves a kit. An edited copy is written into the kit already in use, so games and forms holding it see the change. */
     public void saveKit(Kit kit) {
-        kits.put(kit.getId(), kit);
+        Kit existing = kits.get(kit.getId());
+        if (existing != null && existing != kit) existing.copyFrom(kit);
+        else kits.put(kit.getId(), kit);
         saveKits();
     }
 

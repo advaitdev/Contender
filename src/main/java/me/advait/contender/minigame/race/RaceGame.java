@@ -142,7 +142,7 @@ public final class RaceGame extends Minigame {
             if (participant.status != Status.PLAYING || finishTimes.containsKey(participant.id)) continue;
             participant.value = "#" + progress.getOrDefault(participant.id, 0) + "  " + time(elapsed).replaceFirst("\\.[0-9]{3}$", "");
             Player racer = Bukkit.getPlayer(participant.id);
-            if (racer != null) racer.sendActionBar(progressBar(progress.getOrDefault(participant.id, 0), elapsed));
+            if (racer != null) Msg.status(racer, progressBar(progress.getOrDefault(participant.id, 0), elapsed));
         }
         if (timeLimitSeconds > 0 && elapsed >= timeLimitSeconds * 1_000_000_000L) {
             broadcast(Msg.text("Time's up.", DialogPalette.WARNING));
@@ -239,7 +239,9 @@ public final class RaceGame extends Minigame {
         int reached = progress.getOrDefault(racer.getUniqueId(), 0);
         if (index > reached + course.maxJump()) {
             event.setCancelled(true);
-            racer.sendActionBar(Msg.text("Too far ahead. Hit #" + (reached + 1) + " to #" + (reached + course.maxJump()) + ".", DialogPalette.WARNING));
+            int furthest = Math.min(reached + course.maxJump(), course.size()); // 1-based, like index
+            String next = course.label(reached), last = course.label(furthest - 1);
+            Msg.notice(racer, Msg.text("Too far ahead. Hit " + (furthest == reached + 1 ? next + " first." : next + " to " + last + "."), DialogPalette.WARNING));
             return;
         }
         // A real hit lets the mace's Wind Burst launch the racer; the mob is healed right after.
@@ -426,7 +428,7 @@ public final class RaceGame extends Minigame {
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
         if (plugin.getRegistry().owner(player.getUniqueId()) != this) return;
-        event.setRespawnLocation(finishTimes.containsKey(player.getUniqueId()) ? spectatorSpawn() : returnPoint(player));
+        event.setRespawnLocation(finishTimes.containsKey(player.getUniqueId()) ? watchSpot() : returnPoint(player));
         tasks.later(1, () -> { if (player.isOnline() && !finishTimes.containsKey(player.getUniqueId())) normalize(player); });
     }
 
@@ -475,7 +477,7 @@ public final class RaceGame extends Minigame {
 
     /** "Checkpoint 3 of 8  ·  1:24" (the finish is the last checkpoint and isn't counted). */
     private Component progressBar(int reached, long elapsed) {
-        int checkpoints = Math.max(1, course.size() - 1);
+        int checkpoints = course.size() - 1; // the last one is the finish
         Component left = reached >= checkpoints ? Msg.text("Go for the finish", DialogPalette.ACCENT)
                 : Msg.text("Checkpoint ", DialogPalette.MUTED).append(Msg.text(reached + " of " + checkpoints, DialogPalette.ACCENT));
         String clock = time(elapsed).replaceFirst("\\.[0-9]{3}$", "");

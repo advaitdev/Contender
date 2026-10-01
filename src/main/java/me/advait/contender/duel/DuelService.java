@@ -212,7 +212,7 @@ public final class DuelService extends Module {
             return;
         }
         if (player.getGameMode() == GameMode.SPECTATOR) {
-            if (!duel.arena().contains(to)) event.setTo(duel.spectatorSpawn());
+            if (!duel.arena().contains(to)) event.setTo(duel.watchSpot());
             return;
         }
         var bounds = duel.layout().getBounds();
@@ -222,7 +222,7 @@ public final class DuelService extends Module {
         }
         if (!duel.arena().contains(to)) {
             Location back = event.getFrom().clone();
-            if (!duel.arena().contains(back)) back = duel.spectatorSpawn();
+            if (!duel.arena().contains(back)) back = duel.watchSpot();
             event.setTo(back);
         }
     }

@@ -11,7 +11,9 @@ import org.bukkit.entity.Player;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Chat, title and action bar output in the shared palette. */
 public final class Msg {
@@ -37,11 +39,38 @@ public final class Msg {
         }
     }
 
+    /** A repeating status bar (a clock or score) for each of these players. See {@link #status}. */
     public static void actionBar(Collection<UUID> players, Component message) {
         for (UUID id : players) {
             Player player = Bukkit.getPlayer(id);
-            if (player != null) player.sendActionBar(message);
+            if (player != null) status(player, message);
         }
+    }
+
+    private static final Map<UUID, Long> NOTICE_UNTIL = new ConcurrentHashMap<>();
+    private static final long NOTICE_MILLIS = 2500;
+
+    /** A one-off action bar message. Repeating status bars wait a moment so it can be read. */
+    public static void notice(Player player, Component message) {
+        player.sendActionBar(message);
+        NOTICE_UNTIL.put(player.getUniqueId(), System.currentTimeMillis() + NOTICE_MILLIS);
+    }
+
+    public static void notice(Collection<UUID> players, Component message) {
+        for (UUID id : players) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null) notice(player, message);
+        }
+    }
+
+    /** A repeating status bar, resent every second or so. Skipped while a {@link #notice} is showing. */
+    public static void status(Player player, Component message) {
+        Long until = NOTICE_UNTIL.get(player.getUniqueId());
+        if (until != null) {
+            if (until > System.currentTimeMillis()) return;
+            NOTICE_UNTIL.remove(player.getUniqueId(), until);
+        }
+        player.sendActionBar(message);
     }
 
     public static void title(Audience audience, Component title, Component subtitle, int fadeIn, int stay, int fadeOut) {

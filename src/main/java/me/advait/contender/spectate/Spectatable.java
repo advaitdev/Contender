@@ -59,7 +59,8 @@ public interface Spectatable {
     }
 
     private static boolean open(Location location) {
-        if (!location.getWorld().isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) return false;
+        // Watchers are often placed before anyone is near, so load the chunk, but never generate one.
+        if (!location.getWorld().isChunkGenerated(location.getBlockX() >> 4, location.getBlockZ() >> 4)) return false;
         for (int y = 0; y <= 1; y++) if (!location.clone().add(0, y, 0).getBlock().isPassable()) return false;
         return true;
     }

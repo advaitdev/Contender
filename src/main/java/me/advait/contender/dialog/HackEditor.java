@@ -4,6 +4,7 @@ import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.Contender;
+import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
 import me.advait.contender.hacker.HackSetting;
 import me.advait.contender.hacker.HackSettings;
@@ -56,10 +57,10 @@ final class HackEditor {
 
     void grid(Player player, Target target) {
         HackSettings settings = target.current().apply(player);
-        // One text block: separate blocks each add spacing, which pushes the last row off small screens.
-        List<Component> lines = new ArrayList<>(target.header());
-        lines.add(status(settings));
-        List<DialogBody> body = List.of(DialogBody.plainMessage(DialogText.lines(lines.toArray(Component[]::new)), 340));
+        // The status sits in the title and any header is one text block, so the grid and its extras
+        // fit without scrolling on small GUIs (426x240, Auto GUI scale at 1440p).
+        List<DialogBody> body = target.header().isEmpty() ? List.of()
+                : List.of(DialogBody.plainMessage(DialogText.lines(target.header().toArray(Component[]::new)), 340));
         List<ActionButton> buttons = new ArrayList<>();
         for (HackSetting setting : HackSetting.values()) {
             double value = settings.get(setting);
@@ -80,7 +81,8 @@ final class HackEditor {
         ActionButton exit = target.back() == null
                 ? dialogs.button(player, text("Close", MUTED), null, admin, NAV, (p, view) -> p.closeDialog())
                 : dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, admin, NAV, (p, view) -> target.back().accept(p));
-        dialogs.show(player, target.title(), body, List.of(), buttons, 2, NAV, exit);
+        Component title = DialogText.heading(target.title()).append(text("  ·  ", MUTED)).append(shortStatus(settings));
+        dialogs.show(player, title, body, List.of(), buttons, 2, NAV, exit);
     }
 
     private void levels(Player player, Target target, HackSetting setting) {
@@ -128,16 +130,16 @@ final class HackEditor {
     private void apply(Player player, Target target, HackSettings settings, String message) {
         target.save().accept(player, settings);
         Sounds.CLICK.play(player);
-        player.sendActionBar(text(message, ACCENT));
+        Msg.notice(player, text(message, ACCENT));
         grid(player, target);
     }
 
-    static Component status(HackSettings settings) {
+    /** The status for a title: "All off", "2 on · Looks legit" or "2 on · 1 might look suspicious". */
+    private static Component shortStatus(HackSettings settings) {
         int active = settings.active().size(), risky = settings.warnings().size();
-        if (active == 0) return text("All hacks are off", MUTED);
-        Component count = text(active + (active == 1 ? " hack on" : " hacks on"), ACCENT);
-        return count.append(text("  ·  ", MUTED)).append(risky == 0 ? text("Looks legit", SUCCESS)
-                : text(risky == 1 ? "1 might look suspicious" : risky + " might look suspicious", WARNING));
+        if (active == 0) return text("All off", MUTED);
+        return text(active + " on", ACCENT).append(text("  ·  ", MUTED)).append(risky == 0 ? text("Looks legit", SUCCESS)
+                : text(risky + " might look suspicious", WARNING));
     }
 
     static TextColor valueColor(HackSetting setting, double value) {

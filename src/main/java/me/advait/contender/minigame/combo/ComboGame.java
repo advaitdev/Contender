@@ -101,7 +101,9 @@ public final class ComboGame extends ArenaGame {
     private org.bukkit.entity.TextDisplay counter;
     private MannequinMotion motion;
     private UUID fighter;
-    private int tick, nextTurn, lastAcceptedHit = -1, hits, waitingSince = -1;
+    private int tick, nextTurn, lastAcceptedHit = -1, hits, waitingSince = -1, startBy;
+    /** How long a fighter has to land the first hit of a try, so an idle player can't stall the game. */
+    private static final int START_LIMIT_TICKS = 30 * 20;
     private boolean live, resetting;
 
     ComboGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit, ComboDifficulty difficulty, int retries) {
@@ -149,6 +151,9 @@ public final class ComboGame extends ArenaGame {
             Component bar = fighter == null ? Msg.text("Next turn starting…", DialogPalette.MUTED)
                     : Msg.text(participant(fighter).name + "  ", DialogPalette.TEXT).append(Msg.text("Combo " + hits, DialogPalette.ACCENT));
             Msg.actionBar(audience(), bar);
+            Player up = fighter == null || live || resetting ? null : Bukkit.getPlayer(fighter);
+            if (up != null) Msg.status(up, Msg.text("Hit the bot to start  ·  ", DialogPalette.MUTED)
+                    .append(Msg.text(Math.max(0, (startBy - tick + 19) / 20) + "s", DialogPalette.ACCENT)));
         }
         if (fighter == null) { nextTurn(); return; }
         Player player = Bukkit.getPlayer(fighter);
@@ -160,6 +165,7 @@ public final class ComboGame extends ArenaGame {
         bot.setFireTicks(0);
         bot.setHealth(bot.getAttribute(Attribute.MAX_HEALTH).getValue());
         if (live && !resetting && bot.getLocation().getY() < arena.layout().getBounds().minY() - 3) { endTurn(true); return; }
+        if (!live && !resetting && tick >= startBy) { endTurn(false); return; }
         if (resetting || !live) { motion.drive(bot, player, difficulty, false); return; }
         if (!contains(bot.getLocation())) { retry(); return; }
         double distance = player.getLocation().distanceSquared(bot.getLocation());
@@ -215,6 +221,7 @@ public final class ComboGame extends ArenaGame {
         resetting = false;
         hits = 0;
         lastAcceptedHit = -1;
+        startBy = tick + START_LIMIT_TICKS;
         attacks.reset();
         participant(player.getUniqueId()).value = "Playing";
         if (player.getGameMode() == GameMode.SPECTATOR) player.setSpectatorTarget(null);
@@ -295,7 +302,7 @@ public final class ComboGame extends ArenaGame {
         if (hits == 0) { retry(); return; }
         if (hits <= retries) {
             Player player = Bukkit.getPlayer(fighter);
-            if (player != null) player.sendActionBar(Msg.text("Hit back at " + hits + ". Try again.", DialogPalette.WARNING));
+            if (player != null) Msg.notice(player, Msg.text("Hit back at " + hits + ". Try again.", DialogPalette.WARNING));
             retry();
             return;
         }
@@ -313,10 +320,12 @@ public final class ComboGame extends ArenaGame {
         showCounter(participant.name, botCleared ? "∞" : hits + (hits == 1 ? " hit" : " hits"), true);
         if (botCleared) cleared.add(id);
         var theme = plugin.getThemes().current();
-        broadcast(Component.text(participant.name, theme.primary()).append(Msg.text(botCleared ? " knocked the bot into the void!" : " scored a " + hits + "-hit combo.", DialogPalette.TEXT)));
+        // A turn ends with no hits only when the fighter never started (see START_LIMIT_TICKS).
+        String result = botCleared ? " knocked the bot into the void!" : hits == 0 ? " ran out of time." : " scored a " + hits + "-hit combo.";
+        broadcast(Component.text(participant.name, theme.primary()).append(Msg.text(result, DialogPalette.TEXT)));
         Player player = Bukkit.getPlayer(id);
         if (player != null) {
-            Msg.title(player, Component.text(botCleared ? "∞" : String.valueOf(hits), theme.primary()), Msg.text(botCleared ? "Into the void" : "hit combo", DialogPalette.MUTED), 2, 40, 8);
+            Msg.title(player, Component.text(botCleared ? "∞" : String.valueOf(hits), theme.primary()), Msg.text(botCleared ? "Into the void" : hits == 0 ? "Out of time" : "hit combo", DialogPalette.MUTED), 2, 40, 8);
             (botCleared ? Sounds.VICTORY : Sounds.ROUND_WIN).play(player);
         }
         save();

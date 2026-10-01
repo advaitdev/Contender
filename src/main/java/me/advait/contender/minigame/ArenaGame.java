@@ -214,7 +214,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onRespawn(PlayerRespawnEvent event) {
         if (!ours(event.getPlayer())) return;
-        Location spawn = spectatorSpawn();
+        Location spawn = watchSpot();
         if (spawn != null) event.setRespawnLocation(spawn);
         Player player = event.getPlayer();
         tasks.later(1, () -> { if (player.isOnline() && ours(player) && !fighting(player)) player.setGameMode(GameMode.SPECTATOR); });
@@ -233,11 +233,11 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
             return;
         }
         if (player.getGameMode() == GameMode.SPECTATOR) {
-            if (!arena.contains(event.getTo())) event.setTo(spectatorSpawn());
+            if (!arena.contains(event.getTo())) event.setTo(watchSpot());
             return;
         }
         if (fighting(player) && event.getTo().getY() < arena.layout().getBounds().minY()) { killed(player, lastAttacker(player)); return; }
-        if (!arena.contains(event.getTo())) event.setTo(arena.contains(event.getFrom()) ? event.getFrom() : spectatorSpawn());
+        if (!arena.contains(event.getTo())) event.setTo(arena.contains(event.getFrom()) ? event.getFrom() : watchSpot());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

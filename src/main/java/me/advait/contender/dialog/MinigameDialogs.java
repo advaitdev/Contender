@@ -34,10 +34,12 @@ public final class MinigameDialogs {
         List<DialogBody> body = new ArrayList<>();
         long entered = game.roster().stream().filter(p -> p.status != Minigame.Status.WITHDRAWN).count();
         long online = game.roster().stream().filter(p -> p.status != Minigame.Status.WITHDRAWN && Bukkit.getPlayer(p.id) != null).count();
-        body.add(DialogBody.plainMessage(DialogText.lines(
-                DialogText.detail("Game", game.type().name()),
-                DialogText.detail("Status", game.statusText(), game.state() == Minigame.State.RUNNING ? SUCCESS : game.cancelled() ? DANGER : TEXT),
-                DialogText.detail("Players", online + " of " + entered + " online")), 320));
+        // One line keeps the buttons on screen at small GUI sizes; the title already names the game.
+        Component summary = game.name().equalsIgnoreCase(game.type().name()) ? Component.empty()
+                : text(game.type().name(), TEXT).append(text("  ·  ", MUTED));
+        summary = summary.append(text(game.statusText(), game.state() == Minigame.State.RUNNING ? SUCCESS : game.cancelled() ? DANGER : TEXT))
+                .append(text("  ·  " + online + " of " + entered + " online", MUTED));
+        body.add(DialogBody.plainMessage(summary, 320));
         List<ActionButton> buttons = new ArrayList<>();
         switch (game.state()) {
             case READY -> buttons.add(button(player, DialogIcon.NEXT, "Start " + game.type().name(), ACCENT, "Moves everyone in and starts the countdown.",

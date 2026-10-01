@@ -118,10 +118,10 @@ public final class VoteDialogs {
                     open(p);
                 }), NAV);
         boolean stage = plugin.getVotes().stageLocation() != null;
-        dialogs.show(player, "Start a Vote", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("Each contestant gets a number over their head."),
-                DialogText.muted(stage ? "The results are revealed on the vote stage."
-                        : "Set a vote stage in Board & Lobby for the circle reveal.")), 320)), inputs, buttons, 2, NAV, null);
+        // One line, so Start Vote stays on screen at small GUI sizes.
+        dialogs.show(player, "Start a Vote", List.of(DialogBody.plainMessage(stage
+                ? DialogText.muted("Each contestant gets a number over their head.")
+                : text("Set a vote stage in Board & Lobby for the circle reveal.", WARNING), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private static DialogInput toggle(String key, DialogIcon icon, String label, boolean value, String yes, String no) {

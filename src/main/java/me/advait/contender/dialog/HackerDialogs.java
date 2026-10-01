@@ -31,12 +31,10 @@ public final class HackerDialogs {
             return;
         }
         if (hackers.mode() == HackerService.Mode.SELF) {
-            List<Component> header = new ArrayList<>();
-            header.add(DialogText.muted("Only you can see this. Changes apply right away."));
             List<HackEditor.Extra> extras = plugin.getSabotage().available(player)
                     ? List.of(new HackEditor.Extra(DialogIcon.SKULL, "Sabotage", "Change the rules for everyone in this event.", p -> new SabotageDialogs(plugin).open(p)))
                     : List.of();
-            new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", header,
+            new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", List.of(),
                     p -> require(p).profile(p.getUniqueId()).own(),
                     (p, settings) -> require(p).setOwn(p, settings), null, extras));
             return;
@@ -49,11 +47,10 @@ public final class HackerDialogs {
         HackerService hackers = plugin.getHackers();
         HackSettings plan = hackers.plan(player.getUniqueId());
         List<DialogBody> body = new ArrayList<>();
-        body.add(DialogBody.plainMessage(DialogText.muted("The director chooses your hacks for each event.\nOnly you can see this."), 320));
         Component state = hackers.planActive()
                 ? text("On now", SUCCESS)
                 : text("Off until the next event starts", MUTED);
-        body.add(DialogBody.plainMessage(state, 320));
+        body.add(DialogBody.plainMessage(DialogText.lines(DialogText.muted("The director chooses your hacks for each event."), state), 320));
         body.add(DialogBody.plainMessage(DialogText.lines(text(hackers.planActive() ? "Your hacks" : "Planned for next event", ACCENT),
                 text(plan.active().isEmpty() ? "Nothing yet" : String.join("\n", plan.active().stream()
                         .map(setting -> setting.label + "  " + setting.display(plan.get(setting))).toList()), TEXT)), 320));

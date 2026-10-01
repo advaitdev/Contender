@@ -38,9 +38,11 @@ public record RoleStyle(String prefix, NamedTextColor color) {
         return fallback;
     }
 
-    private static void warnOnce(String path, String value) {
+    /** Logs an invalid config value the first time it's read, not on every refresh. */
+    public static void warnOnce(String path, String value) { warnOnce(path, value, "It isn't valid."); }
+    public static void warnOnce(String path, String value, String detail) {
         if (WARNED.add(path + "=" + value)) {
-            org.bukkit.Bukkit.getLogger().warning("[Contender] Ignoring " + path + ": \"" + value + "\" isn't valid in config.yml. Using the default.");
+            org.bukkit.Bukkit.getLogger().warning("[Contender] Ignoring " + path + " in config.yml: \"" + value + "\". " + detail + " Using the default.");
         }
     }
     public void write(ConfigurationSection config, PlayerRole role) {

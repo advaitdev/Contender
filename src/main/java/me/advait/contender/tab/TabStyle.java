@@ -22,9 +22,11 @@ public record TabStyle(String title, NamedTextColor color, boolean enabled) {
     public static TabStyle read(ConfigurationSection config) {
         var color = RoleStyle.lenientColor(config.getString("tablist.color"), net.kyori.adventure.text.format.NamedTextColor.GOLD, "tablist.color");
         boolean enabled = config.getBoolean("tablist.enabled", true);
-        try { return new TabStyle(config.getString("tablist.title", ""), color, enabled); }
+        String title = config.getString("tablist.title", "");
+        try { return new TabStyle(title, color, enabled); }
         catch (IllegalArgumentException invalid) {
-            org.bukkit.Bukkit.getLogger().warning("[Contender] Ignoring tablist.title in config.yml: " + invalid.getMessage());
+            // Read every second by the tab list and the board, so warn once per bad value.
+            me.advait.contender.role.RoleStyle.warnOnce("tablist.title", title, invalid.getMessage());
             return new TabStyle("", color, enabled);
         }
     }

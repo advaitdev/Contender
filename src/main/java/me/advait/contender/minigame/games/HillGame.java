@@ -136,7 +136,7 @@ public final class HillGame extends ArenaGame {
         String clock = String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60);
         Msg.actionBar(audience(), status.append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
         // The player on the hill sees their own progress instead (sent last, so it replaces the shared line).
-        if (king != null) king.sendActionBar(Component.text("You hold the hill", theme.primary()).append(Msg.text("  ·  "
+        if (king != null) Msg.status(king, Component.text("You hold the hill", theme.primary()).append(Msg.text("  ·  "
                 + (int) participant(king.getUniqueId()).score + " of " + target + " pts  ·  " + clock, DialogPalette.MUTED)));
         if (left == 0) finish();
     }

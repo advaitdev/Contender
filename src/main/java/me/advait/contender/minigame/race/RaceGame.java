@@ -255,6 +255,7 @@ public final class RaceGame extends Minigame {
         progress.put(racer.getUniqueId(), index);
         participant(racer.getUniqueId()).score = index;
         if (index == course.size()) { finished(racer); return; }
+        plugin.getCelebrations().ring(mob.getLocation().add(0, mob.getHeight() / 2, 0), 1.0, 16);
         Sounds.TICK_HIGH.play(racer, 1f + index / (float) course.size());
         racer.sendActionBar(Msg.text("Checkpoint " + index + " of " + (course.size() - 1), DialogPalette.ACCENT));
     }

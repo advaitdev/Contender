@@ -78,7 +78,10 @@ public final class SnapshotStore {
         data.set(key + ".slot", player.getInventory().getHeldItemSlot());
         try { save(); }
         catch (RuntimeException failure) { data.set(key, null); throw failure; }
+        if (debug) plugin.getLogger().info("Saved " + player.getName() + "'s inventory");
     }
+
+    private final boolean debug = Boolean.getBoolean("contender.debug");
 
     /** Restores in place. Returns false if there was nothing to restore or the player cannot receive it yet. */
     public boolean restore(Player player) {
@@ -119,6 +122,7 @@ public final class SnapshotStore {
         player.setFireTicks(0);
         player.setFreezeTicks(0);
         data.set(key, null);
+        if (debug) plugin.getLogger().info("Restored " + player.getName() + "'s inventory");
         try { save(); }
         catch (RuntimeException failure) {
             // The player already has their items. Keeping the record would duplicate them on the next join.

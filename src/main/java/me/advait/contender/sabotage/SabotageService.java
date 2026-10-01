@@ -169,15 +169,14 @@ public final class SabotageService extends Module implements StageService.Listen
         Active running = new Active(sabotage, by, endsAt, context, new HashSet<>());
         active.put(sabotage.id(), running);
         lastTrigger = System.currentTimeMillis();
-        try { sabotage.start(context); }
-        catch (RuntimeException failure) { plugin.getLogger().log(Level.SEVERE, "Sabotage " + sabotage.id() + " failed to start", failure); }
+        safely(running, () -> sabotage.start(context));
         sync(running);
-        announce(running);
+        safely(running, () -> announce(running));
     }
 
     private void announce(Active running) {
         Sabotage sabotage = running.sabotage();
-        Player trigger = Bukkit.getPlayer(running.triggeredBy());
+        Player trigger = running.triggeredBy() == null ? null : Bukkit.getPlayer(running.triggeredBy());
         String who = trigger == null ? "A director" : trigger.getName();
         Component subtitle = Msg.text(sabotage.description(), DialogPalette.TEXT);
         Component title = Msg.text("Sabotage: " + sabotage.name(), DialogPalette.DANGER);

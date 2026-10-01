@@ -254,6 +254,13 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
 
     private void beginFight() {
         if (isOver()) return;
+        List<DuelTeam> absent = teams.stream().filter(team -> online(team.players()).isEmpty()).toList();
+        if (!absent.isEmpty()) {
+            // Hold the countdown until the side returns; its forfeit timer ends the match if it doesn't.
+            Msg.actionBar(audience(), Msg.text("Waiting for " + absent.getFirst().name() + " to reconnect", DialogPalette.WARNING));
+            tasks.later(20, this::beginFight);
+            return;
+        }
         if (round == 1) {
             for (UUID player : teamOf.keySet()) {
                 Player online = Bukkit.getPlayer(player);

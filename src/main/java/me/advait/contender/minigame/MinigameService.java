@@ -38,6 +38,9 @@ public final class MinigameService extends Module {
 
     private void registerBuiltIns() {
         // Order here is the order shown in the event list.
+        register(new me.advait.contender.minigame.games.LastStandGame.Type(plugin));
+        register(new me.advait.contender.minigame.games.HillGame.Type(plugin));
+        register(new me.advait.contender.minigame.games.GauntletGame.Type(plugin));
     }
 
     public void register(MinigameType type) {

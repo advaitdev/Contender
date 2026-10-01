@@ -17,6 +17,13 @@ public interface MinigameType {
     /** Opens the dialog that creates a new game of this type. */
     void openCreate(Player director);
 
+    /**
+     * Creates a game without a dialog (the dialog calls this too). {@code options} holds the game's own
+     * settings by key, such as "lives" or "minutes"; missing keys use defaults.
+     */
+    Minigame create(String name, me.advait.contender.map.ArenaMap map, me.advait.contender.kit.Kit kit,
+                    java.util.Map<java.util.UUID, String> roster, java.util.Map<String, String> options);
+
     /** Setup tools (courses, arenas, worlds), or false when the type needs none. */
     default boolean hasSetup() { return false; }
 

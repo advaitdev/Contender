@@ -109,8 +109,8 @@ public final class HillGame extends ArenaGame {
         }
         Component status;
         Color ring;
-        if (on.size() == 1) {
-            Player king = on.getFirst();
+        Player king = on.size() == 1 ? on.getFirst() : null;
+        if (king != null) {
             Participant participant = participant(king.getUniqueId());
             participant.score++;
             participant.value = (int) participant.score + " pts";
@@ -133,7 +133,11 @@ public final class HillGame extends ArenaGame {
             hill.getWorld().spawnParticle(Particle.DUST, hill.clone().add(Math.cos(angle) * radius, 0.15, Math.sin(angle) * radius), 1, 0, 0, 0, 0,
                     new Particle.DustOptions(ring, 1.3f));
         }
-        Msg.actionBar(audience(), status.append(Msg.text("  ·  " + String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60), DialogPalette.MUTED)));
+        String clock = String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60);
+        Msg.actionBar(audience(), status.append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
+        // The player on the hill sees their own progress instead (sent last, so it replaces the shared line).
+        if (king != null) king.sendActionBar(Component.text("You hold the hill", theme.primary()).append(Msg.text("  ·  "
+                + (int) participant(king.getUniqueId()).score + " of " + target + " pts  ·  " + clock, DialogPalette.MUTED)));
         if (left == 0) finish();
     }
 

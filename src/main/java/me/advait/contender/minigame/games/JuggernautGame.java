@@ -182,7 +182,10 @@ public final class JuggernautGame extends ArenaGame {
             Participant participant = participant(juggernaut);
             participant.score++;
             participant.value = time((int) participant.score);
-            Msg.actionBar(audience(), Component.text(holder.getName(), theme.primary()).append(Msg.text(" is the Juggernaut  ·  " + clock, DialogPalette.MUTED)));
+            Set<UUID> others = new HashSet<>(audience());
+            others.remove(juggernaut);
+            Msg.actionBar(others, Component.text(holder.getName(), theme.primary()).append(Msg.text(" is the Juggernaut  ·  " + clock, DialogPalette.MUTED)));
+            holder.sendActionBar(Component.text("You're the Juggernaut", theme.primary()).append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
             holder.getWorld().spawnParticle(Particle.DUST, holder.getLocation().add(0, 1, 0), 6, 0.4, 0.6, 0.4, 0,
                     new Particle.DustOptions(theme.primaryColor(), 1.2f));
         } else {

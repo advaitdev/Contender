@@ -72,7 +72,8 @@ public final class RaceType implements MinigameType, AutoCloseable {
         new GameForm(plugin).open(director, new GameForm.Spec("Mace Race", "Mace Race",
                 "Pick a course and the racers.", false, true, true,
                 List.of(coursePicker, DialogInput.singleOption("minutes", DialogIcon.CLOCK.label("Time Limit"), java.util.stream.Stream.of(0, 3, 5, 10, 15, 20, 30)
-                        .map(minutes -> Dialogs.option(Integer.toString(minutes), minutes == 0 ? "No limit" : minutes + " minutes", minutes == 0)).toList()).width(WIDE).build()), 1),
+                        .map(minutes -> Dialogs.option(Integer.toString(minutes), minutes == 0 ? "No limit" : minutes + " minutes", minutes == 0)).toList()).width(WIDE).build()), 1,
+                "Race kit (maces, spear, wind charges)"),
                 (p, result) -> {
                     Minigame game = create(result.name(), null, result.kit(), result.roster(), result.values());
                     plugin.getMinigames().select(game);

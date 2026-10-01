@@ -39,7 +39,7 @@ public final class HillGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("King of the Hill", "King of the Hill",
-                    "The hill is the middle of the map, between the two team spawns. Respawns are on.", true, true, false,
+                    "The hill is the middle of the map. Respawns are on.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 1, 15, 4, 1, "%s: %s min"),
                             GameForm.number("target", DialogIcon.STAR, "Points to Win", 20, 600, 90, 10, null),
                             GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks")), 2),

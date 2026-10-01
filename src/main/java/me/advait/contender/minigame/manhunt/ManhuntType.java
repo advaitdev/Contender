@@ -110,8 +110,8 @@ public final class ManhuntType implements MinigameType, Listener, AutoCloseable 
                 GameForm.number("runners", DialogIcon.RACE, "Runners", 1, 16, 1, 1, null),
                 DialogInput.text("picked", DialogIcon.PLAYERS.label("Choose Runners (optional)")).initial("").maxLength(512).width(WIDE).build());
         new GameForm(plugin).open(director, new GameForm.Spec("Manhunt", "Manhunt",
-                "Runners win when the dragon dies. Hunters win when every runner is out. Leave Choose Runners empty to pick them at random.",
-                false, true, true, extras, 2),
+                "Leave Choose Runners empty to pick them at random.",
+                false, true, true, extras, 2, "None (start empty-handed)"),
                 (p, result) -> {
                     Minigame game = create(result.name(), null, result.kit(), result.roster(), result.values());
                     plugin.getMinigames().select(game);

@@ -51,7 +51,7 @@ public final class ComboGame extends ArenaGame {
             DialogInput difficulty = DialogInput.singleOption("difficulty", DialogIcon.DUEL.label("Bot Difficulty"), Arrays.stream(ComboDifficulty.values())
                     .map(d -> Dialogs.option(d.name(), d.label(), d == ComboDifficulty.NORMAL)).toList()).width(300).build();
             new GameForm(plugin).open(director, new GameForm.Spec("Combo", "Combo",
-                    "One turn each against a bot. A hit back within the retry allowance restarts your try.", true, true, false,
+                    "One turn each against a practice bot.", true, true, false,
                     List.of(difficulty, GameForm.number("retries", DialogIcon.REFRESH, "Retry Allowance", 0, 20, 5, 1, "%s: up to %s hits")), 1),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());

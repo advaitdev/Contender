@@ -46,7 +46,7 @@ public final class JuggernautGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Juggernaut", "Juggernaut",
-                    "Whoever takes down the Juggernaut becomes the next one. The longest time as Juggernaut wins. Respawns are on.", true, true, false,
+                    "Take down the Juggernaut to take their place.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 2, 15, 5, 1, "%s: %s min"),
                             GameForm.number("hearts", DialogIcon.HEART, "Juggernaut Hearts", 2, 5, 3, 1, "%s: %sx")), 3),
                     (p, result) -> {

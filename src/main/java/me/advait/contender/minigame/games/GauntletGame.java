@@ -41,7 +41,7 @@ public final class GauntletGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Winner Stays On", "Winner Stays On",
-                    "Fights happen one at a time while everyone else watches. One round per fight.", true, true, false,
+                    "One fight at a time. One round per fight.", true, true, false,
                     List.of(GameForm.number("fights", DialogIcon.DUEL, "Total Fights", 2, 100, 12, 1, null)), 2),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());

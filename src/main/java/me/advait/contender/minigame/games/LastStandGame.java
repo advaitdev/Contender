@@ -31,7 +31,7 @@ public final class LastStandGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Last Man Standing", "Last Man Standing",
-                    "Everyone spawns around the arena at once. Pick a map that fits the roster.", true, true, false,
+                    "Everyone fights at once. Pick a map that fits.", true, true, false,
                     List.of(GameForm.number("lives", DialogIcon.HEART, "Lives", 1, 5, 1, 1, null)), 2),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());

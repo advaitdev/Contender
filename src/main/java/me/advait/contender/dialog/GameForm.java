@@ -32,7 +32,12 @@ public final class GameForm {
      * @param needsKit show the kit picker; {@code kitOptional} adds a "Default" choice
      */
     public record Spec(String title, String defaultName, String hint, boolean needsMap, boolean needsKit, boolean kitOptional,
-                       List<DialogInput> extras, int minimumPlayers) { }
+                       List<DialogInput> extras, int minimumPlayers, String noKitLabel) {
+        public Spec(String title, String defaultName, String hint, boolean needsMap, boolean needsKit, boolean kitOptional,
+                    List<DialogInput> extras, int minimumPlayers) {
+            this(title, defaultName, hint, needsMap, needsKit, kitOptional, extras, minimumPlayers, "Default kit");
+        }
+    }
 
     private final Contender plugin;
     private final Dialogs dialogs;
@@ -67,15 +72,16 @@ public final class GameForm {
         if (spec.needsKit()) {
             String selected = values.getOrDefault("kit", spec.kitOptional() ? "" : kits.getFirst().getId());
             List<SingleOptionDialogInput.OptionEntry> options = new ArrayList<>();
-            if (spec.kitOptional()) options.add(Dialogs.option("", "Default kit", selected.isEmpty()));
+            if (spec.kitOptional()) options.add(Dialogs.option("", spec.noKitLabel(), selected.isEmpty()));
             for (Kit kit : kits) options.add(SingleOptionDialogInput.OptionEntry.create(kit.getId(), KitIcons.label(kit), kit.getId().equals(selected)));
             inputs.add(DialogInput.singleOption("kit", text("Kit", TEXT), options).width(INPUT).build());
         }
         inputs.addAll(spec.extras());
         String roster = values.getOrDefault("players", String.join(", ", Bukkit.getOnlinePlayers().stream()
                 .filter(p -> plugin.getRoleManager().isContestant(p.getUniqueId())).map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList()));
-        inputs.add(DialogInput.text("players", DialogIcon.PLAYERS.label("Players")).initial(roster).maxLength(4096)
-                .multiline(TextDialogInput.MultilineOptions.create(32, 44)).width(INPUT).build());
+        // One line keeps Back / Create on screen at 1280x720; the field scrolls for long rosters.
+        inputs.add(DialogInput.text("players", DialogIcon.PLAYERS.label("Players (separate with commas)")).initial(roster).maxLength(4096)
+                .width(INPUT).build());
         List<DialogBody> body = new ArrayList<>();
         if (error != null) body.add(DialogBody.plainMessage(text(error, DANGER), 320));
         body.add(DialogBody.plainMessage(DialogText.muted(spec.hint()), 320));

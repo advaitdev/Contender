@@ -11,7 +11,7 @@ public final class Fragile implements Sabotage {
     @Override public String id() { return "fragile"; }
     @Override public String name() { return "Fragile"; }
     @Override public String description() { return "Everyone takes 50% more damage."; }
-    @Override public DialogIcon icon() { return DialogIcon.SKULL; }
+    @Override public DialogIcon icon() { return DialogIcon.EGG; }
 
     @Override public void onDamage(EntityDamageEvent event, Player victim, SabotageContext context) {
         if (!context.affects(victim) || event.getCause() == EntityDamageEvent.DamageCause.VOID) return;

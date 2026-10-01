@@ -11,7 +11,7 @@ public final class Famished implements Sabotage {
     @Override public String id() { return "famished"; }
     @Override public String name() { return "Famished"; }
     @Override public String description() { return "Hunger drains fast, so healing stops."; }
-    @Override public DialogIcon icon() { return DialogIcon.SUGAR; }
+    @Override public DialogIcon icon() { return DialogIcon.HUNGER; }
 
     @Override public void tick(SabotageContext context, long second) {
         for (Player player : context.affectedPlayers()) {

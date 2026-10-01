@@ -10,6 +10,7 @@ import me.advait.contender.tab.*;
 import me.advait.contender.tournament.BoardHitbox;
 import me.advait.contender.util.Tags;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
@@ -29,13 +30,19 @@ import java.util.*;
  * the controls underneath switch rounds, standings and pages.
  */
 public final class StageBoard extends Module {
-    private static final double ROW_HEIGHT = 0.30;
+    /** Text scale: bigger than a default display so it reads from across the lobby. */
+    private static final float SCALE = 1.4f;
+    private static final double ROW_HEIGHT = 0.30 * SCALE;
     private static final int ROWS = 20;
+    /** Space under the last row for the caption and the three rows of controls. */
+    private static final double FOOTER = 1.8 * SCALE;
     private final List<Cell> cells = new ArrayList<>();
     private final Map<UUID, Hover> hovers = new HashMap<>();
     private final Map<UUID, Long> clicks = new HashMap<>();
     private final Set<Chunk> tickets = new HashSet<>();
-    private Location anchor;
+    // The board grows upward from base (just above the floor); anchor is its current top-left reference.
+    private Location base, anchor;
+    private int rowsPerColumn;
     private Vector normal, right;
     private BracketLayout.View view = BracketLayout.View.following();
     private BracketLayout.Layout layout;
@@ -67,22 +74,26 @@ public final class StageBoard extends Module {
         String name = config.getString("tournament-board.world");
         World world = name == null ? null : Bukkit.getWorld(name);
         if (world == null) return;
-        setAnchor(new Location(world, config.getDouble("tournament-board.x"), config.getDouble("tournament-board.y"),
+        double y = config.getDouble("tournament-board.y");
+        // Boards placed before version 2 saved their top, seven blocks above the player's feet.
+        if (config.getInt("tournament-board.version", 1) < 2) y = y - 7 + 0.3;
+        setBase(new Location(world, config.getDouble("tournament-board.x"), y,
                 config.getDouble("tournament-board.z"), (float) config.getDouble("tournament-board.yaw", 180), 0));
     }
 
-    public boolean placed() { return anchor != null; }
+    public boolean placed() { return base != null; }
 
-    /** Places the board ten blocks in front of the player, facing them. */
+    /** Places the board eight blocks in front of the player, facing them, standing on the floor. */
     public void place(Player player) {
         Vector direction = player.getLocation().getDirection().setY(0);
         if (direction.lengthSquared() < 0.001) direction.setZ(1);
-        Location location = player.getLocation().add(direction.normalize().multiply(10)).add(0, 7, 0);
+        Location location = player.getLocation().add(direction.normalize().multiply(8)).add(0, 0.3, 0);
         location.setYaw(player.getLocation().getYaw() + 180);
         location.setPitch(0);
         if (plugin.getArenas().isArenaWorld(location.getWorld())) throw new IllegalArgumentException("Place the board outside the arena world.");
-        setAnchor(location);
+        setBase(location);
         var config = plugin.getConfig();
+        config.set("tournament-board.version", 2);
         config.set("tournament-board.world", location.getWorld().getName());
         config.set("tournament-board.x", location.getX());
         config.set("tournament-board.y", location.getY());
@@ -94,15 +105,18 @@ public final class StageBoard extends Module {
 
     public void remove() {
         close();
-        for (String key : List.of("world", "x", "y", "z", "yaw")) plugin.getConfig().set("tournament-board." + key, null);
+        base = null;
+        anchor = null;
+        for (String key : List.of("world", "x", "y", "z", "yaw", "version")) plugin.getConfig().set("tournament-board." + key, null);
         plugin.saveConfig();
     }
 
-    private void setAnchor(Location location) {
+    private void setBase(Location location) {
         close();
-        anchor = location.clone();
-        normal = anchor.getDirection();
-        double yaw = Math.toRadians(anchor.getYaw());
+        base = location.clone();
+        anchor = base.clone();
+        normal = base.getDirection();
+        double yaw = Math.toRadians(base.getYaw());
         right = new Vector(Math.cos(yaw), 0, Math.sin(yaw));
     }
 
@@ -114,7 +128,7 @@ public final class StageBoard extends Module {
     }
 
     public void refresh() {
-        if (!isEnabled() || anchor == null || anchor.getWorld() == null || !anchor.isChunkLoaded() && anchor.getWorld().getPlayers().isEmpty()) return;
+        if (!isEnabled() || base == null || base.getWorld() == null || !base.isChunkLoaded() && base.getWorld().getPlayers().isEmpty()) return;
         Stage stage = plugin.getStages().current();
         if (stage != null && stage.cancelled()) stage = null;
         UUID id = stage == null ? null : stage.id();
@@ -125,30 +139,39 @@ public final class StageBoard extends Module {
                 ? List.of(TabRow.label(Component.text("Waiting for the next event", theme.muted())))
                 : layout.rows();
         int newColumns = Math.max(1, (rows.size() + ROWS - 1) / ROWS);
+        // Layout columns are padded to ROWS; draw only down to the last row any column uses.
+        int used = 0;
+        for (int index = 0; index < rows.size(); index++) {
+            if (!PlainTextComponentSerializer.plainText().serialize(rows.get(index).boardText()).isBlank()) used = Math.max(used, index % ROWS + 1);
+        }
+        int newRows = Math.clamp(used, 4, ROWS);
         int pixels = Math.max(170, rows.stream().mapToInt(row -> TabText.width(row.boardText())).max().orElse(170) + 12);
-        if (columns != newColumns || columnPixels != pixels || cells.isEmpty()) {
+        if (columns != newColumns || columnPixels != pixels || rowsPerColumn != newRows || cells.isEmpty()) {
             destroyDisplays();
             columns = newColumns;
             columnPixels = pixels;
-            double width = pixels / 40.0, gap = 0.2;
-            for (int column = 0; column < columns; column++) for (int row = 0; row < ROWS; row++) {
+            rowsPerColumn = newRows;
+            anchor = base.clone().add(0, rowsPerColumn * ROW_HEIGHT + FOOTER, 0);
+            double width = pixels / 40.0 * SCALE, gap = 0.2 * SCALE;
+            for (int column = 0; column < columns; column++) for (int row = 0; row < rowsPerColumn; row++) {
                 double x = (column - (columns - 1) / 2.0) * (width + gap);
                 cells.add(cell(x, -row * ROW_HEIGHT, width));
             }
-            cells.add(cell(0, 0.75, (width + gap) * columns));
-            cells.add(cell(0, -ROWS * ROW_HEIGHT - 0.2, (width + gap) * columns));
+            cells.add(cell(0, 0.75 * SCALE, (width + gap) * columns));
+            cells.add(cell(0, -rowsPerColumn * ROW_HEIGHT - 0.2 * SCALE, (width + gap) * columns));
             for (int row = 0; row < 3; row++) for (int side = 0; side < 2; side++) {
-                cells.add(cell((side == 0 ? -1 : 1) * 2.1, -ROWS * ROW_HEIGHT - 0.7 - row * 0.4, 4));
+                cells.add(cell((side == 0 ? -1 : 1) * 2.1 * SCALE, -rowsPerColumn * ROW_HEIGHT - (0.7 + row * 0.4) * SCALE, 4 * SCALE));
             }
         }
         Map<Integer, Duel> playing = plugin.getTournaments().playing();
         boolean bracket = stage != null && stage.hasRounds();
-        for (int i = 0; i < columns * ROWS; i++) {
-            TabRow row = i < rows.size() ? rows.get(i) : TabRow.label(Component.empty());
+        for (int i = 0; i < columns * rowsPerColumn; i++) {
+            int source = (i / rowsPerColumn) * ROWS + i % rowsPerColumn;
+            TabRow row = source < rows.size() ? rows.get(source) : TabRow.label(Component.empty());
             Integer target = bracket && row.matchNumber() != null && playing.containsKey(row.matchNumber()) ? row.matchNumber() : null;
             set(cells.get(i), row.boardText().append(TabText.padding(columnPixels - 12 - TabText.width(row.boardText()))), target);
         }
-        int offset = columns * ROWS;
+        int offset = columns * rowsPerColumn;
         set(cells.get(offset++), TabStyle.read(plugin.getConfig()).header(stage == null ? null : stage.name()), null);
         Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
         set(cells.get(offset++), caption, null);
@@ -185,6 +208,7 @@ public final class StageBoard extends Module {
             entity.setDefaultBackground(false);
             entity.setBackgroundColor(theme.background(plugin.getThemes().opacity()));
             entity.setInterpolationDuration(2);
+            entity.setTransformationMatrix(new Matrix4f().scaling(SCALE));
         });
     }
 
@@ -220,7 +244,7 @@ public final class StageBoard extends Module {
             player.showEntity(plugin, display);
             player.hideEntity(plugin, selected.display);
             display.setInterpolationDelay(0);
-            display.setTransformationMatrix(new Matrix4f().scaling(1.08f));
+            display.setTransformationMatrix(new Matrix4f().scaling(SCALE * 1.08f));
             hovers.put(player.getUniqueId(), new Hover(player, selected, display));
         }
     }
@@ -280,9 +304,9 @@ public final class StageBoard extends Module {
 
     private void close() {
         destroyDisplays();
-        anchor = null;
         layout = null;
         columns = 0;
+        rowsPerColumn = 0;
         clicks.clear();
     }
 }

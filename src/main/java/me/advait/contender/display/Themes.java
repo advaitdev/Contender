@@ -57,5 +57,5 @@ public final class Themes {
     /** Displays that are already in the world redraw themselves when the scheme changes. */
     public void onChange(Consumer<Theme> listener) { listeners.add(listener); }
 
-    public int opacity() { return Math.clamp(plugin.getConfig().getInt("tournament-board.background-opacity", 0), 0, 100); }
+    public int opacity() { return Math.clamp(plugin.getConfig().getInt("tournament-board.background-opacity", 30), 0, 100); }
 }

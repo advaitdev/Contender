@@ -37,7 +37,7 @@ public final class Sabotages {
                         new AttributeSabotage.Change(Attribute.ATTACK_KNOCKBACK, 1.5, ADD_NUMBER)),
                 new AttributeSabotage("sugar_rush", "Sugar Rush", "Everyone moves a third faster.", DialogIcon.SUGAR, false,
                         new AttributeSabotage.Change(Attribute.MOVEMENT_SPEED, 0.35, MULTIPLY_SCALAR_1)),
-                new AttributeSabotage("rusty_swords", "Rusty Swords", "Weapons take much longer to recharge.", DialogIcon.CLOCK, false,
+                new AttributeSabotage("rusty_swords", "Rusty Swords", "Weapons take much longer to recharge.", DialogIcon.RUSTY, false,
                         new AttributeSabotage.Change(Attribute.ATTACK_SPEED, -0.4, MULTIPLY_SCALAR_1)),
                 new AttributeSabotage("pogo", "Pogo", "Everyone jumps twice as high and takes less fall damage.", DialogIcon.JUMP, false,
                         new AttributeSabotage.Change(Attribute.JUMP_STRENGTH, 0.6, MULTIPLY_SCALAR_1),

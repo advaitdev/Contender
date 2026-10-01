@@ -52,6 +52,7 @@ public final class MinigameDialogs {
                 p -> { plugin.getSpectate().watch(p, require(game)); p.closeDialog(); }));
         buttons.add(button(player, DialogIcon.BOARD, "Leaderboard", TEXT, "See the current standings.", p -> new BracketDialogs(plugin).open(p)));
         if (!game.finished()) buttons.add(button(player, DialogIcon.PLAYERS, "Manage Players", TEXT, "Withdraw someone from this game.", p -> players(p, game)));
+        new TournamentDialogs(plugin).addShowButtons(player, buttons);
         buttons.add(button(player, DialogIcon.SETTINGS, "Setup Tools", TEXT, "Maps, kits, courses and displays.", p -> new TournamentDialogs(plugin).tools(p)));
         buttons.add(button(player, DialogIcon.SKULL, "Hacker Controls", TEXT, "Hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin).open(p)));
         if (!game.finished()) buttons.add(button(player, DialogIcon.CLOSE, "Cancel Game", DANGER, "Stop now. Everyone goes back to the lobby.", p -> confirmCancel(p, game)));

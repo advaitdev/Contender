@@ -65,15 +65,15 @@ public final class DuelDialogs {
         List<DialogInput> inputs = List.of(
                 DialogInput.singleOption("map", DialogIcon.MAP.label("Map"), maps.stream().map(m -> Dialogs.option(m.getId(),
                         m.getDisplayName() + " (" + plugin.getArenas().ready(m.getId()) + " ready)", m == setup.map)).toList()).width(FORM_WIDTH).build(),
-                DialogInput.singleOption("kit", DialogIcon.DUEL.label("Kit"), kits.stream().map(k -> SingleOptionDialogInput.OptionEntry.create(
+                DialogInput.singleOption("kit", text("Kit", TEXT), kits.stream().map(k -> SingleOptionDialogInput.OptionEntry.create(
                         k.getId(), KitIcons.label(k), k == setup.kit)).toList()).width(FORM_WIDTH).build(),
                 DialogInput.singleOption("mode", DialogIcon.PLAYERS.label("Mode"), List.of(
                         Dialogs.option("teams", "Two Teams", !setup.freeForAll),
                         Dialogs.option("ffa", "Free for All", setup.freeForAll))).width(FORM_WIDTH).build(),
                 DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8)
                         .initial((float) setup.wins).step(1f).width(FORM_WIDTH).build(),
-                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items (seconds)"), 5, 60)
-                        .initial((float) setup.sortSeconds).step(1f).width(FORM_WIDTH).build());
+                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items"), 5, 60)
+                        .initial((float) setup.sortSeconds).step(1f).width(FORM_WIDTH).labelFormat("%s: %ss").build());
         var actions = new ArrayList<ActionButton>();
         Dialogs.navigationRow(actions,
                 action(player, DialogIcon.SETTINGS, "Setup Tools", MUTED, NAV_WIDTH, (p, view) -> { readDetails(view, setup); tools(p, setup); }),

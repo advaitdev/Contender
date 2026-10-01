@@ -16,7 +16,7 @@ public enum DialogIcon {
     BACK("items", "item/arrow"),
     NEXT("items", "item/spectral_arrow"),
     REFRESH("items", "item/clock_09"),
-    MAP("items", "item/map"),
+    MAP("items", "item/filled_map"),
     SPAWN("items", "item/compass_18"),
     DUEL("items", "item/diamond_sword"),
     AXE("items", "item/diamond_axe"),
@@ -30,7 +30,7 @@ public enum DialogIcon {
     NAME("items", "item/name_tag"),
     CHAT("items", "item/writable_book"),
     VOICE("items", "item/goat_horn"),
-    BOARD("items", "item/paper"),
+    BOARD("items", "item/painting"),
     PAUSE("items", "item/clock_09"),
     REACH("items", "item/ender_pearl"),
     ARMOR("items", "item/diamond_chestplate"),
@@ -60,7 +60,13 @@ public enum DialogIcon {
     RACE("items", "item/elytra"),
     COMPASS("items", "item/compass_00"),
     BRUSH("items", "item/brush"),
-    TNT("items", "item/fire_charge");
+    TNT("items", "item/fire_charge"),
+    PING("gui", "icon/ping_2"),
+    RUSTY("items", "item/stone_sword"),
+    BLOOD("items", "item/redstone"),
+    INK("items", "item/ink_sac"),
+    HUNGER("items", "item/rotten_flesh"),
+    EGG("items", "item/egg");
 
     private final String atlas;
     private final String texture;

@@ -64,16 +64,16 @@ public final class ManhuntType implements MinigameType, Listener, AutoCloseable 
         return switch (world.state()) {
             case EMPTY -> "Not prepared";
             case PREPARING -> "Preparing…";
-            case READY -> "Ready (" + world.pillarCount() + " pillars)";
-            case USED -> "Used. Prepare a fresh End.";
-            case FAILED -> "Preparing failed. Try again.";
+            case READY -> "Ready";
+            case USED -> "Already used";
+            case FAILED -> "Couldn't prepare";
         };
     }
 
     @Override public void openSetup(Player player) {
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(dialogs.button(player, DialogIcon.REFRESH.label(world.ready() ? "Prepare Another End" : "Prepare a Fresh End", ACCENT),
-                DialogText.muted("Creates a new End with a dragon. Takes a few seconds."), true, WIDE, (p, view) -> prepare(p)));
+                DialogText.muted("Creates a new End with a dragon. Takes a few seconds."), true, WIDE, (p, view) -> prepare(p, this::openSetup)));
         if (world.ready()) buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Visit the End", TEXT), DialogText.muted("Look around before the game. Everything stays frozen."), true, WIDE, (p, view) -> {
             if (!plugin.getRegistry().isFree(p.getUniqueId())) throw new IllegalStateException("Leave what you're doing first.");
             p.closeDialog();
@@ -81,11 +81,11 @@ public final class ManhuntType implements MinigameType, Listener, AutoCloseable 
         }));
         dialogs.show(player, "Manhunt Setup", List.of(DialogBody.plainMessage(DialogText.lines(
                 DialogText.detail("End", status()),
-                DialogText.muted("Each game needs a fresh End. Players start on the obsidian pillars.")), 320)),
+                DialogText.muted("Each game needs a fresh End.")), 320)),
                 List.of(), buttons, 1, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).minigameTools(p)));
     }
 
-    private void prepare(Player player) {
+    private void prepare(Player player, java.util.function.Consumer<Player> then) {
         var current = plugin.getMinigames().current();
         if (current instanceof ManhuntGame game && game.started() && !game.finished()) throw new IllegalStateException("Finish the current Manhunt first.");
         if (world.world() != null && !world.world().getPlayers().isEmpty()) throw new IllegalStateException("Everyone has to leave the current End first.");
@@ -95,14 +95,14 @@ public final class ManhuntType implements MinigameType, Listener, AutoCloseable 
             if (failure != null) plugin.getLogger().log(Level.WARNING, "Could not prepare the Manhunt End", failure);
             if (!player.isOnline()) return;
             if (failure != null) Dialogs.error(player, Dialogs.message(failure));
-            else { Dialogs.tell(player, "The End is ready."); openSetup(player); }
+            else { Dialogs.tell(player, "The End is ready."); then.accept(player); }
         }));
     }
 
     @Override public void openCreate(Player director) {
         if (!world.ready()) {
-            dialogs.show(director, "Prepare the End First", List.of(DialogBody.plainMessage(DialogText.muted("Manhunt needs a fresh End. Prepare one, then come back."), 320)),
-                    List.of(), List.of(dialogs.button(director, DialogIcon.COMPASS.label("Manhunt Setup", ACCENT), null, true, WIDE, (p, view) -> openSetup(p))),
+            dialogs.show(director, "Prepare the End First", List.of(DialogBody.plainMessage(DialogText.muted("Manhunt needs a fresh End. It takes a few seconds."), 320)),
+                    List.of(), List.of(dialogs.button(director, DialogIcon.REFRESH.label("Prepare a Fresh End", ACCENT), null, true, WIDE, (p, view) -> prepare(p, this::openCreate))),
                     1, NAV, dialogs.button(director, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).formats(p)));
             return;
         }

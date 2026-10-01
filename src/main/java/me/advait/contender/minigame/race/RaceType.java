@@ -68,10 +68,11 @@ public final class RaceType implements MinigameType, AutoCloseable {
             return;
         }
         DialogInput coursePicker = DialogInput.singleOption("course", DialogIcon.RACE.label("Course"), ready.stream()
-                .map(course -> Dialogs.option(course.id(), course.name() + " (" + (course.size() - 1) + " checkpoints)", course == ready.getFirst())).toList()).width(WIDE).build();
+                .map(course -> Dialogs.option(course.id(), course.name() + " (" + checkpoints(course) + ")", course == ready.getFirst())).toList()).width(WIDE).build();
         new GameForm(plugin).open(director, new GameForm.Spec("Mace Race", "Mace Race",
-                "Pick a course and who races. Offline players can be entered now.", false, true, true,
-                List.of(coursePicker, GameForm.number("minutes", DialogIcon.CLOCK, "Time Limit (0 = none)", 0, 60, 0, 1, "%s: %s min")), 1),
+                "Pick a course and the racers.", false, true, true,
+                List.of(coursePicker, DialogInput.singleOption("minutes", DialogIcon.CLOCK.label("Time Limit"), java.util.stream.Stream.of(0, 3, 5, 10, 15, 20, 30)
+                        .map(minutes -> Dialogs.option(Integer.toString(minutes), minutes == 0 ? "No limit" : minutes + " minutes", minutes == 0)).toList()).width(WIDE).build()), 1),
                 (p, result) -> {
                     Minigame game = create(result.name(), null, result.kit(), result.roster(), result.values());
                     plugin.getMinigames().select(game);
@@ -98,7 +99,7 @@ public final class RaceType implements MinigameType, AutoCloseable {
         buttons.add(dialogs.button(player, DialogIcon.SAVE.label("New Course", ACCENT), DialogText.muted("Name it, then build it where you stand."), true, WIDE, (p, view) -> create(p)));
         for (RaceCourse course : courses.all()) {
             String problem = course.problem();
-            Component label = DialogIcon.RACE.label(course.name() + "  ", TEXT).append(text(problem == null ? (course.size() - 1) + " checkpoints" : "not ready", problem == null ? MUTED : WARNING));
+            Component label = DialogIcon.RACE.label(course.name() + "  ", TEXT).append(text(problem == null ? checkpoints(course) : "not ready", problem == null ? MUTED : WARNING));
             buttons.add(dialogs.button(player, label, DialogText.muted(problem == null ? "Edit, test or change rules." : problem), true, WIDE, (p, view) -> course(p, course.id())));
         }
         for (String legacy : courses.legacyCourses()) {
@@ -115,8 +116,8 @@ public final class RaceType implements MinigameType, AutoCloseable {
                     }));
         }
         dialogs.show(player, "Mace Race Courses", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("A course is a start and checkpoints in order. The last checkpoint is the finish."),
-                DialogText.muted("Checkpoints can float in midair; the mobs are spawned for each race.")), 340)),
+                DialogText.muted("Racers hit the checkpoints in order."),
+                DialogText.muted("The last one is the finish. They can float midair.")), 340)),
                 List.of(), buttons, 1, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).minigameTools(p)));
     }
 
@@ -136,6 +137,13 @@ public final class RaceType implements MinigameType, AutoCloseable {
         dialogs.show(player, "New Course", List.of(DialogBody.plainMessage(DialogText.muted(
                 "The start is set to where you stand now. You'll get building tools next."), 320)),
                 List.of(Dialogs.text("name", "Course name", "", 48)), buttons, 2, NAV, null);
+    }
+
+    /** "3 checkpoints + finish", or "Finish only" for a one-checkpoint course. */
+    private static String checkpoints(RaceCourse course) {
+        int before = Math.max(0, course.size() - 1);
+        if (before == 0) return "Finish only";
+        return before + (before == 1 ? " checkpoint" : " checkpoints") + " + finish";
     }
 
     private RaceCourse require(String id) {

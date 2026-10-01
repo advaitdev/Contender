@@ -69,13 +69,13 @@ public final class GameForm {
             List<SingleOptionDialogInput.OptionEntry> options = new ArrayList<>();
             if (spec.kitOptional()) options.add(Dialogs.option("", "Default kit", selected.isEmpty()));
             for (Kit kit : kits) options.add(SingleOptionDialogInput.OptionEntry.create(kit.getId(), KitIcons.label(kit), kit.getId().equals(selected)));
-            inputs.add(DialogInput.singleOption("kit", DialogIcon.DUEL.label("Kit"), options).width(INPUT).build());
+            inputs.add(DialogInput.singleOption("kit", text("Kit", TEXT), options).width(INPUT).build());
         }
         inputs.addAll(spec.extras());
         String roster = values.getOrDefault("players", String.join(", ", Bukkit.getOnlinePlayers().stream()
                 .filter(p -> plugin.getRoleManager().isContestant(p.getUniqueId())).map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList()));
         inputs.add(DialogInput.text("players", DialogIcon.PLAYERS.label("Players")).initial(roster).maxLength(4096)
-                .multiline(TextDialogInput.MultilineOptions.create(32, 80)).width(INPUT).build());
+                .multiline(TextDialogInput.MultilineOptions.create(32, 44)).width(INPUT).build());
         List<DialogBody> body = new ArrayList<>();
         if (error != null) body.add(DialogBody.plainMessage(text(error, DANGER), 320));
         body.add(DialogBody.plainMessage(DialogText.muted(spec.hint()), 320));

@@ -64,4 +64,4 @@ tablist:
 
 # 0 is transparent; 100 is solid. Change this in /options > Board Background.
 tournament-board:
-  background-opacity: 0
+  background-opacity: 30

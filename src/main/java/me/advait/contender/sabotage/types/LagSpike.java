@@ -15,7 +15,7 @@ public final class LagSpike implements Sabotage {
     @Override public String id() { return "lag_spike"; }
     @Override public String name() { return "Lag Spike"; }
     @Override public String description() { return "Everyone's ping jumps up. Hits land late."; }
-    @Override public DialogIcon icon() { return DialogIcon.CLOCK; }
+    @Override public DialogIcon icon() { return DialogIcon.PING; }
 
     @Override public void apply(Player player, SabotageContext context) {
         injector.add(player, Math.clamp(context.settings().getInt("ping", 200), 20, 1000));

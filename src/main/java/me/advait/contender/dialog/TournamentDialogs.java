@@ -111,16 +111,7 @@ public final class TournamentDialogs {
             if (!canCreate) buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate", TEXT,
                     "Watch a match in progress.", p -> new SpectateDialogs(plugin).open(p)));
         }
-        boolean voting = plugin.getVotes().isActive();
-        buttons.add(menuAction(player, DialogIcon.STAR, voting ? "Vote in Progress" : "Start a Vote", TEXT,
-                voting ? "See the votes, remove players or end it." : "Everyone votes someone out.", p -> {
-                    if (plugin.getVotes().isActive()) new VoteDialogs(plugin).open(p); else new VoteDialogs(plugin).start(p);
-                }));
-        boolean interviewing = plugin.getInterviews().active();
-        buttons.add(menuAction(player, DialogIcon.BELL, interviewing ? "End Interview" : "Interview a Player", TEXT,
-                interviewing ? "Send everyone back where they were." : "Bring a player to the interview room.", p -> {
-                    if (plugin.getInterviews().active()) { plugin.getInterviews().end(); open(p); } else interviewee(p);
-                }));
+        addShowButtons(player, buttons);
         buttons.add(menuAction(player, DialogIcon.SETTINGS, "Setup Tools", TEXT,
                 "Maps, kits, minigames, displays and the lobby.", this::tools));
         buttons.add(menuAction(player, DialogIcon.SKULL, "Hacker Controls", TEXT,
@@ -155,6 +146,20 @@ public final class TournamentDialogs {
         }
         menu(player, "Minigames", DialogText.muted(buttons.isEmpty() ? "No minigame needs setup." : "Set up a minigame before creating it."), buttons, this::tools);
     }
+    /** Vote and interview controls, shared by the tournament menu and the minigame control panel. */
+    public void addShowButtons(Player player, List<ActionButton> buttons) {
+        boolean voting = plugin.getVotes().isActive();
+        buttons.add(menuAction(player, DialogIcon.STAR, voting ? "Vote in Progress" : "Start a Vote", TEXT,
+                voting ? "See the votes, remove players or end it." : "Everyone votes someone out.", p -> {
+                    if (plugin.getVotes().isActive()) new VoteDialogs(plugin).open(p); else new VoteDialogs(plugin).start(p);
+                }));
+        boolean interviewing = plugin.getInterviews().active();
+        buttons.add(menuAction(player, DialogIcon.BELL, interviewing ? "End Interview" : "Interview a Player", TEXT,
+                interviewing ? "Send everyone back where they were." : "Bring a player to the interview room.", p -> {
+                    if (plugin.getInterviews().active()) { plugin.getInterviews().end(); open(p); } else interviewee(p);
+                }));
+    }
+
     private void interviewee(Player player) {
         var interviews = plugin.getInterviews();
         if (interviews.position("interviewee") == null || interviews.position("interviewer") == null) {
@@ -244,7 +249,7 @@ public final class TournamentDialogs {
         List<DialogInput> inputs = List.of(
                 DialogInput.text("name", DialogIcon.NAME.label("Tournament Name")).initial(draft.name()).maxLength(64).width(INPUT_WIDTH).build(),
                 DialogInput.singleOption("map", DialogIcon.MAP.label("Map"), maps.stream().map(m -> Dialogs.option(m.getId(), m.getDisplayName(), m.getId().equals(draft.map()))).toList()).width(INPUT_WIDTH).build(),
-                DialogInput.singleOption("kit", DialogIcon.DUEL.label("Kit"), kits.stream().map(k ->
+                DialogInput.singleOption("kit", text("Kit", TEXT), kits.stream().map(k ->
                         io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput.OptionEntry.create(k.getId(), KitIcons.label(k), k.getId().equals(draft.kit()))).toList()).width(INPUT_WIDTH).build());
         form(player, 1, List.of(body(DialogText.muted("Choose a name, map, and kit for this stage.\nYou will see the title preview before creating it."))), inputs,
                 nav(player, DialogIcon.BACK, "Back", MUTED, "Return to the tournament menu.", (p, view) -> open(p)),
@@ -294,7 +299,7 @@ public final class TournamentDialogs {
                 .initial((float) (draft.bracketRounds() == 0 ? full : Math.min(draft.bracketRounds(), full))).step(1f).width(INPUT_WIDTH).build());
         inputs.addAll(List.of(
                 DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8).initial((float) (draft.bestOf() / 2 + 1)).step(1f).width(INPUT_WIDTH).build(),
-                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items (seconds)"), 5, 60).initial((float) draft.delay()).step(1f).width(INPUT_WIDTH).build(),
+                DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items"), 5, 60).initial((float) draft.delay()).step(1f).width(INPUT_WIDTH).labelFormat("%s: %ss").build(),
                 DialogInput.numberRange("parallel", DialogIcon.TOURNAMENT.label("Matches at Once"), 1, 100).initial((float) draft.parallel()).step(1f).width(INPUT_WIDTH).build(),
                 DialogInput.singleOption("schedule", DialogIcon.BOARD.label("Schedule"), List.of(
                         Dialogs.option("free", "As arenas become free", !draft.waitForRound()),

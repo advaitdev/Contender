@@ -103,7 +103,7 @@ public final class SabotageDialogs {
         Component running = service.active().isEmpty() ? DialogText.muted("None running.")
                 : DialogText.detail("Running", String.join(", ", service.active().values().stream().map(a -> a.sabotage().name()).toList()));
         dialogs.show(player, "Sabotage Settings", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("Hackers trigger sabotages from /hacks while an event is running."), running), 320)), inputs, buttons, 2, NAV, null);
+                DialogText.muted("Hackers use /sabotage during an event."), running), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private void save(DialogResponseView view) {

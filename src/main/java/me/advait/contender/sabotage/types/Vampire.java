@@ -13,7 +13,7 @@ public final class Vampire implements Sabotage {
     @Override public String id() { return "vampire"; }
     @Override public String name() { return "Vampire"; }
     @Override public String description() { return "Hitting someone heals you."; }
-    @Override public DialogIcon icon() { return DialogIcon.HEART; }
+    @Override public DialogIcon icon() { return DialogIcon.BLOOD; }
 
     @Override public void afterHit(EntityDamageByEntityEvent event, Player attacker, Player victim, SabotageContext context) {
         if (!context.affects(attacker) || attacker.isDead()) return;

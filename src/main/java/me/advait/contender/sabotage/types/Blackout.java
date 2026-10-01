@@ -12,7 +12,7 @@ public final class Blackout implements Sabotage {
     @Override public String id() { return "blackout"; }
     @Override public String name() { return "Blackout"; }
     @Override public String description() { return "Screens go dark every few seconds."; }
-    @Override public DialogIcon icon() { return DialogIcon.PHANTOM; }
+    @Override public DialogIcon icon() { return DialogIcon.INK; }
 
     @Override public void tick(SabotageContext context, long second) {
         int interval = Math.clamp(context.settings().getInt("interval-seconds", 15), 5, 300);

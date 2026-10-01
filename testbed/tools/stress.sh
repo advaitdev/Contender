@@ -15,4 +15,4 @@ for i in $(seq 1 30); do
 done
 python3 $R "probe trounds" "probe registry" | grep -v "^$" | grep "pts=\|free\|PLAYING\|WATCHING"
 echo "--- errors"
-tools/errors.sh $L 80 | grep -v "at net.minecraft\|at com.mojang\|at java.base\|at io.papermc.paper.command\|at org.bukkit.command\|UserConnection\|ViaVersion\|ContenderProbe\|com.viaversion\|getProtocolInfo\|NoSuchElement"
+tools/errors.sh $L 80 | grep -v "ContenderProbe\|NoSuchElement"

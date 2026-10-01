@@ -1,0 +1,12 @@
+server/
+.work/
+client/driver/build/
+client/driver/.gradle/
+client/xvfb/root/
+client/xvfb/debs/
+client/xvfb/xkbbin
+client/xvfb/Xvfb-local
+client/__pycache__/
+*.jar
+!client/driver/gradle/wrapper/gradle-wrapper.jar
+*.log

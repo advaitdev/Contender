@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "uhcr-testbed-client-driver",
+  "version": "1.0.0",
+  "name": "UHCR Testbed Client Driver",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.uhcranked.testbed.client.UhcrClientDriver"
+    ],
+    "voicechat": [
+      "com.uhcranked.testbed.client.LoopbackVoicePlugin"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "fabric-api": "*",
+    "minecraft": "1.21.11",
+    "java": ">=21"
+  }
+}

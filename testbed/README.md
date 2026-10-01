@@ -50,6 +50,7 @@ client/rc.py cmd "tournament"        # run a command as Render_1
 client/rc.py attack                  # hit whatever the crosshair is on
 client/rc.py hud off                 # hide the HUD for clean shots of holograms (also hides entity name tags)
 client/shoot-dialogs.sh tournament tools hacks   # screenshot several menus in one go
+client/check-dialogs.py              # open every menu and flag buttons below the fold, clipped labels, missing sprites
 ```
 
 Give the client permissions with `tools/rcon.py "op Render_1" "role Render_1 director"`. Move its camera with server teleports, for example `tp Render_1 x y z yaw pitch` or `execute as Render_1 at @s run tp @s ~ ~ ~ facing entity Alice eyes`.

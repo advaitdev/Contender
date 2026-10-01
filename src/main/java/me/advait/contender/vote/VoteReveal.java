@@ -163,7 +163,8 @@ final class VoteReveal implements Activity, Listener {
     private Location beamAt(UUID player) {
         Player online = Bukkit.getPlayer(player);
         Location spot = spots.getOrDefault(player, online == null ? null : online.getLocation());
-        return spot == null ? null : spot.clone().add(0, -0.2, 0);
+        // The beam comes down from the sky and stops above the badge, so the count stays readable.
+        return spot == null ? null : spot.clone().add(0, 3.7, 0);
     }
 
     private void conclude(List<VoteSession.Candidate> leaders, int votes) {

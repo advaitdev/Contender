@@ -112,7 +112,7 @@ public final class Contender extends JavaPlugin {
 
         loadWorlds();
         for (Listener listener : List.of(managedWorlds, celebrations, deathEffect, new LobbyListener(this, lobby),
-                new ArenaListener(this, arenas), new ChatListener(this), new ChatManager(this), new PvPListener(this), new GUIListener(this),
+                new ArenaListener(this, arenas), new ChatListener(this), new ChatManager(this), new PvPListener(this), new GUIListener(this), new me.advait.contender.display.QuietToasts(this),
                 new me.advait.contender.command.QuickActions(this))) {
             getServer().getPluginManager().registerEvents(listener, this);
         }

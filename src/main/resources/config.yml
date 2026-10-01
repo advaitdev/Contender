@@ -36,6 +36,8 @@ display:
   # Colors for boards, holograms, vote numbers and fireworks.
   # ocean, amethyst, sunset, gold, mint, crimson, frost or mono. Change this in /options > Display Colors.
   theme: ocean
+  # Hide "Advancement Made" and "New Recipes Unlocked" pop-ups, which appear whenever a kit is handed out.
+  hide-advancement-toasts: true
 
 voice:
   # Directors can be heard by everyone, wherever they are (needs Simple Voice Chat).

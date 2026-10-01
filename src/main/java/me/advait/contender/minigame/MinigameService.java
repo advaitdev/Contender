@@ -44,6 +44,7 @@ public final class MinigameService extends Module {
         register(new me.advait.contender.minigame.games.LastStandGame.Type(plugin));
         register(new me.advait.contender.minigame.games.HillGame.Type(plugin));
         register(new me.advait.contender.minigame.games.GauntletGame.Type(plugin));
+        register(new me.advait.contender.minigame.games.JuggernautGame.Type(plugin));
     }
 
     public void register(MinigameType type) {

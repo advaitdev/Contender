@@ -42,6 +42,7 @@ Drop the jar from `dist/` into `plugins/` and start the server. Operators have b
 | Last Man Standing | Free-for-all with a set number of lives. |
 | King of the Hill | Stand on the hill to score. First to the target, or the most when time runs out. |
 | Winner Stays On | One fight at a time. The winner keeps fighting until someone beats them. |
+| Juggernaut | One player gets extra hearts and glows. Take them down to take their place; the longest time as Juggernaut wins. |
 
 Minigames that need building have their own page in **Setup Tools** → **Minigames**:
 

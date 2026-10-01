@@ -15,8 +15,8 @@ import java.util.UUID;
 
 /** Who may use game chat: lobby players, players in a game, and spectators each have their own switch. */
 public final class ChatManager implements Listener {
-    private static final Set<String> PRIVATE_MESSAGES = Set.of("/msg", "/w", "/tell", "/whisper", "/minecraft:msg",
-            "/minecraft:tell", "/minecraft:whisper", "/me", "/minecraft:me");
+    private static final Set<String> PRIVATE_MESSAGES = Set.of("/msg", "/w", "/tell", "/whisper", "/minecraft:msg", "/minecraft:w",
+            "/minecraft:tell", "/minecraft:whisper", "/me", "/minecraft:me", "/teammsg", "/tm", "/minecraft:teammsg", "/minecraft:tm");
     private final Contender plugin;
 
     public ChatManager(Contender plugin) { this.plugin = plugin; }

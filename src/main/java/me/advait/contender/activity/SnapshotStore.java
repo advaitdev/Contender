@@ -135,6 +135,8 @@ public final class SnapshotStore {
 
     /** Sends the player to the lobby, then restores their snapshot there. */
     public void restoreToLobby(Player player) {
+        // On the death screen: ActivityRegistry restores them as soon as they respawn.
+        if (player.isDead()) return;
         if (!plugin.getLobby().send(player)) {
             plugin.getLogger().warning("Could not return " + player.getName() + " to the lobby; their saved inventory is kept for later.");
             return;

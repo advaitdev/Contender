@@ -19,8 +19,29 @@ public record RoleStyle(String prefix, NamedTextColor color) {
     }
     public static RoleStyle read(ConfigurationSection config, PlayerRole role) {
         String key = "nametags.roles." + role.id();
-        return new RoleStyle(config.getString(key + ".prefix", "[" + role.label() + "]"),
-                parseColor(config.getString(key + ".color", role == PlayerRole.DIRECTOR ? "gold" : "gray")));
+        String fallbackPrefix = "[" + role.label() + "]";
+        NamedTextColor fallbackColor = role == PlayerRole.DIRECTOR ? NamedTextColor.GOLD : NamedTextColor.GRAY;
+        String prefix = config.getString(key + ".prefix", fallbackPrefix);
+        try { new RoleStyle(prefix, fallbackColor); }
+        catch (IllegalArgumentException invalid) { warnOnce(key + ".prefix", prefix); prefix = fallbackPrefix; }
+        return new RoleStyle(prefix, lenientColor(config.getString(key + ".color"), fallbackColor, key + ".color"));
+    }
+
+    private static final java.util.Set<String> WARNED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Reads a color from config, falling back (with one warning) when someone typed a name that doesn't exist. */
+    public static NamedTextColor lenientColor(String name, NamedTextColor fallback, String path) {
+        if (name == null) return fallback;
+        NamedTextColor color = NamedTextColor.NAMES.value(name.toLowerCase(java.util.Locale.ROOT));
+        if (color != null) return color;
+        warnOnce(path, name);
+        return fallback;
+    }
+
+    private static void warnOnce(String path, String value) {
+        if (WARNED.add(path + "=" + value)) {
+            org.bukkit.Bukkit.getLogger().warning("[Contender] Ignoring " + path + ": \"" + value + "\" isn't valid in config.yml. Using the default.");
+        }
     }
     public void write(ConfigurationSection config, PlayerRole role) {
         String key = "nametags.roles." + role.id();

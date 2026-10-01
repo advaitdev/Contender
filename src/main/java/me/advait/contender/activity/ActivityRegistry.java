@@ -101,6 +101,18 @@ public final class ActivityRegistry extends Module {
         }
     }
 
+    /** Someone who was on the death screen when their game ended gets their items back as they respawn. */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onRespawn(org.bukkit.event.player.PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (!isFree(player.getUniqueId()) || !plugin.getSnapshots().has(player.getUniqueId())) return;
+        var lobby = plugin.getLobby().location();
+        if (lobby != null) event.setRespawnLocation(lobby);
+        tasks.later(1, () -> {
+            if (player.isOnline() && isFree(player.getUniqueId()) && plugin.getSnapshots().has(player.getUniqueId())) plugin.getSnapshots().restoreToLobby(player);
+        });
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();

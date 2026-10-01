@@ -62,6 +62,7 @@ public final class NameTagManager extends Module {
     }
     public void refresh() {
         if (!isEnabled()) return;
+        readStyles();
         var online = List.copyOf(Bukkit.getOnlinePlayers());
         Set<Scoreboard> used = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Player viewer : online) used.add(viewer.getScoreboard());
@@ -107,8 +108,18 @@ public final class NameTagManager extends Module {
     private Tag tag(UUID id) {
         PlayerRole role = plugin.getRoleManager().getRole(id);
         if (role == PlayerRole.CONTESTANT) return new Tag(TierFormatter.prefix(plugin.getTierService().cached(id)), NamedTextColor.WHITE);
-        RoleStyle style = RoleStyle.read(plugin.getConfig(), role);
+        RoleStyle style = styles.get(role);
+        if (style == null) style = RoleStyle.read(plugin.getConfig(), role);
         return new Tag(style.prefixComponent(), style.color());
+    }
+
+    // Read from config on the server thread; chat formatting reads it from the async chat thread.
+    private volatile Map<PlayerRole, RoleStyle> styles = Map.of();
+
+    private void readStyles() {
+        Map<PlayerRole, RoleStyle> read = new EnumMap<>(PlayerRole.class);
+        for (PlayerRole role : PlayerRole.values()) if (role != PlayerRole.CONTESTANT) read.put(role, RoleStyle.read(plugin.getConfig(), role));
+        styles = read;
     }
     public Component displayName(Player player) { return displayName(player.getUniqueId(), player.getName()); }
     public Component displayName(UUID id, String name) { return tag(id).name(name); }

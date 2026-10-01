@@ -17,6 +17,8 @@ public class KitManager {
     private final File kitFile;
     private final Map<String, Kit> kits;
 
+    private boolean loadFailed;
+
     public KitManager(Contender plugin) {
         this.plugin = plugin;
         this.kitFile = new File(plugin.getDataFolder(), "kits.yml");
@@ -36,7 +38,15 @@ public class KitManager {
             return;
         }
 
-        FileConfiguration config = YamlConfiguration.loadConfiguration(kitFile);
+        YamlConfiguration config = new YamlConfiguration();
+        try { config.load(kitFile); }
+        catch (IOException | org.bukkit.configuration.InvalidConfigurationException failure) {
+            // Keep the file: the next save backs it up instead of replacing it with an empty list.
+            loadFailed = true;
+            plugin.getLogger().severe("Could not read kits.yml, so no kits were loaded: " + failure.getMessage());
+            return;
+        }
+        loadFailed = false;
         ConfigurationSection kitsSection = config.getConfigurationSection("kits");
         if (kitsSection == null) return;
 
@@ -91,7 +101,12 @@ public class KitManager {
     }
 
     public void saveKits() {
-        FileConfiguration config = new YamlConfiguration();
+        if (loadFailed) {
+            File backup = new File(kitFile.getParentFile(), "kits.yml.broken-" + System.currentTimeMillis());
+            if (kitFile.renameTo(backup)) plugin.getLogger().warning("The unreadable kits.yml was kept as " + backup.getName() + ".");
+            loadFailed = false;
+        }
+        YamlConfiguration config = new YamlConfiguration();
 
         for (Kit kit : kits.values()) {
             String path = "kits." + kit.getId();
@@ -111,11 +126,8 @@ public class KitManager {
             }
         }
 
-        try {
-            config.save(kitFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Failed to save kits.yml: " + e.getMessage());
-        }
+        try { me.advait.contender.util.YamlStorage.save(config, kitFile); }
+        catch (RuntimeException e) { plugin.getLogger().severe("Failed to save kits.yml: " + e.getMessage()); }
     }
 
     public void saveKit(Kit kit) {

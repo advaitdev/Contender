@@ -31,8 +31,13 @@ public final class LobbyListener implements Listener {
         this.lobby = lobby;
     }
 
+    /** Players in a match or minigame follow that game's rules. Interviews, vote reveals and course building don't. */
     private boolean exempt(Entity entity) {
-        if (entity instanceof Player player) return plugin.getRegistry().isPlaying(player.getUniqueId());
+        if (entity instanceof Player player) {
+            var owner = plugin.getRegistry().owner(player.getUniqueId());
+            return plugin.getRegistry().isPlaying(player.getUniqueId())
+                    && (owner instanceof me.advait.contender.duel.Duel || owner instanceof me.advait.contender.minigame.Minigame);
+        }
         return Tags.isManaged(entity);
     }
 
@@ -94,10 +99,32 @@ public final class LobbyListener implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
         if (!lobby.isLobbyWorld(event.getClickedBlock().getWorld())) return;
         if (lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
+        if (exempt(event.getPlayer())) return;
         Material type = event.getClickedBlock().getType();
-        if (type == Material.FLOWER_POT || type.name().startsWith("POTTED_") || type == Material.CAKE || type.name().endsWith("CANDLE_CAKE")) {
+        var state = event.getClickedBlock().getState(false);
+        // Decorations and storage: pots, cakes, chests and barrels, lecterns, jukeboxes and shelves.
+        if (type == Material.FLOWER_POT || type.name().startsWith("POTTED_") || type == Material.CAKE || type.name().endsWith("CANDLE_CAKE")
+                || state instanceof org.bukkit.block.Container || state instanceof org.bukkit.block.Lectern || state instanceof org.bukkit.block.Jukebox
+                || state instanceof org.bukkit.block.ChiseledBookshelf || state instanceof org.bukkit.block.DecoratedPot) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onSignEdit(io.papermc.paper.event.player.PlayerOpenSignEvent event) {
+        if (lobby.isLobbyWorld(event.getSign().getWorld()) && !exempt(event.getPlayer()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onSignChange(org.bukkit.event.block.SignChangeEvent event) {
+        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !exempt(event.getPlayer()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onFertilize(org.bukkit.event.block.BlockFertilizeEvent event) {
+        if (!lobby.isLobbyWorld(event.getBlock().getWorld())) return;
+        if (event.getPlayer() != null && (exempt(event.getPlayer()) || lobby.canPlace(event.getPlayer()))) return;
+        event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -112,8 +139,13 @@ public final class LobbyListener implements Listener {
     public void onDamage(EntityDamageEvent event) {
         Entity entity = event.getEntity();
         if (!lobby.isLobbyWorld(entity.getWorld()) || exempt(entity)) return;
+        if (entity instanceof Player && event instanceof EntityDamageByEntityEvent shot
+                && shot.getDamager() instanceof org.bukkit.entity.Projectile projectile && projectile.getShooter() instanceof Player shooter
+                && !shooter.equals(entity)) return;
         if (event instanceof EntityDamageByEntityEvent byEntity && byEntity.getDamager() instanceof Player attacker) {
             if (exempt(attacker)) return;
+            // Player against player follows the PvP settings, which PvPListener has already applied.
+            if (entity instanceof Player) return;
             if (entity instanceof ArmorStand || entity instanceof ItemFrame) {
                 if (lobby.canBreak(attacker)) return;
             } else if (attacker.getGameMode() == GameMode.CREATIVE) return;
@@ -181,7 +213,7 @@ public final class LobbyListener implements Listener {
     }
 
     @EventHandler
-    public void onLeafDecay(LeavesDecayEvent event) { event.setCancelled(true); }
+    public void onLeafDecay(LeavesDecayEvent event) { if (lobby.isLobbyWorld(event.getBlock().getWorld())) event.setCancelled(true); }
 
     @EventHandler(ignoreCancelled = true)
     public void onNaturalSpawn(CreatureSpawnEvent event) {

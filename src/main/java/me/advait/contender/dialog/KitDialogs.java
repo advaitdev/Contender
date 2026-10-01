@@ -29,7 +29,7 @@ public final class KitDialogs {
         for (Kit kit : kits.subList(page * 8, Math.min(kits.size(), page * 8 + 8))) {
             buttons.add(dialogs.button(player, KitIcons.label(kit), DialogText.muted("Edit this kit's items and rules."), true, 220, (p, view) -> {
                 if (plugin.getKitManager().getKit(kit.getId()) != kit) throw new IllegalStateException("This kit changed. Open the kit list again.");
-                p.closeDialog(); KitEditorGUI.open(p, kit, false);
+                p.closeDialog(); KitEditorGUI.open(p, kit.copy(), false);
             }));
         }
         Dialogs.navigationRow(buttons,

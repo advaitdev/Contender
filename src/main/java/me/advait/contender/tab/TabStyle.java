@@ -17,8 +17,13 @@ public record TabStyle(String title, NamedTextColor color, boolean enabled) {
         return Component.text("\n" + heading + "\n", color);
     }
     public static TabStyle read(ConfigurationSection config) {
-        return new TabStyle(config.getString("tablist.title", ""),
-                RoleStyle.parseColor(config.getString("tablist.color", "gold")), config.getBoolean("tablist.enabled", true));
+        var color = RoleStyle.lenientColor(config.getString("tablist.color"), net.kyori.adventure.text.format.NamedTextColor.GOLD, "tablist.color");
+        boolean enabled = config.getBoolean("tablist.enabled", true);
+        try { return new TabStyle(config.getString("tablist.title", ""), color, enabled); }
+        catch (IllegalArgumentException invalid) {
+            org.bukkit.Bukkit.getLogger().warning("[Contender] Ignoring tablist.title in config.yml: " + invalid.getMessage());
+            return new TabStyle("", color, enabled);
+        }
     }
     public void write(ConfigurationSection config) {
         config.set("tablist.title", title);

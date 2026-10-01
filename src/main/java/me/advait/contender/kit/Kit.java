@@ -55,6 +55,24 @@ public class Kit {
         player.updateInventory();
     }
 
+    /** An independent copy for editing, so running matches keep the saved kit until the copy is saved. */
+    public Kit copy() {
+        Kit copy = new Kit(id);
+        copy.displayName = displayName;
+        copy.contents = cloneArray(contents);
+        copy.armor = cloneArray(armor);
+        copy.offhand = offhand == null ? null : offhand.clone();
+        copy.icon = icon;
+        copy.allowBlockPlace = allowBlockPlace;
+        copy.allowBlockBreak = allowBlockBreak;
+        copy.naturalRegen = naturalRegen;
+        copy.spectatorInvisible = spectatorInvisible;
+        copy.noClear = noClear;
+        copy.pvpHurt = pvpHurt;
+        copy.pveHurt = pveHurt;
+        return copy;
+    }
+
     private ItemStack[] cloneArray(ItemStack[] original) {
         if (original == null) return new ItemStack[0];
         ItemStack[] clone = new ItemStack[original.length];

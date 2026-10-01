@@ -159,7 +159,8 @@ public final class TabManager extends Module {
         }
         for (UUID id : new HashSet<>(state.unlisted)) {
             Player target = plugin.getServer().getPlayer(id);
-            if (target == null) { state.unlisted.remove(id); continue; }
+            // Paper keeps them unlisted for this viewer even after a rejoin; list them again once they're back.
+            if (target == null) continue;
             if (viewer.canSee(target)) {
                 if (!viewer.isListed(target)) viewer.listPlayer(target);
                 state.unlisted.remove(id);

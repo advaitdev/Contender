@@ -141,6 +141,8 @@ public final class RaceGame extends Minigame {
         for (Participant participant : roster()) {
             if (participant.status != Status.PLAYING || finishTimes.containsKey(participant.id)) continue;
             participant.value = "#" + progress.getOrDefault(participant.id, 0) + "  " + time(elapsed).replaceFirst("\\.[0-9]{3}$", "");
+            Player racer = Bukkit.getPlayer(participant.id);
+            if (racer != null) racer.sendActionBar(progressBar(progress.getOrDefault(participant.id, 0), elapsed));
         }
         if (timeLimitSeconds > 0 && elapsed >= timeLimitSeconds * 1_000_000_000L) {
             broadcast(Msg.text("Time's up.", DialogPalette.WARNING));
@@ -257,7 +259,7 @@ public final class RaceGame extends Minigame {
         if (index == course.size()) { finished(racer); return; }
         plugin.getCelebrations().ring(mob.getLocation().add(0, mob.getHeight() / 2, 0), 1.0, 16);
         Sounds.TICK_HIGH.play(racer, 1f + index / (float) course.size());
-        racer.sendActionBar(Msg.text("Checkpoint " + index + " of " + (course.size() - 1), DialogPalette.ACCENT));
+        racer.sendActionBar(progressBar(index, elapsed()));
     }
 
     private void finished(Player racer) {
@@ -468,6 +470,15 @@ public final class RaceGame extends Minigame {
         section.set("course", course.id());
         section.set("kit", kit == null ? "" : kit.getId());
         section.set("time-limit", timeLimitSeconds);
+    }
+
+    /** "Checkpoint 3 of 8  ·  1:24" (the finish is the last checkpoint and isn't counted). */
+    private Component progressBar(int reached, long elapsed) {
+        int checkpoints = Math.max(1, course.size() - 1);
+        Component left = reached >= checkpoints ? Msg.text("Go for the finish", DialogPalette.ACCENT)
+                : Msg.text("Checkpoint ", DialogPalette.MUTED).append(Msg.text(reached + " of " + checkpoints, DialogPalette.ACCENT));
+        String clock = time(elapsed).replaceFirst("\\.[0-9]{3}$", "");
+        return left.append(Msg.text("  ·  " + clock, DialogPalette.TEXT));
     }
 
     public static String time(long nanos) {

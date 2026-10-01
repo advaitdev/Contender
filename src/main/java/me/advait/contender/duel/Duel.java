@@ -303,10 +303,11 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         Set<UUID> audience = audience();
         var theme = plugin.getThemes().current();
         Component scoreLine = scoreLine();
+        // The score card in the arena shows the round result; a title on top of it would repeat it.
         if (winner == null) {
-            Msg.title(audience, Msg.text("Draw", theme.secondary()), scoreLine, 2, 36, 8);
+            Msg.actionBar(audience, Msg.text("Draw  ", theme.secondary()).append(scoreLine));
         } else {
-            Msg.title(audience, Msg.text(winner.name(), theme.primary()), Msg.text("wins the round  ", DialogPalette.MUTED).append(scoreLine), 2, 36, 8);
+            Msg.actionBar(audience, Msg.text(winner.name(), theme.primary()).append(Msg.text(" wins the round  ", DialogPalette.MUTED)).append(scoreLine));
             for (UUID player : winner.players()) { Player online = Bukkit.getPlayer(player); if (online != null) Sounds.ROUND_WIN.play(online); }
         }
         hud.score(teams, winner);

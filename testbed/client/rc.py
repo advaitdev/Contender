@@ -56,14 +56,22 @@ def show_screen(s):
 
 
 def find_widget(s, needle):
+    """Finds a button by id, exact label or partial label. Sprite markers like [item/x] are ignored."""
+    import re
     if needle.startswith("widget-"):
         return needle
-    exact = [w for w in s.get("widgets", []) if w["label"].strip() == needle]
-    if exact:
-        return exact[0]["id"]
-    partial = [w for w in s.get("widgets", []) if needle.lower() in w["label"].lower()]
-    if partial:
-        return partial[0]["id"]
+    def plain(label):
+        return re.sub(r"\[[^\]]*\]\s*", "", label).strip()
+    widgets = s.get("widgets", [])
+    buttons = [w for w in widgets if w["height"] == 20 and w["enabled"]]
+    for pool in (buttons, widgets):
+        exact = [w for w in pool if plain(w["label"]).lower() == needle.lower()]
+        if exact:
+            return exact[0]["id"]
+    for pool in (buttons, widgets):
+        partial = [w for w in pool if needle.lower() in plain(w["label"]).lower()]
+        if partial:
+            return partial[0]["id"]
     raise SystemExit(f"No widget matching {needle!r}")
 
 

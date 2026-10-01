@@ -27,7 +27,7 @@ public final class LastStandGame extends ArenaGame {
         @Override public String id() { return "last_stand"; }
         @Override public String name() { return "Last Man Standing"; }
         @Override public String description() { return "Everyone in one arena. Last one alive wins."; }
-        @Override public DialogIcon icon() { return DialogIcon.SKULL; }
+        @Override public DialogIcon icon() { return DialogIcon.APPLE; }
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Last Man Standing", "Last Man Standing",

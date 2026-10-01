@@ -325,20 +325,20 @@ public final class TournamentDialogs {
         UUID form = UUID.randomUUID(); rosterViews.put(player.getUniqueId(), form);
         var map = plugin.getMapManager().getMap(draft.map()); var kit = plugin.getKitManager().getKit(draft.kit());
         int count = RosterParser.entryCount(draft.players(), draft.teams());
+        int matches = count / 2 * draft.bracketRounds(), wins = draft.bestOf() / 2 + 1;
+        // Compact, so Back and Create Tournament stay on screen without scrolling.
         List<DialogBody> contents = List.of(
-                body(section(DialogIcon.PREVIEW, "Title Preview", TabStyle.read(plugin.getConfig()).header(draft.name()))),
-                body(section(DialogIcon.MAP, "Map & Kit", DialogText.lines(
-                        DialogText.detail("Map", map == null ? draft.map() : map.getDisplayName()),
-                        DialogText.detail("Kit", kit == null ? draft.kit() : kit.getDisplayName())))),
-                body(section(DialogIcon.PLAYERS, draft.teams() ? "Teams" : "Players", rosterSummary(draft))),
-                body(section(DialogIcon.DUEL, "Match Rules", DialogText.lines(
-                        DialogText.detail("Bracket rounds", draft.bracketRounds() + " of " + RoundRobinSchedule.fullRounds(count)),
-                        DialogText.detail("Matches", Integer.toString(count / 2 * draft.bracketRounds())),
-                        DialogText.detail("Scoring", "1 point per match won"),
-                        DialogText.detail("Win condition", "First to " + (draft.bestOf() / 2 + 1) + " round wins"),
-                        DialogText.detail("Time to arrange items", draft.delay() + " seconds"), DialogText.detail("Matches at once", Integer.toString(draft.parallel())),
-                        DialogText.detail("Schedule", draft.waitForRound() ? "Finish each bracket round" : "As arenas become free")))),
-                body(DialogText.muted("Create saves the bracket. Start it from the tournament menu when you are ready.")));
+                body(section(DialogIcon.PREVIEW, "Title Preview", Component.text(TabStyle.read(plugin.getConfig()).heading(draft.name()),
+                        TabStyle.read(plugin.getConfig()).color()))),
+                body(DialogText.lines(
+                        DialogText.detail("Map", (map == null ? draft.map() : map.getDisplayName()) + "  ·  Kit: " + (kit == null ? draft.kit() : kit.getDisplayName())),
+                        DialogText.muted((draft.teams() ? "Teams: " : "Players: ")).append(rosterSummary(draft)))),
+                body(DialogText.lines(
+                        DialogText.detail("Schedule", draft.bracketRounds() + " of " + RoundRobinSchedule.fullRounds(count) + " rounds  ·  "
+                                + matches + (matches == 1 ? " match" : " matches")),
+                        DialogText.detail("Each match", "First to " + wins + (wins == 1 ? " round win" : " round wins") + "  ·  1 point per match won"),
+                        DialogText.detail("Timing", draft.delay() + "s to arrange items  ·  up to " + draft.parallel() + " at once"),
+                        DialogText.detail("Order", draft.waitForRound() ? "Finish each bracket round first" : "As arenas become free"))));
         form(player, 4, contents, List.of(),
                 nav(player, DialogIcon.BACK, "Back", MUTED, "Make changes before creating the tournament.", (p, view) -> { rosterViews.remove(p.getUniqueId()); rules(p, draft); }),
                 nav(player, DialogIcon.SAVE, "Create Tournament", ACCENT, "Save the bracket without starting matches.", (p, view) -> {
@@ -388,8 +388,12 @@ public final class TournamentDialogs {
         page = Math.clamp(page, 0, pages - 1); int selectedPage = page;
         for (int i = page * 8; i < Math.min(page * 8 + 8, tournament.matches().size()); i++) {
             TournamentMatch match = tournament.matches().get(i);
-            String label = "#" + match.number() + "  " + tournament.entries().get(match.first()).name() + " vs " + tournament.entries().get(match.second()).name();
-            buttons.add(action(player, DialogIcon.DUEL, label, TEXT, 220, "View this match and its settings.",
+            String names = "#" + match.number() + "  " + tournament.entries().get(match.first()).name() + " vs " + tournament.entries().get(match.second()).name();
+            // Live matches are gold, finished ones show the score, waiting ones are muted.
+            Component status = match.result() != null ? text("  " + match.result().team1Score() + "-" + match.result().team2Score(), MUTED)
+                    : match.status() == TournamentMatch.Status.PLAYING ? text("  Live", SUCCESS) : Component.empty();
+            Component label = DialogIcon.DUEL.label(names, match.status() == TournamentMatch.Status.WAITING ? MUTED : TEXT).append(status);
+            buttons.add(dialogs.button(player, label, DialogText.muted("View this match and its settings."), true, 220,
                     (p, view) -> match(p, id, match.number(), selectedPage)));
         }
         // Match menus use two columns so paging remains on its own paired row.

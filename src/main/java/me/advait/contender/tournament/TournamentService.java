@@ -281,7 +281,7 @@ public final class TournamentService extends Module {
             LinkedHashSet<UUID> roster = new LinkedHashSet<>();
             tournament.entries().forEach(entry -> roster.addAll(entry.players()));
             roster.addAll(others);
-            return BracketLayout.render(tournament, scores, presence, List.copyOf(roster), view);
+            return BracketLayout.render(tournament, scores, presence, List.copyOf(roster), view, plugin.getThemes().current());
         }
         @Override public String caption(BracketLayout.Layout layout) { return layout == null ? "Bracket" : layout.heading(); }
     }

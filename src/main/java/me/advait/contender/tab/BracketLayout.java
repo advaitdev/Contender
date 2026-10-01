@@ -37,10 +37,6 @@ public final class BracketLayout {
         return tournament.matches().stream().mapToInt(TournamentMatch::round).max().orElse(1);
     }
     public static Layout render(Tournament tournament, Map<Integer, Score> liveScores, Function<UUID, Presence> presence,
-                                List<UUID> roster, View view) {
-        return render(tournament, liveScores, presence, roster, view, me.advait.contender.display.Themes.byId("ocean"));
-    }
-    public static Layout render(Tournament tournament, Map<Integer, Score> liveScores, Function<UUID, Presence> presence,
                                 List<UUID> roster, View view, Theme theme) {
         int round = view.round() == 0 ? currentRound(tournament) : Math.clamp(view.round(), 1, rounds(tournament));
         List<TournamentMatch> matches = tournament.matches().stream().filter(m -> m.round() == round).toList();

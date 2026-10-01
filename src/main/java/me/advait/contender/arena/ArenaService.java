@@ -85,11 +85,8 @@ public final class ArenaService extends Module {
 
     @Override protected void onDisable() {
         closed = true;
+        // Paper saves every world right after plugins disable, so copies can be trusted on a clean stop.
         boolean stopping = plugin.getServer().isStopping();
-        if (stopping && world != null) {
-            try { world.save(true); }
-            catch (RuntimeException failure) { plugin.getLogger().log(Level.WARNING, "Could not save the arena world", failure); stopping = false; }
-        }
         writeState(stopping);
         if (chunks != null) chunks.close();
         urgent.values().forEach(list -> list.forEach(future -> future.completeExceptionally(new IllegalStateException("Arenas stopped."))));

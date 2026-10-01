@@ -55,7 +55,7 @@ final class VoteTimerDisplay {
             var config = plugin.getConfig();
             Location location = new Location(world, config.getDouble("vote-timer.x"), config.getDouble("vote-timer.y"), config.getDouble("vote-timer.z"));
             if (location.getChunk().addPluginChunkTicket(plugin)) ticket = location.getChunk();
-            display = Holograms.text(location, text, 0.01f, Display.Billboard.CENTER, theme.background(0), "vote_timer");
+            display = Holograms.text(location, text, 0.01f, Display.Billboard.CENTER, theme.background(plugin.getThemes().opacity()), "vote_timer");
             TextDisplay created = display;
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> Holograms.animate(created, Holograms.scaled(2.6f), 8), 2L);
         } else {

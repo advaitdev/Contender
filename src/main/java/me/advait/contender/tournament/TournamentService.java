@@ -180,7 +180,8 @@ public final class TournamentService extends Module {
             boolean waitingMatches = tournament.matches().stream().anyMatch(m -> m.status() == TournamentMatch.Status.WAITING);
             if (!waitingMatches) waitingReason = "Finishing the last matches.";
             else if (plugin.getArenas().ready(map.getId()) == 0) waitingReason = "Waiting for an arena: " + plugin.getArenas().readiness(map.getId());
-            else waitingReason = "Waiting for players to be free and online.";
+            else if (!playing.isEmpty()) waitingReason = playing.size() + (playing.size() == 1 ? " match" : " matches") + " playing. The next ones start as players finish.";
+            else waitingReason = "Waiting for players to come online or finish what they're doing.";
         }
         if (started) plugin.getStages().refreshDisplays();
     }

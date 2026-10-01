@@ -20,7 +20,7 @@ import static me.advait.contender.dialog.DialogPalette.*;
 
 /** /spectate: every live match and minigame, one button each. */
 public final class SpectateDialogs {
-    private static final int WIDTH = 300, NAV = 150, PER_PAGE = 8;
+    private static final int WIDTH = 150, NAV = 150, PER_PAGE = 8;
     private final Contender plugin;
     private final Dialogs dialogs;
 

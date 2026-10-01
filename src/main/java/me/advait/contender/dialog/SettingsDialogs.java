@@ -46,10 +46,10 @@ public final class SettingsDialogs {
     }
     private void style(Player player, PlayerRole role) { style(player, role, RoleStyle.read(plugin.getConfig(), role)); }
     private void style(Player player, PlayerRole role, RoleStyle draft) {
-        List<DialogInput> inputs = List.of(Dialogs.text("prefix", "Prefix", draft.prefix(), 32), colors("Prefix and name color", draft.color()));
+        List<DialogInput> inputs = List.of(Dialogs.text("prefix", "Prefix", draft.prefix(), 32), colors("Prefix and Name Color", draft.color()));
         List<DialogBody> body = List.of(DialogBody.plainMessage(DialogText.muted(
                 "Applies to everyone with this role.\nLeave the prefix empty to show only their name.\n\nShow Preview checks your edits. Save applies them."), 440),
-                DialogBody.plainMessage(DialogText.heading("Nametag preview")),
+                DialogBody.plainMessage(DialogText.heading("Nametag Preview")),
                 DialogBody.plainMessage(draft.displayName(player.getName())));
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(dialogs.button(player, DialogIcon.PREVIEW.label("Show Preview", DialogPalette.TEXT), null, true, 150, (p, view) -> style(p, role, roleDraft(view))));

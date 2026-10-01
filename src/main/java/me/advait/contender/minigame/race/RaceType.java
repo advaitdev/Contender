@@ -160,7 +160,7 @@ public final class RaceType implements MinigameType, AutoCloseable {
                 DialogText.detail("Checkpoints", course.size() == 0 ? "None yet" : (course.size() - 1) + " + finish"),
                 DialogText.detail("World", course.worldName()),
                 DialogText.detail("Checkpoint jump", "up to " + course.maxJump()),
-                DialogText.detail("Return height", course.returnHeight() + " blocks"),
+                DialogText.detail("Return height", (course.returnHeight() == Math.rint(course.returnHeight()) ? Integer.toString((int) course.returnHeight()) : Double.toString(course.returnHeight())) + " blocks"),
                 DialogText.detail("Landing sends you back", course.returnOnGround() ? "Yes" : "No"),
                 problem == null ? text("Ready to race", SUCCESS) : text(problem, WARNING));
         List<ActionButton> buttons = new ArrayList<>();

@@ -28,7 +28,9 @@ def problems(screen):
     widgets = screen.get("widgets", [])
     containers = [w for w in widgets if w["label"] == "" and w["height"] > 40]
     bottom = max((c["y"] + c["height"] for c in containers), default=None)
-    footer_y = max((w["y"] for w in widgets if w["height"] == 20), default=0)
+    # The footer (Close/Back) is the last full-size button; it sits outside the scrolling area.
+    footer = [w for w in widgets if w["height"] == 20 and w["width"] > 20]
+    footer_y = footer[-1]["y"] if footer else -1
     for w in widgets:
         # Skip the footer and the vanilla "custom screen" warning icon (a 20px button with a tooltip label).
         if w["height"] != 20 or w["y"] == footer_y or w["width"] <= 20:

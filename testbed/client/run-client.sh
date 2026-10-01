@@ -47,4 +47,4 @@ exec java -Xmx2G \
   -Dfabric.dli.config="$DRIVER/.gradle/loom-cache/launch.cfg" -Dfabric.dli.env=client \
   -Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient \
   @"$DRIVER/build/loom-cache/argFiles/runClient" net.fabricmc.devlaunchinjector.Main \
-  --username Render_1 --quickPlayMultiplayer 127.0.0.1:25565 --width 1280 --height 720
+  --username Render_1 --quickPlayMultiplayer 127.0.0.1:25565 --width ${WIDTH:-1280} --height ${HEIGHT:-720}

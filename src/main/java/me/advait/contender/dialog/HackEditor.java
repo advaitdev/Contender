@@ -56,9 +56,10 @@ final class HackEditor {
 
     void grid(Player player, Target target) {
         HackSettings settings = target.current().apply(player);
-        List<DialogBody> body = new ArrayList<>();
-        for (Component line : target.header()) body.add(DialogBody.plainMessage(line, 340));
-        body.add(DialogBody.plainMessage(status(settings), 340));
+        // One text block: separate blocks each add spacing, which pushes the last row off small screens.
+        List<Component> lines = new ArrayList<>(target.header());
+        lines.add(status(settings));
+        List<DialogBody> body = List.of(DialogBody.plainMessage(DialogText.lines(lines.toArray(Component[]::new)), 340));
         List<ActionButton> buttons = new ArrayList<>();
         for (HackSetting setting : HackSetting.values()) {
             double value = settings.get(setting);

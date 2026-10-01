@@ -116,7 +116,7 @@ public final class SpectateService extends Module implements Activity {
         Location to = event.getTo();
         boolean tooLow = to.getY() < to.getWorld().getMinHeight();
         if (tooLow || !target.contains(to)) {
-            Location back = !tooLow && target.contains(event.getFrom()) ? event.getFrom() : target.spectatorSpawn();
+            Location back = !tooLow && target.contains(event.getFrom()) ? event.getFrom() : target.watchSpot();
             if (back != null) event.setTo(back);
         }
     }
@@ -129,7 +129,7 @@ public final class SpectateService extends Module implements Activity {
         if (target == null) return;
         event.setCancelled(true);
         if (event.getCause() == org.bukkit.event.entity.EntityDamageEvent.DamageCause.VOID && target.spectatorSpawn() != null) {
-            plugin.getServer().getScheduler().runTask(plugin, () -> { if (watching.get(player.getUniqueId()) == target) move(player, target.spectatorSpawn()); });
+            plugin.getServer().getScheduler().runTask(plugin, () -> { if (watching.get(player.getUniqueId()) == target) move(player, target.watchSpot()); });
         }
     }
 

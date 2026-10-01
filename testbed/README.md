@@ -55,7 +55,7 @@ client/check-dialogs.py              # open every menu and flag buttons below th
 
 Give the client permissions with `tools/rcon.py "op Render_1" "role Render_1 director"`. Move its camera with server teleports, for example `tp Render_1 x y z yaw pitch` or `execute as Render_1 at @s run tp @s ~ ~ ~ facing entity Alice eyes`.
 
-`GUI_SCALE=3 client/restart-client.sh` checks menus on smaller screens. `client/run-client.sh --show` opens a visible window instead of using Xvfb.
+Most players see a smaller GUI than the default 640x360. Minecraft's Auto GUI scale is 4 at 1080p (480x270) and gives 426x240 at 1440p and 4K. Check menus used during the show at those sizes with `GUI_SCALE=3 client/restart-client.sh` (426x240) and `WIDTH=1920 HEIGHT=1080 GUI_SCALE=4 client/restart-client.sh` (480x270). Long setup forms may scroll. `client/run-client.sh --show` opens a visible window instead of using Xvfb.
 
 To check voice chat, put the Simple Voice Chat Fabric mod for 1.21.11 in `.work/client/game/mods/` and start the client with `UHCR_TESTBED_VOICE_MODERATION=1 client/restart-client.sh`. The driver keeps voice traffic on loopback. `tools/rcon.py "contender voice Render_1"` should then report "Voice connection: connected". The hidden client has no microphone, so voice shows as turned off.
 

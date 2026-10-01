@@ -364,6 +364,11 @@ public final class ManhuntGame extends Minigame {
 
     // ---- Spectating and results ----------------------------------------------------------------
 
+    @Override public Location focus() {
+        World world = end().world();
+        return world == null || !world.getName().equals(worldName) ? null : new Location(world, 0.5, 66, 0.5);
+    }
+
     @Override public Location spectatorSpawn() {
         World world = end().world();
         if (world == null || !world.getName().equals(worldName)) return null;

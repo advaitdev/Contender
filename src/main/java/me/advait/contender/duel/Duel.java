@@ -118,6 +118,14 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         return audience;
     }
 
+    @Override public Location focus() {
+        Location first = layout().getTeam1Spawn(), second = layout().getTeam2Spawn();
+        if (first == null || second == null) return null;
+        Location middle = first.clone().add(second).multiply(0.5);
+        middle.setWorld(first.getWorld());
+        return middle.add(0, 1, 0);
+    }
+
     @Override public Location spectatorSpawn() {
         Location spawn = layout().getSpectatorSpawn();
         return spawn == null ? layout().getTeam1Spawn() : spawn;

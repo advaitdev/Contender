@@ -251,17 +251,18 @@ public final class ComboGame extends ArenaGame {
         var theme = plugin.getThemes().current();
         Component text = Component.text(fighter, theme.secondary()).appendNewline().append(Component.text(value, theme.primary()));
         if (counter == null || !counter.isValid()) {
-            Location at = middle().add(0, 3.4, 0);
+            // Just above head height: readable from the side and well below an overhead spectator spawn.
+            Location at = middle().add(0, 2.4, 0);
             counter = me.advait.contender.display.Holograms.text(at, text, 0.01f, org.bukkit.entity.Display.Billboard.CENTER, theme.background(0), "combo");
             org.bukkit.entity.TextDisplay created = counter;
-            tasks.later(2, () -> me.advait.contender.display.Holograms.animate(created, me.advait.contender.display.Holograms.scaled(2.4f), 6));
+            tasks.later(2, () -> me.advait.contender.display.Holograms.animate(created, me.advait.contender.display.Holograms.scaled(1.8f), 6));
             return;
         }
         counter.text(text);
         if (!pop) return;
         org.bukkit.entity.TextDisplay shown = counter;
-        me.advait.contender.display.Holograms.animate(shown, me.advait.contender.display.Holograms.scaled(3.1f), 2);
-        tasks.later(3, () -> me.advait.contender.display.Holograms.animate(shown, me.advait.contender.display.Holograms.scaled(2.4f), 4));
+        me.advait.contender.display.Holograms.animate(shown, me.advait.contender.display.Holograms.scaled(2.3f), 2);
+        tasks.later(3, () -> me.advait.contender.display.Holograms.animate(shown, me.advait.contender.display.Holograms.scaled(1.8f), 4));
     }
 
     private void hideCounter() {

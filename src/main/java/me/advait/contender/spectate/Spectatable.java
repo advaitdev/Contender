@@ -24,6 +24,9 @@ public interface Spectatable {
     /** Players competing, who see watchers' avatars only from a distance. */
     Set<UUID> players();
 
+    /** What watchers face when they arrive, or null to keep the spawn's facing. */
+    default Location focus() { return null; }
+
     /** Hide watcher avatars from competitors entirely. */
     default boolean hidesAvatars() { return false; }
 }

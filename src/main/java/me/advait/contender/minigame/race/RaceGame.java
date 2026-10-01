@@ -429,6 +429,10 @@ public final class RaceGame extends Minigame {
 
     // ---- Spectating ----------------------------------------------------------------------------
 
+    @Override public Location focus() {
+        return course.world() == null || course.size() == 0 ? null : course.checkpoints().getFirst().at(course.world());
+    }
+
     @Override public Location spectatorSpawn() {
         Location start = course.startLocation();
         return start == null ? null : start.clone().add(0, 6, 0);

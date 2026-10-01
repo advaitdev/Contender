@@ -68,6 +68,8 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
 
     @Override public boolean contains(Location location) { return arena != null && arena.contains(location); }
 
+    @Override public Location focus() { return arena == null ? null : middle().add(0, 1, 0); }
+
     @Override public boolean hidesAvatars() { return kit.isSpectatorInvisible(); }
 
     /** Spawn points around the middle of the arena, one per player. */

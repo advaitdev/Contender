@@ -111,7 +111,7 @@ public final class RaceType implements MinigameType, AutoCloseable {
                         courses.importLegacy(legacy).whenComplete((course, failure) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
                             if (!p.isOnline()) return;
                             if (failure != null) Dialogs.error(p, Dialogs.message(failure));
-                            else { Dialogs.tell(p, "Imported " + course.name() + " with " + course.size() + " checkpoints."); course(p, course.id()); }
+                            else { Dialogs.tell(p, "Imported " + course.name() + " with " + course.size() + (course.size() == 1 ? " checkpoint." : " checkpoints.")); course(p, course.id()); }
                         }));
                     }));
         }

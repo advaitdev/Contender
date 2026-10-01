@@ -305,7 +305,7 @@ public final class TournamentDialogs {
                         Dialogs.option("free", "As arenas become free", !draft.waitForRound()),
                         Dialogs.option("rounds", "Finish each bracket round", draft.waitForRound()))).width(INPUT_WIDTH).build()));
         Component schedule = DialogText.detail("Full schedule", full + (full == 1 ? " bracket round" : " bracket rounds")
-                + " · " + count * (count - 1) / 2 + " matches");
+                + " · " + count * (count - 1) / 2 + (count * (count - 1) / 2 == 1 ? " match" : " matches"));
         schedule = DialogText.paragraphs(schedule, DialogText.muted("Each bracket round schedules at most one match per entry.\nRound Wins Needed sets the length of each match."));
         if (count % 2 != 0) schedule = DialogText.paragraphs(schedule, DialogText.muted("An odd roster has one bye per bracket round.\nSome entries may play one fewer match."));
         form(player, 3, List.of(body(schedule)), inputs,

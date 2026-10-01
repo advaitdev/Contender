@@ -151,7 +151,7 @@ public final class GauntletGame extends ArenaGame {
         winner.score++;
         streak = winnerId.equals(champion) ? streak + 1 : 1;
         best.merge(winnerId, streak, Math::max);
-        winner.value = (int) winner.score + " wins";
+        winner.value = (int) winner.score + ((int) winner.score == 1 ? " win" : " wins");
         fought++;
         Player loser = Bukkit.getPlayer(loserId);
         if (loser != null && plugin.getRegistry().owner(loserId) == this) {

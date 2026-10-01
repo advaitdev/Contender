@@ -234,7 +234,7 @@ public final class TournamentService extends Module {
     private void announceStart(Tournament started) {
         var theme = plugin.getThemes().current();
         Msg.broadcast(Msg.text(started.name(), DialogPalette.ACCENT).append(Msg.text(" has started. ", DialogPalette.TEXT))
-                .append(Msg.text(started.matches().size() + " matches.", DialogPalette.MUTED)));
+                .append(Msg.text(started.matches().size() + (started.matches().size() == 1 ? " match." : " matches."), DialogPalette.MUTED)));
         for (Player player : Bukkit.getOnlinePlayers()) {
             Msg.title(player, Component.text(started.name(), theme.primary()), Msg.text("Let the games begin", DialogPalette.MUTED), 10, 50, 15);
             Sounds.ANNOUNCE.play(player);

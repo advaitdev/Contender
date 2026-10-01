@@ -92,7 +92,7 @@ public final class HillGame extends ArenaGame {
         Theme theme = plugin.getThemes().current();
         label = Holograms.text(hill.clone().add(0, 3.2, 0), Component.text("King of the Hill", theme.primary()), 1.6f,
                 Display.Billboard.CENTER, theme.background(30), "hill");
-        broadcast(Msg.text("Stand on the hill alone to score. First to " + target + " points, or the most after " + (seconds / 60) + " minutes.", DialogPalette.MUTED));
+        broadcast(Msg.text("Stand on the hill alone to score. First to " + target + " points, or the most after " + (seconds / 60) + (seconds / 60 == 1 ? " minute." : " minutes."), DialogPalette.MUTED));
     }
 
     @Override protected void begin() { }

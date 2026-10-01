@@ -23,6 +23,30 @@ arenas:
   # Maximum selected volume per map, including air.
   max-template-blocks: 100000000
 
+matches:
+  # How long a match waits for a player who disconnects before they forfeit the round.
+  reconnect-seconds: 60
+
+spectators:
+  # Show a small allay where each spectator is, so players can see who's watching.
+  # Allays are hidden from fighters close by and in kits marked as spectator-invisible.
+  allay-avatars: true
+
+display:
+  # Colors for boards, holograms, vote numbers and fireworks.
+  # ocean, amethyst, sunset, gold, mint, crimson, frost or mono. Change this in /options > Display Colors.
+  theme: ocean
+
+voice:
+  # Directors can be heard by everyone, wherever they are (needs Simple Voice Chat).
+  # Change this in /options > Chat & Voice.
+  director-broadcast: false
+
+# Saved by commands; there's no need to edit these by hand:
+#   /setinterviewerposition and /setintervieweeposition save interview positions
+#   /setvotestage saves where players gather when votes are revealed
+#   /votetimer saves where the vote countdown appears
+
 nametags:
   roles:
     director:
@@ -38,6 +62,6 @@ tablist:
   title: ""
   color: gold
 
-# 0 is transparent; 100 is solid. Change this in /options > Board appearance.
+# 0 is transparent; 100 is solid. Change this in /options > Board Background.
 tournament-board:
   background-opacity: 0

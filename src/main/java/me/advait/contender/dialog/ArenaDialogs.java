@@ -74,7 +74,7 @@ public final class ArenaDialogs {
                 DialogText.muted("Saves everything inside your WorldEdit selection, including"),
                 DialogText.muted("air above the floor and any decorations. Spawns come next.")), 320)), List.of(
                 Dialogs.text("name", "Map name", "", 64),
-                Dialogs.number("copies", "Arena copies (matches at once)", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 12), 1, 100), 1, 100, 1)),
+                Dialogs.number("copies", "Arena copies (matches at once)", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100), 1, 100, 1)),
                 buttons, 2, NAV, null);
     }
 

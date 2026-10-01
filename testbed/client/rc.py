@@ -76,9 +76,11 @@ def find_widget(s, needle):
 
 
 def shot(name=None):
-    # Park the cursor in a corner so no tooltip covers the screen, then let a frame render.
-    call("POST", "/v1/actors/Render_1/actions", {"type": "mouse", "x": 2, "y": 2})
-    time.sleep(0.3)
+    # With a menu open, park the cursor in a corner so no tooltip covers it. Without one, moving
+    # the cursor would turn the camera, so leave it alone.
+    if screen().get("open"):
+        call("POST", "/v1/actors/Render_1/actions", {"type": "mouse", "x": 2, "y": 2})
+        time.sleep(0.3)
     s = screen(screenshot=True)
     files = s.get("screenshot") or {}
     time.sleep(1.0)  # screenshots are written on the render thread

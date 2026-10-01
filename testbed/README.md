@@ -57,4 +57,6 @@ Give the client permissions with `tools/rcon.py "op Render_1" "role Render_1 dir
 
 `GUI_SCALE=3 client/restart-client.sh` checks menus on smaller screens. `client/run-client.sh --show` opens a visible window instead of using Xvfb.
 
+To check voice chat, put the Simple Voice Chat Fabric mod for 1.21.11 in `.work/client/game/mods/` and start the client with `UHCR_TESTBED_VOICE_MODERATION=1 client/restart-client.sh`. The driver keeps voice traffic on loopback. `tools/rcon.py "contender voice Render_1"` should then report "Voice connection: connected". The hidden client has no microphone, so voice shows as turned off.
+
 ViaVersion logs "Could not find UserConnection" warnings for fake players, because they have no network connection. They're expected and filtered out of `errors.sh`.

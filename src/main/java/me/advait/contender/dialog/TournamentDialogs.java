@@ -137,7 +137,7 @@ public final class TournamentDialogs {
                     me.advait.contender.command.Commands.cancelAll(plugin, p);
                 })), this::tools);
     }
-    private void minigameTools(Player player) {
+    public void minigameTools(Player player) {
         List<ActionButton> buttons = new ArrayList<>();
         for (var type : plugin.getMinigames().types()) {
             if (!type.hasSetup()) continue;

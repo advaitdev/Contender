@@ -227,7 +227,12 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     }
 
     private void abortStart(Throwable failure) {
-        plugin.getLogger().log(Level.WARNING, name + " could not start", failure);
+        Throwable cause = failure;
+        while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null) cause = cause.getCause();
+        // Setup problems (missing spawns, a course being edited) are expected; only real errors get a stack trace.
+        if (cause instanceof IllegalStateException || cause instanceof IllegalArgumentException) {
+            plugin.getLogger().warning(name + " could not start: " + cause.getMessage());
+        } else plugin.getLogger().log(Level.WARNING, name + " could not start", failure);
         for (Participant participant : roster.values()) {
             if (plugin.getRegistry().owner(participant.id) != this) continue;
             plugin.getRegistry().release(participant.id, this);
@@ -446,7 +451,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     }
 
     /** Restores names, statuses and scores. A game that was running when the server stopped counts as cancelled. */
-    protected void readSaved(YamlConfiguration yaml) {
+    public void readSaved(YamlConfiguration yaml) {
         ConfigurationSection saved = yaml.getConfigurationSection("roster");
         if (saved != null) for (String key : saved.getKeys(false)) {
             Participant participant = roster.get(UUID.fromString(key));
@@ -470,7 +475,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         }
     }
 
-    protected static Map<UUID, String> savedRoster(YamlConfiguration yaml) {
+    public static Map<UUID, String> savedRoster(YamlConfiguration yaml) {
         Map<UUID, String> players = new LinkedHashMap<>();
         ConfigurationSection saved = yaml.getConfigurationSection("roster");
         if (saved != null) for (String key : saved.getKeys(false)) {

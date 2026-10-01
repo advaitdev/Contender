@@ -38,6 +38,7 @@ public final class MinigameService extends Module {
 
     private void registerBuiltIns() {
         // Order here is the order shown in the event list.
+        register(new me.advait.contender.minigame.race.RaceType(plugin));
         register(new me.advait.contender.minigame.games.LastStandGame.Type(plugin));
         register(new me.advait.contender.minigame.games.HillGame.Type(plugin));
         register(new me.advait.contender.minigame.games.GauntletGame.Type(plugin));
@@ -50,6 +51,10 @@ public final class MinigameService extends Module {
     public Collection<MinigameType> types() { return Collections.unmodifiableCollection(types.values()); }
     public MinigameType type(String id) { return types.get(id); }
     public Minigame current() { return current; }
+
+    public me.advait.contender.minigame.race.RaceEditor raceEditor() {
+        return types.get("mace_race") instanceof me.advait.contender.minigame.race.RaceType race ? race.editor() : null;
+    }
 
     /** Makes a newly created game the selected stage. */
     public void select(Minigame game) {

@@ -89,10 +89,11 @@ public final class VoteDialogs {
                 DialogText.detail("Time left", String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60), seconds <= 10 ? DANGER : TEXT),
                 DialogText.detail("Votes cast", Integer.toString(session.totalVotes()))), 340));
         body.add(DialogBody.plainMessage(DialogText.muted(manage ? "Click a player to remove them from this vote."
-                : canVote ? "Pick the number floating over someone's head. Click again to undo." : "You can watch the vote, but only contestants can vote."), 340));
+                : canVote ? "Pick someone's number. Click it again to undo." : "You can watch the vote, but only contestants can vote."), 340));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
-        dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV,
-                dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, NAV, (p, view) -> open(p, page, manage)));
+        // Escape runs the footer button, so the footer stays a plain Close and Refresh goes in the grid.
+        Dialogs.navigationRow(buttons, null, dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, NAV, (p, view) -> open(p, page, manage)), NAV);
+        dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV, null);
     }
 
     private VoteSession require(VoteSession session) {
@@ -118,9 +119,9 @@ public final class VoteDialogs {
                 }), NAV);
         boolean stage = plugin.getVotes().stageLocation() != null;
         dialogs.show(player, "Start a Vote", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("Every online contestant gets a number over their head."),
-                DialogText.muted(stage ? "For the results, candidates gather in a circle on the vote stage."
-                        : "Tip: set a vote stage in Setup Tools → Board & Lobby for the circle reveal.")), 320)), inputs, buttons, 2, NAV, null);
+                DialogText.muted("Each contestant gets a number over their head."),
+                DialogText.muted(stage ? "The results are revealed on the vote stage."
+                        : "Set a vote stage in Board & Lobby for the circle reveal.")), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private static DialogInput toggle(String key, DialogIcon icon, String label, boolean value, String yes, String no) {

@@ -72,6 +72,13 @@ public final class Commands {
             }
             return true;
         }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove", "clear", "4", "6", "8") : List.of());
+        set(commands, "setboard", (sender, command, label, args) -> {
+            if (!(sender instanceof Player player)) { Msg.error(sender, "Use this in game."); return true; }
+            if (args.length == 1 && args[0].equalsIgnoreCase("remove")) { plugin.getBoard().remove(); Msg.success(player, "Board removed."); return true; }
+            boolean wall = plugin.getBoard().place(player);
+            Msg.success(player, wall ? "Board hung on the wall." : "Board placed in front of you. Look at a wall to hang it there instead.");
+            return true;
+        }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove") : List.of());
         for (var room : me.advait.contender.vote.VoteService.Room.values()) {
             String name = room == me.advait.contender.vote.VoteService.Room.VOTING ? "setvotingroom" : "setjudgeroom";
             String who = room == me.advait.contender.vote.VoteService.Room.VOTING ? "Contestants" : "Everyone who isn't voting";

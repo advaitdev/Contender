@@ -63,7 +63,7 @@ If the server restarts mid-event, a tournament comes back paused with its result
 
 `/spectate` lists live matches and minigames. Spectators fly in Spectator mode inside the arena and show up as small allays to the fighters (hidden when close, or if the kit says so). `/lobby` leaves.
 
-The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leaderboard where you stand. Players can click a match on it to watch. Switching rounds, standings or pages only changes the board for the player who clicked. Everyone else keeps the live board, and **Back to live view** returns to it. **Display Colors** switches the color scheme for the board, holograms, vote numbers and fireworks: Ocean, Amethyst, Sunset, Gold, Mint, Crimson, Frost or Mono.
+The **Board** shows the bracket or leaderboard. Look at a wall and run `/setboard` (or Setup Tools → Board & Lobby → Place Board) to hang it flat on the wall, centered where you look. It never sinks into the floor as it grows. Look anywhere else and it stands on the floor in front of you. `/setboard remove` takes it down. Players can click a match on it to watch. Switching rounds, standings or pages only changes the board for the player who clicked. Everyone else keeps the live board, and **Back to live view** returns to it. **Display Colors** switches the color scheme for the board, holograms, vote numbers and fireworks: Ocean, Amethyst, Sunset, Gold, Mint, Crimson, Frost or Mono.
 
 ## Votes
 
@@ -150,7 +150,7 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 | `/options` | Settings |
 | `/role`, `/tier` | Player roles, MCTiers lookups |
 | `/vote [name]`, `/startvote`, `/endvote` | Votes |
-| `/votetimer`, `/setvotestage`, `/setvotingroom`, `/setjudgeroom` | Vote timers, the reveal stage and the voting rooms |
+| `/setboard`, `/votetimer`, `/setvotestage`, `/setvotingroom`, `/setjudgeroom` | Vote timers, the reveal stage and the voting rooms |
 | `/hacks`, `/hackers`, `/pickhacker`, `/sabotage` | Hacks and sabotage |
 | `/interview`, `/uninterview` | Interviews |
 | `/setinterviewerposition`, `/setintervieweeposition` | Interview marks |

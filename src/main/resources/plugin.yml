@@ -59,6 +59,10 @@ commands:
     description: "Set where candidates gather for the vote results"
     permission: contender.master
     usage: "/setvotestage [remove]"
+  setboard:
+    description: "Hang the tournament board on the wall you're looking at, or remove it"
+    permission: contender.master
+    usage: "/setboard [remove]"
   setvotingroom:
     description: "Set where contestants are sent when a vote starts"
     permission: contender.master

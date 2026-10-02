@@ -41,9 +41,11 @@ final class DuelHud {
             DuelTeam team = teams.get(i);
             if (i > 0) line = line.append(Component.text("  -  ", theme.muted()));
             var color = team == roundWinner ? theme.primary() : theme.secondary();
+            // The numbers are bold so the score reads at a glance.
+            Component score = Component.text(Integer.toString(team.score()), color).decorate(net.kyori.adventure.text.format.TextDecoration.BOLD);
             line = teams.size() == 2 && i == 1
-                    ? line.append(Component.text(team.score() + " ", color)).append(Component.text(team.name(), color))
-                    : line.append(Component.text(team.name() + " ", color)).append(Component.text(Integer.toString(team.score()), color));
+                    ? line.append(score).append(Component.text(" " + team.name(), color))
+                    : line.append(Component.text(team.name() + " ", color)).append(score);
         }
         Component caption = roundWinner == null ? Component.text("Draw", theme.muted())
                 : Component.text(roundWinner.name() + " takes the round", theme.muted());

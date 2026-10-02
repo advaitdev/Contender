@@ -201,8 +201,9 @@ public final class TournamentDialogs {
     private void venue(Player player) {
         var board = plugin.getBoard();
         menu(player, "Board & Lobby", DialogText.muted("Everything is placed from where you stand and the way you face."), List.of(
-                menuAction(player, DialogIcon.BOARD, "Place Board Here", TEXT, "Show the bracket on a big board in front of you.", p -> {
-                    board.place(p); p.closeDialog(); Dialogs.tell(p, "Board placed in front of you.");
+                menuAction(player, DialogIcon.BOARD, "Place Board", TEXT, "Look at a wall to hang it there. Otherwise it stands in front of you.", p -> {
+                    boolean wall = board.place(p); p.closeDialog();
+                    Dialogs.tell(p, wall ? "Board hung on the wall." : "Board placed in front of you.");
                 }),
                 menuAction(player, DialogIcon.SPAWN, "Set Lobby Here", TEXT, "Players return here after their games.", p -> {
                     plugin.getLobby().setLocation(p.getLocation()); Dialogs.tell(p, "Lobby set here."); venue(p);

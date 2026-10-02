@@ -21,6 +21,8 @@ import org.bukkit.event.player.PlayerAnimationEvent;
 import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.util.Vector;
+import org.bukkit.util.RayTraceResult;
+import org.bukkit.block.BlockFace;
 import org.joml.Matrix4f;
 
 import java.util.*;
@@ -35,17 +37,24 @@ import java.util.*;
  */
 public final class StageBoard extends Module {
     /** Text scale: bigger than a default display so it reads from across the lobby. */
-    private static final float SCALE = 1.4f;
+    private static final float SCALE = 1.15f;
     private static final double ROW_HEIGHT = 0.30 * SCALE;
     private static final int ROWS = 20;
     /** Space under the last row for the caption and the three rows of controls. */
     private static final double FOOTER = 1.8 * SCALE;
+    /** Space above the top row for the title. */
+    private static final double TITLE = 1.4 * SCALE;
+    /** How far away a wall can be when hanging the board on it. */
+    private static final double WALL_REACH = 32;
     private static final int BACK_TO_LIVE = -6;
     private final Map<UUID, Hover> hovers = new HashMap<>();
     private final Map<UUID, Long> clicks = new HashMap<>();
     private final Set<Chunk> tickets = new HashSet<>();
-    // Boards grow upward from base (just above the floor).
+    // Standing boards grow upward from base (just above the floor). A board on a wall is centered on wallCenter
+    // instead, but never reaches below wallFloor; base is then the same spot, for the checks that need a location.
     private Location base;
+    private Location wallCenter;
+    private double wallFloor;
     private Vector normal, right;
     private UUID stageId;
     private final Board shared = new Board(null);
@@ -79,23 +88,44 @@ public final class StageBoard extends Module {
         double y = config.getDouble("tournament-board.y");
         // Boards placed before version 2 saved their top, seven blocks above the player's feet.
         if (config.getInt("tournament-board.version", 1) < 2) y = y - 7 + 0.3;
-        setBase(new Location(world, config.getDouble("tournament-board.x"), y,
-                config.getDouble("tournament-board.z"), (float) config.getDouble("tournament-board.yaw", 180), 0));
+        Location location = new Location(world, config.getDouble("tournament-board.x"), y,
+                config.getDouble("tournament-board.z"), (float) config.getDouble("tournament-board.yaw", 180), 0);
+        if (config.getBoolean("tournament-board.wall", false)) setWall(location, config.getDouble("tournament-board.floor", y - 32));
+        else setBase(location);
     }
 
     public boolean placed() { return base != null; }
 
-    /** Places the board eight blocks in front of the player, facing them, standing on the floor. */
-    public void place(Player player) {
-        Vector direction = player.getLocation().getDirection().setY(0);
-        if (direction.lengthSquared() < 0.001) direction.setZ(1);
-        Location location = player.getLocation().add(direction.normalize().multiply(8)).add(0, 0.3, 0);
-        location.setYaw(player.getLocation().getYaw() + 180);
-        location.setPitch(0);
-        if (plugin.getArenas().isArenaWorld(location.getWorld())) throw new IllegalArgumentException("Place the board outside the arena world.");
-        setBase(location);
+    /**
+     * Looking at a wall (up to 32 blocks away) hangs the board flat on it, centered where you look. Otherwise the
+     * board stands on the floor eight blocks in front of you, facing you. Returns true when it went on a wall.
+     */
+    public boolean place(Player player) {
+        if (plugin.getArenas().isArenaWorld(player.getWorld())) throw new IllegalArgumentException("Place the board outside the arena world.");
+        RayTraceResult hit = player.rayTraceBlocks(WALL_REACH, FluidCollisionMode.NEVER);
+        BlockFace face = hit == null ? null : hit.getHitBlockFace();
         var config = plugin.getConfig();
-        config.set("tournament-board.version", 2);
+        Location location;
+        boolean wall = face != null && face.getModY() == 0;
+        if (wall) {
+            Vector out = face.getDirection();
+            location = hit.getHitPosition().toLocation(player.getWorld()).add(out.clone().multiply(0.05));
+            location.setDirection(out);
+            location.setPitch(0);
+            double floor = floorBelow(location);
+            setWall(location, floor);
+            config.set("tournament-board.floor", floor);
+        } else {
+            Vector direction = player.getLocation().getDirection().setY(0);
+            if (direction.lengthSquared() < 0.001) direction.setZ(1);
+            location = player.getLocation().add(direction.normalize().multiply(8)).add(0, 0.3, 0);
+            location.setYaw(player.getLocation().getYaw() + 180);
+            location.setPitch(0);
+            setBase(location);
+            config.set("tournament-board.floor", null);
+        }
+        config.set("tournament-board.version", 3);
+        config.set("tournament-board.wall", wall);
         config.set("tournament-board.world", location.getWorld().getName());
         config.set("tournament-board.x", location.getX());
         config.set("tournament-board.y", location.getY());
@@ -103,17 +133,45 @@ public final class StageBoard extends Module {
         config.set("tournament-board.yaw", location.getYaw());
         plugin.saveConfig();
         refresh();
+        return wall;
+    }
+
+    /** The top of the first solid block under this spot, so a wall board never sinks into the floor. */
+    private static double floorBelow(Location location) {
+        int top = location.getBlockY();
+        for (int y = top; y > top - 32 && y > location.getWorld().getMinHeight(); y--) {
+            var block = location.getWorld().getBlockAt(location.getBlockX(), y, location.getBlockZ());
+            if (block.getType().isSolid()) return y + 1;
+        }
+        return location.getY() - 32;
+    }
+
+    /** Where the board's bottom edge goes for this many rows. */
+    private Location bottom(int rows) {
+        if (wallCenter == null) return base.clone();
+        double height = rows * ROW_HEIGHT + FOOTER + TITLE;
+        Location bottom = wallCenter.clone();
+        bottom.setY(Math.max(wallFloor + 0.1, wallCenter.getY() - height / 2));
+        return bottom;
     }
 
     public void remove() {
         close();
         base = null;
-        for (String key : List.of("world", "x", "y", "z", "yaw", "version")) plugin.getConfig().set("tournament-board." + key, null);
+        wallCenter = null;
+        for (String key : List.of("world", "x", "y", "z", "yaw", "version", "wall", "floor")) plugin.getConfig().set("tournament-board." + key, null);
         plugin.saveConfig();
+    }
+
+    private void setWall(Location center, double floor) {
+        setBase(center);
+        wallCenter = center.clone();
+        wallFloor = floor;
     }
 
     private void setBase(Location location) {
         close();
+        wallCenter = null;
         base = location.clone();
         normal = base.getDirection();
         double yaw = Math.toRadians(base.getYaw());
@@ -206,7 +264,7 @@ public final class StageBoard extends Module {
                 columns = newColumns;
                 columnPixels = pixels;
                 rowsPerColumn = newRows;
-                anchor = base.clone().add(0, rowsPerColumn * ROW_HEIGHT + FOOTER, 0);
+                anchor = bottom(rowsPerColumn).add(0, rowsPerColumn * ROW_HEIGHT + FOOTER, 0);
                 double width = pixels / 40.0 * SCALE, gap = 0.2 * SCALE;
                 for (int column = 0; column < columns; column++) for (int row = 0; row < rowsPerColumn; row++) {
                     double x = (column - (columns - 1) / 2.0) * (width + gap);
@@ -231,7 +289,6 @@ public final class StageBoard extends Module {
             int offset = columns * rowsPerColumn;
             set(cells.get(offset++), Component.text(TabStyle.read(plugin.getConfig()).heading(stage == null ? null : stage.name()), theme.primary()), null);
             Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
-            if (owner != null && stage != null) caption = caption.append(Component.text("  |  Only you see this view", theme.muted()));
             set(cells.get(offset++), caption, null);
             if (!bracket || layout == null) {
                 while (offset < cells.size()) set(cells.get(offset++), Component.empty(), null);
@@ -292,6 +349,8 @@ public final class StageBoard extends Module {
             entity.setShadowed(true);
             entity.setDefaultBackground(false);
             entity.setBackgroundColor(theme.background(plugin.getThemes().opacity()));
+            // Lit like a sign, so the board reads the same on a shaded wall as in the open.
+            entity.setBrightness(new Display.Brightness(15, 15));
             entity.setInterpolationDuration(2);
             entity.setTransformationMatrix(new Matrix4f().scaling(SCALE));
         });

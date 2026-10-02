@@ -21,7 +21,11 @@ import org.bukkit.event.player.*;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 
-/** Lobby world protection. Players taking part in an activity follow that activity's rules instead. */
+/**
+ * Lobby world protection, plus build protection everywhere else: outside a game, players can only break or
+ * place blocks when Lobby Settings allows it or they have the admin build bypass. Players in a match or
+ * minigame follow that game's rules (its kit's Break Blocks and Place Blocks) instead.
+ */
 public final class LobbyListener implements Listener {
     private final Contender plugin;
     private final LobbyService lobby;
@@ -40,6 +44,9 @@ public final class LobbyListener implements Listener {
         }
         return Tags.isManaged(entity);
     }
+
+    private boolean mayBreak(Player player) { return exempt(player) || lobby.canBreak(player); }
+    private boolean mayPlace(Player player) { return exempt(player) || lobby.canPlace(player); }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onSpawnLocation(AsyncPlayerSpawnLocationEvent event) {
@@ -71,33 +78,37 @@ public final class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBreak(BlockBreakEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !exempt(event.getPlayer()) && !lobby.canBreak(event.getPlayer())) event.setCancelled(true);
+        if (!mayBreak(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onDamageBlock(BlockDamageEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !exempt(event.getPlayer()) && !lobby.canBreak(event.getPlayer())) event.setCancelled(true);
+        if (!mayBreak(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlace(BlockPlaceEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !exempt(event.getPlayer()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+        if (!mayPlace(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+        if (!mayPlace(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !lobby.canBreak(event.getPlayer())) event.setCancelled(true);
+        if (!mayBreak(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
+        if (event.getAction() == Action.PHYSICAL && event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.FARMLAND) {
+            // Trampling farmland breaks it.
+            if (!mayBreak(event.getPlayer())) event.setCancelled(true);
+            return;
+        }
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
-        if (!lobby.isLobbyWorld(event.getClickedBlock().getWorld())) return;
         if (lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
         if (exempt(event.getPlayer())) return;
         Material type = event.getClickedBlock().getType();
@@ -112,26 +123,40 @@ public final class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onSignEdit(io.papermc.paper.event.player.PlayerOpenSignEvent event) {
-        if (lobby.isLobbyWorld(event.getSign().getWorld()) && !exempt(event.getPlayer()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+        if (!mayPlace(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onSignChange(org.bukkit.event.block.SignChangeEvent event) {
-        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !exempt(event.getPlayer()) && !lobby.canPlace(event.getPlayer())) event.setCancelled(true);
+        if (!mayPlace(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onFertilize(org.bukkit.event.block.BlockFertilizeEvent event) {
-        if (!lobby.isLobbyWorld(event.getBlock().getWorld())) return;
-        if (event.getPlayer() != null && (exempt(event.getPlayer()) || lobby.canPlace(event.getPlayer()))) return;
-        event.setCancelled(true);
+        if (event.getPlayer() != null) { if (!mayPlace(event.getPlayer())) event.setCancelled(true); return; }
+        if (lobby.isLobbyWorld(event.getBlock().getWorld())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (!lobby.isLobbyWorld(event.getRightClicked().getWorld())) return;
-        if (lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
+        if (exempt(event.getPlayer()) || lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
         if (event.getRightClicked() instanceof ArmorStand || event.getRightClicked() instanceof ItemFrame) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onArmorStand(org.bukkit.event.player.PlayerArmorStandManipulateEvent event) {
+        if (exempt(event.getPlayer()) || lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
+        event.setCancelled(true);
+    }
+
+    /** Outside the lobby world, players can't break armor stands, item frames or paintings either. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onDecorationDamage(EntityDamageByEntityEvent event) {
+        Entity entity = event.getEntity();
+        if (lobby.isLobbyWorld(entity.getWorld()) || !(entity instanceof ArmorStand || entity instanceof org.bukkit.entity.Hanging)) return;
+        Player attacker = event.getDamager() instanceof Player player ? player
+                : event.getDamager() instanceof org.bukkit.entity.Projectile projectile && projectile.getShooter() instanceof Player player ? player : null;
+        if (attacker != null && !mayBreak(attacker)) event.setCancelled(true);
     }
 
     /** No damage in the lobby, except a creative player attacking for testing. */
@@ -177,9 +202,13 @@ public final class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
-        if (!lobby.isLobbyWorld(event.getBlock().getWorld())) return;
-        if (event.getEntity() instanceof Player player && lobby.canBreak(player)) return;
-        event.setCancelled(true);
+        boolean lobbyWorld = lobby.isLobbyWorld(event.getBlock().getWorld());
+        if (event.getEntity() instanceof Player player) {
+            // Outside the lobby world, a game's own rules decide for its players.
+            if (!lobby.canBreak(player) && !(exempt(player) && !lobbyWorld)) event.setCancelled(true);
+            return;
+        }
+        if (lobbyWorld) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -194,9 +223,8 @@ public final class LobbyListener implements Listener {
 
     @EventHandler
     public void onIgnite(BlockIgniteEvent event) {
-        if (!lobby.isLobbyWorld(event.getBlock().getWorld())) return;
-        if (event.getPlayer() != null && lobby.canPlace(event.getPlayer())) return;
-        event.setCancelled(true);
+        if (event.getPlayer() != null) { if (!mayPlace(event.getPlayer())) event.setCancelled(true); return; }
+        if (lobby.isLobbyWorld(event.getBlock().getWorld())) event.setCancelled(true);
     }
 
     @EventHandler
@@ -206,8 +234,11 @@ public final class LobbyListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onHangingBreak(HangingBreakEvent event) {
+        if (event instanceof HangingBreakByEntityEvent broken && broken.getRemover() instanceof Player player) {
+            if (!mayBreak(player)) event.setCancelled(true);
+            return;
+        }
         if (!lobby.isLobbyWorld(event.getEntity().getWorld())) return;
-        if (event instanceof HangingBreakByEntityEvent broken && broken.getRemover() instanceof Player player && lobby.canBreak(player)) return;
         if (event.getCause() == HangingBreakEvent.RemoveCause.PHYSICS && (lobby.allowBlockBreak() || lobby.adminBuildBypass())) return;
         event.setCancelled(true);
     }

@@ -8,9 +8,10 @@ lobby:
   pitch: 0.0
   # These settings can also be changed in /options > Lobby Settings.
   teleport-on-join: true
-  # Applies to breaking blocks and collecting fluids with buckets.
+  # Breaking blocks and collecting fluids with buckets, in the lobby and every other world outside a game.
+  # Players in a match or minigame follow its kit's Break Blocks setting instead.
   allow-block-break: false
-  # Applies to placing blocks and emptying buckets.
+  # Placing blocks and emptying buckets, with the same scope (games follow the kit's Place Blocks setting).
   allow-block-place: false
   # Players with contender.admin can build even when the options above are blocked.
   admin-build-bypass: true

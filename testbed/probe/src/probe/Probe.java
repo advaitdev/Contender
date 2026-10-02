@@ -101,6 +101,29 @@ public class Probe extends JavaPlugin implements Listener {
                     for (var d : c().getDuels().duels()) line.append(' ').append(d.displayName()).append('=').append(d.phase()).append("/r").append(d.round());
                     s.sendMessage(line.toString());
                 }
+                case "buildtest" -> {
+                    // buildtest <player> <world|here> : places stone next to the player and tries to break it, then tries to place one.
+                    Player who = Bukkit.getPlayer(a[1]);
+                    org.bukkit.Location at = who.getLocation().getBlock().getRelative(org.bukkit.block.BlockFace.NORTH, 2).getLocation();
+                    var block = at.getBlock();
+                    block.setType(org.bukkit.Material.STONE, false);
+                    boolean broke = who.breakBlock(block) && block.getType() != org.bukkit.Material.STONE;
+                    block.setType(org.bukkit.Material.AIR, false);
+                    var placed = new org.bukkit.event.block.BlockPlaceEvent(block, block.getState(), block.getRelative(org.bukkit.block.BlockFace.DOWN),
+                            new org.bukkit.inventory.ItemStack(org.bukkit.Material.STONE), who, true, org.bukkit.inventory.EquipmentSlot.HAND);
+                    Bukkit.getPluginManager().callEvent(placed);
+                    s.sendMessage(who.getName() + " in " + who.getWorld().getName() + ": break=" + (broke ? "allowed" : "blocked") + " place=" + (placed.isCancelled() ? "blocked" : "allowed"));
+                }
+                case "mkworld" -> {
+                    var created = new org.bukkit.WorldCreator(a[1]).type(org.bukkit.WorldType.FLAT).generateStructures(false).createWorld();
+                    s.sendMessage("world " + created.getName() + " ready");
+                }
+                case "kitbuild" -> {
+                    var kit = c().getKitManager().getKit(a[1]);
+                    kit.setAllowBlockBreak(Boolean.parseBoolean(a[2]));
+                    kit.setAllowBlockPlace(Boolean.parseBoolean(a[2]));
+                    s.sendMessage(a[1] + " building " + a[2]);
+                }
                 case "arenas" -> {
                     StringBuilder line = new StringBuilder(a[1] + ":");
                     for (var copy : c().getArenas().copies(a[1])) line.append(' ').append(copy.slot()).append('=').append(copy.status()).append(copy.isDirty() ? "*" : "");

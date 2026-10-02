@@ -42,7 +42,8 @@ public final class GameSettingsDialogs {
         requireAdmin(player);
         var lobby = plugin.getLobby();
         form(player, "Lobby Settings", "Use /setlobby to save your position and facing.\n\n"
-                + "Admin bypass lets players with contender.admin build here.\nSpectator mode still prevents building.", List.of(
+                + "Break Blocks and Place Blocks apply everywhere outside a game. Games follow their kit.\n"
+                + "Admin Build Bypass lets players with contender.admin build anyway.", List.of(
                 toggle("join_lobby", DialogIcon.SPAWN, "Join at Lobby", lobby.teleportOnJoin(), "Enabled", "Disabled"),
                 toggle("break_blocks", DialogIcon.AXE, "Break Blocks", lobby.allowBlockBreak(), "Allowed", "Blocked"),
                 toggle("place_blocks", DialogIcon.MAP, "Place Blocks", lobby.allowBlockPlace(), "Allowed", "Blocked"),

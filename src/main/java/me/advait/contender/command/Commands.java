@@ -211,7 +211,7 @@ public final class Commands {
 
     private void startVote(CommandSender sender, String[] args) {
         if (args.length == 0 && sender instanceof Player player) { new VoteDialogs(plugin).start(player); return; }
-        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove]."); return; }
+        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove] [public]."); return; }
         int seconds;
         try { seconds = Integer.parseInt(args[0]); }
         catch (NumberFormatException invalid) { Msg.error(sender, "Use /startvote <seconds>."); return; }
@@ -221,7 +221,7 @@ public final class Commands {
         // The voted-out player dies and spectates unless told otherwise.
         VoteService.Elimination elimination = flags.contains("keep") ? VoteService.Elimination.KEEP
                 : flags.contains("spectate") || flags.contains("eliminate") ? VoteService.Elimination.SPECTATE : VoteService.Elimination.KILL;
-        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms));
+        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms, !flags.contains("public")));
         Msg.success(sender, "Vote started for " + seconds + " seconds.");
     }
 }

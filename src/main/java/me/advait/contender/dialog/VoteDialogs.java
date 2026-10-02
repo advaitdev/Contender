@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.Locale;
 
 import static me.advait.contender.dialog.DialogPalette.*;
@@ -43,7 +44,8 @@ public final class VoteDialogs {
         }
         boolean director = player.hasPermission("contender.master");
         boolean canVote = plugin.getRoleManager().getRole(player.getUniqueId()) == PlayerRole.CONTESTANT;
-        boolean showCounts = session.liveCounts() || director;
+        // Counts only with Show Counts While Voting, for everyone; directors see the details in Edit Votes.
+        boolean showCounts = session.liveCounts();
         List<VoteSession.Candidate> candidates = session.candidates();
         int pages = Math.max(1, (candidates.size() + PER_PAGE - 1) / PER_PAGE), page = Math.clamp(requestedPage, 0, pages - 1);
         List<ActionButton> buttons = new ArrayList<>();
@@ -91,8 +93,67 @@ public final class VoteDialogs {
                 : canVote ? "Pick a player. Click them again to undo." : "You can watch the vote, but only contestants can vote."), 340));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
         // Escape runs the footer button, so the footer stays a plain Close and Refresh goes in the grid.
-        Dialogs.navigationRow(buttons, null, dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, CELL, (p, view) -> open(p, page, manage)), CELL);
+        Dialogs.navigationRow(buttons,
+                director && !manage ? dialogs.button(player, DialogIcon.SETTINGS.label("Edit Votes", TEXT), DialogText.muted("Change who voted for whom, for testing."), true, CELL, (p, view) -> editVotes(p, 0)) : null,
+                dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, CELL, (p, view) -> open(p, page, manage)), CELL);
         dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV, null);
+    }
+
+    // ---- Director: change who voted for whom ----------------------------------------------------
+
+    private void editVotes(Player player, int requestedPage) {
+        VoteSession session = plugin.getVotes().session();
+        if (session == null) { player.closeDialog(); Dialogs.error(player, "No vote is running."); return; }
+        List<VoteSession.Candidate> voters = session.candidates();
+        int pages = Math.max(1, (voters.size() + PER_PAGE - 1) / PER_PAGE), page = Math.clamp(requestedPage, 0, pages - 1);
+        List<ActionButton> buttons = new ArrayList<>();
+        for (VoteSession.Candidate voter : voters.subList(page * PER_PAGE, Math.min(voters.size(), (page + 1) * PER_PAGE))) {
+            UUID choice = session.voteOf(voter.id());
+            VoteSession.Candidate target = choice == null ? null : session.candidate(choice);
+            Component label = Component.textOfChildren(StringUtil.getPlayerHead(voter.id()), text(" " + voter.name() + "  →  ", TEXT),
+                    target == null ? text("—", MUTED) : StringUtil.getPlayerHead(target.id()));
+            String hint = target == null ? voter.name() + " hasn't voted." : voter.name() + " voted for " + target.name() + ".";
+            buttons.add(dialogs.button(player, label, DialogText.lines(text(hint, TEXT), DialogText.muted("Click to change it.")), true, CELL,
+                    (p, view) -> pickVote(p, voter.id(), page)));
+        }
+        Dialogs.navigationRow(buttons,
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, true, CELL, (p, view) -> editVotes(p, page - 1)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, true, CELL, (p, view) -> editVotes(p, page + 1)) : null, CELL);
+        List<String> totals = session.results().stream().filter(t -> t.votes() > 0).map(t -> t.candidate().name() + " " + t.votes()).toList();
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(DialogText.lines(DialogText.muted("Change who voted for whom. Players aren't told."),
+                DialogText.detail("Votes", totals.isEmpty() ? "None yet" : String.join(" · ", totals))), 340));
+        if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
+        dialogs.show(player, "Edit Votes", body, List.of(), buttons, 2, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)));
+    }
+
+    private void pickVote(Player player, UUID voter, int returnPage) {
+        VoteSession session = plugin.getVotes().session();
+        VoteSession.Candidate who = session == null ? null : session.candidate(voter);
+        if (who == null) { editVotes(player, returnPage); return; }
+        UUID current = session.voteOf(voter);
+        List<ActionButton> buttons = new ArrayList<>();
+        for (VoteSession.Candidate candidate : session.candidates()) {
+            if (candidate.id().equals(voter)) continue;
+            Component label = Component.textOfChildren(StringUtil.getPlayerHead(candidate.id()), text(" " + candidate.name(), TEXT));
+            if (candidate.id().equals(current)) label = label.append(Component.space()).append(DialogIcon.SAVE.sprite());
+            buttons.add(dialogs.button(player, label, null, true, CELL, (p, view) -> {
+                require(session);
+                plugin.getVotes().setVote(voter, candidate.id());
+                editVotes(p, returnPage);
+            }));
+        }
+        Component none = text("No Vote", MUTED);
+        if (current == null) none = none.append(Component.space()).append(DialogIcon.SAVE.sprite());
+        buttons.add(dialogs.button(player, none, DialogText.muted("Take their vote away."), true, CELL, (p, view) -> {
+            require(session);
+            plugin.getVotes().setVote(voter, null);
+            editVotes(p, returnPage);
+        }));
+        dialogs.show(player, who.name() + "'s Vote", List.of(DialogBody.plainMessage(
+                Component.textOfChildren(StringUtil.getPlayerHead(voter), text(" " + who.name() + " votes for…", TEXT)), 340)), List.of(), buttons, 2, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> editVotes(p, returnPage)));
     }
 
     private VoteSession require(VoteSession session) {
@@ -108,7 +169,8 @@ public final class VoteDialogs {
                 toggle("live", DialogIcon.EYE, "Show Counts While Voting", false, "Yes", "No, keep them secret"),
                 toggle("ceremony", DialogIcon.STAR, "Results", true, "Reveal ceremony", "Chat only"),
                 DialogInput.singleOption("elimination", DialogIcon.SKULL.label("Voted-Out Player"), java.util.Arrays.stream(VoteService.Elimination.values())
-                        .map(option -> Dialogs.option(option.name(), option.label, option == VoteService.Elimination.KILL)).toList()).width(300).build()));
+                        .map(option -> Dialogs.option(option.name(), option.label, option == VoteService.Elimination.KILL)).toList()).width(300).build(),
+                toggle("anonymous", DialogIcon.PLAYERS, "Anonymous Votes", true, "Yes", "No, show who everyone voted for")));
         // The rooms choice only appears once a voting or judge room is set.
         boolean rooms = plugin.getVotes().anyRoom();
         if (rooms) inputs.add(DialogInput.singleOption("rooms", DialogIcon.SPAWN.label("Rooms"), java.util.Arrays.stream(VoteService.RoomMode.values())
@@ -119,7 +181,8 @@ public final class VoteDialogs {
                 dialogs.button(player, DialogIcon.NEXT.label("Start Vote", ACCENT), null, true, NAV, (p, view) -> {
                     VoteService.RoomMode mode = rooms ? VoteService.RoomMode.valueOf(Dialogs.text(view, "rooms")) : VoteService.RoomMode.OFF;
                     plugin.getVotes().start(new VoteService.Options(Dialogs.number(view, "seconds", 10, 600),
-                            bool(view, "live"), bool(view, "ceremony"), VoteService.Elimination.valueOf(Dialogs.text(view, "elimination")), mode));
+                            bool(view, "live"), bool(view, "ceremony"), VoteService.Elimination.valueOf(Dialogs.text(view, "elimination")), mode,
+                            bool(view, "anonymous")));
                     open(p);
                 }), NAV);
         boolean stage = plugin.getVotes().stageLocation() != null;

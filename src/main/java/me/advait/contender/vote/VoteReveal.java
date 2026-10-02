@@ -59,11 +59,14 @@ final class VoteReveal implements Activity, Listener {
     private boolean moving;
     private UUID votedOut;
     private boolean finished;
+    /** The ceremony doesn't end before this (epoch millis), so who-voted-for-whom displays get their full time. */
+    private final long notBefore;
 
     record Layout(List<Location> spots, Vector facing) { }
 
-    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteService.Elimination elimination) {
+    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteService.Elimination elimination, long notBefore) {
         this.plugin = plugin;
+        this.notBefore = notBefore;
         this.service = service;
         this.session = session;
         this.elimination = elimination;
@@ -76,8 +79,6 @@ final class VoteReveal implements Activity, Listener {
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         List<VoteSession.Candidate> leaders = session.leaders();
         int top = leaders.isEmpty() ? 0 : session.votesFor(leaders.getFirst().id());
-        Theme theme = plugin.getThemes().current();
-        Msg.title(onlineAll(), Component.text("The votes are in", theme.primary()), Msg.text(session.totalVotes() + (session.totalVotes() == 1 ? " vote" : " votes") + " cast", DialogPalette.MUTED), 8, 50, 10);
         Sounds.REVEAL.playAll();
         Location stage = service.stageLocation();
         if (stage != null) lineUp(stage);
@@ -221,14 +222,24 @@ final class VoteReveal implements Activity, Listener {
 
     // ---- The spotlight -------------------------------------------------------------------------
 
-    /** A beam sweeps back and forth along the line, slowing down, and stops on the voted-out player. */
+    /**
+     * A beam sweeps back and forth along the line, slowing down, and stops on the voted-out player. On a tie it
+     * slows down over one of the tied players as if it's about to land, hangs there, then pulls back into the sky
+     * without picking anyone.
+     */
     private void spotlight(List<VoteSession.Candidate> leaders, int top) {
         List<UUID> standing = new ArrayList<>();
         for (UUID id : line) if (Bukkit.getPlayer(id) != null) standing.add(id);
-        UUID target = leaders.size() == 1 && standing.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
-        // With a tie (or nobody here to land on) the beam would point at the wrong person.
-        if (standing.size() < 2 || target == null) { conclude(leaders, top); return; }
-        List<Integer> steps = sweep(standing.size(), standing.indexOf(target));
+        boolean tie = leaders.size() > 1;
+        UUID stop = !tie && standing.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
+        if (tie) {
+            List<UUID> tied = leaders.stream().map(VoteSession.Candidate::id).filter(standing::contains).toList();
+            List<UUID> pool = tied.isEmpty() ? standing : tied;
+            stop = pool.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(pool.size()));
+        }
+        // Nobody here to land on (the voted-out player left): skip straight to the result.
+        if (standing.size() < 2 || stop == null) { conclude(leaders, top); return; }
+        List<Integer> steps = sweep(standing.size(), standing.indexOf(stop));
         Theme theme = plugin.getThemes().current();
         BlockDisplay beam = Holograms.block(beamAt(standing.getFirst()), Material.WHITE_STAINED_GLASS.createBlockData(), Holograms.box(0.9f, 14f, 0.9f, 0), "vote_reveal");
         beam.setGlowing(true);
@@ -245,9 +256,26 @@ final class VoteReveal implements Activity, Listener {
             tasks.later(time, () -> {
                 if (beam.isValid()) beam.teleport(beamAt(at));
                 for (Player viewer : onlinePlayers()) Sounds.TICK.play(viewer, last ? 2f : 1.2f);
-                if (last) tasks.later(16, () -> conclude(leaders, top));
+                if (!last) return;
+                if (tie) tasks.later(30, () -> pullAway(beam, leaders, top));
+                else tasks.later(16, () -> conclude(leaders, top));
             });
         }
+    }
+
+    /** The tie fake-out: the beam shoots back up into the sky and thins out, then the tie is announced. */
+    private void pullAway(BlockDisplay beam, List<VoteSession.Candidate> leaders, int top) {
+        Sounds.WHOOSH.playAll();
+        Sounds.FIZZLE.playAll();
+        if (beam.isValid()) {
+            Holograms.animate(beam, new org.bukkit.util.Transformation(new org.joml.Vector3f(-0.45f, 14f, -0.45f), new org.joml.Quaternionf(),
+                    new org.joml.Vector3f(0.9f, 0.01f, 0.9f), new org.joml.Quaternionf()), 12);
+        }
+        tasks.later(20, () -> {
+            Holograms.remove(beam);
+            displays.remove(beam);
+            conclude(leaders, top);
+        });
     }
 
     /**
@@ -277,14 +305,12 @@ final class VoteReveal implements Activity, Listener {
 
     private void conclude(List<VoteSession.Candidate> leaders, int votes) {
         if (finished) return;
-        Theme theme = plugin.getThemes().current();
-        Collection<UUID> everyone = onlineAll();
+        // The timers turn into the results now that the spotlight is done.
+        service.showResults(session);
         if (leaders.isEmpty()) {
-            Msg.title(everyone, Component.text("No votes", theme.secondary()), Msg.text("Nobody was voted out", DialogPalette.MUTED), 5, 60, 15);
             Msg.broadcast(Msg.text("The vote ended with no votes cast.", DialogPalette.MUTED));
         } else if (leaders.size() > 1) {
             String names = String.join(" & ", leaders.stream().map(VoteSession.Candidate::name).toList());
-            Msg.title(everyone, Component.text("It's a tie", theme.primary()), Msg.text(names + " · " + votes + (votes == 1 ? " vote" : " votes") + " each", DialogPalette.MUTED), 5, 70, 15);
             Msg.broadcast(Msg.text("The vote is tied between " + names + " with " + votes + (votes == 1 ? " vote" : " votes") + " each.", DialogPalette.ACCENT));
             Sounds.ANNOUNCE.playAll();
         } else {
@@ -294,8 +320,6 @@ final class VoteReveal implements Activity, Listener {
                 player.getWorld().strikeLightningEffect(player.getLocation());
                 plugin.getCelebrations().fireworks(player.getLocation(), 4);
             }
-            Msg.title(everyone, Component.text(out.name(), DialogPalette.DANGER),
-                    Msg.text("was voted out with " + votes + (votes == 1 ? " vote" : " votes"), DialogPalette.MUTED), 5, 80, 20);
             Msg.broadcast(Msg.text(out.name(), DialogPalette.DANGER).append(Msg.text(" was voted out with " + votes + (votes == 1 ? " vote." : " votes."), DialogPalette.TEXT)));
             Sounds.ELIMINATED.playAll();
             if (elimination == VoteService.Elimination.KILL) {
@@ -309,7 +333,7 @@ final class VoteReveal implements Activity, Listener {
         }
         plugin.getLogger().info("Vote results: " + String.join(", ", session.results().stream()
                 .map(tally -> tally.candidate().name() + " " + tally.votes()).toList()));
-        tasks.later(140, this::finish);
+        tasks.later(Math.max(140, (notBefore - System.currentTimeMillis()) / 50 + 5), this::finish);
     }
 
     private void release(UUID id) {
@@ -354,5 +378,4 @@ final class VoteReveal implements Activity, Listener {
     }
 
     private static List<Player> onlinePlayers() { return List.copyOf(Bukkit.getOnlinePlayers()); }
-    private static Collection<UUID> onlineAll() { return Bukkit.getOnlinePlayers().stream().map(Player::getUniqueId).toList(); }
 }

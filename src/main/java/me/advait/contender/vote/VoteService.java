@@ -47,9 +47,13 @@ public final class VoteService extends Module {
         Elimination(String label) { this.label = label; }
     }
 
-    public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms) {
+    /**
+     * @param liveCounts show how many votes each player has in /vote while voting
+     * @param anonymous  false shows, above each voter, who they voted for once voting closes
+     */
+    public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous) {
         public Options(int seconds, boolean liveCounts, boolean ceremony, boolean eliminate) {
-            this(seconds, liveCounts, ceremony, eliminate ? Elimination.KILL : Elimination.KEEP, RoomMode.RETURN);
+            this(seconds, liveCounts, ceremony, eliminate ? Elimination.KILL : Elimination.KEEP, RoomMode.RETURN, true);
         }
     }
 
@@ -61,6 +65,7 @@ public final class VoteService extends Module {
     private VoteSession session;
     private VoteTimerDisplay timer;
     private VoteRooms rooms;
+    private VoteReceipts receipts;
     private VoteReveal reveal;
     private Options options;
     /** Counts votes, so a delayed step from an old vote never touches a newer one. */
@@ -73,6 +78,7 @@ public final class VoteService extends Module {
     @Override protected void onEnable() {
         timer = new VoteTimerDisplay(plugin);
         rooms = new VoteRooms(plugin);
+        receipts = new VoteReceipts(plugin);
         tasks.repeat(20, 20, this::second);
     }
 
@@ -80,6 +86,7 @@ public final class VoteService extends Module {
         if (reveal != null) reveal.forceStop("");
         session = null;
         timer.hide();
+        receipts.clear();
     }
 
     public boolean isActive() { return session != null; }
@@ -88,7 +95,7 @@ public final class VoteService extends Module {
 
     public void start(Options chosen) {
         if (session != null) throw new IllegalStateException("A vote is already running.");
-        if (reveal != null) throw new IllegalStateException("Wait for the results to finish.");
+        if (reveal != null || receipts.showing()) throw new IllegalStateException("Wait for the results to finish.");
         if (chosen.seconds() < 10 || chosen.seconds() > 3600) throw new IllegalArgumentException("Choose a length from 10 seconds to 60 minutes.");
         List<Map.Entry<UUID, String>> players = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -151,17 +158,22 @@ public final class VoteService extends Module {
         session = null;
         int current = generation;
         timer.update(0);
-        tasks.later(RESULTS_DELAY_TICKS, () -> { if (generation == current) timer.showResults(closing.results()); });
+        // With a ceremony the timers stay at 00:00 until the spotlight is done (VoteReveal shows the results).
+        if (!options.ceremony()) tasks.later(RESULTS_DELAY_TICKS, () -> { if (generation == current) timer.showResults(closing.results()); });
         for (Player player : Bukkit.getOnlinePlayers()) if (!plugin.getRegistry().isPlaying(player.getUniqueId())) player.sendActionBar(Component.empty());
+        // Who voted for whom, when votes aren't anonymous. The vote isn't over until these are gone.
+        if (!options.anonymous()) receipts.show(closing);
+        long overAt = receipts.showing() ? receipts.until() : 0;
         if (options.ceremony()) {
-            reveal = new VoteReveal(plugin, this, closing, options.elimination());
+            reveal = new VoteReveal(plugin, this, closing, options.elimination(), overAt);
             reveal.play();
         } else {
             announce(closing);
             List<VoteSession.Candidate> leaders = closing.leaders();
             if (leaders.size() == 1) voteOut(leaders.getFirst().id(), options.elimination());
-            tasks.later(100, () -> { if (session == null && reveal == null) rooms.sendBack(stageLocation()); });
-            tasks.later(QUICK_RESULTS_TICKS, () -> { if (generation == current && reveal == null) timer.hide(); });
+            long wait = Math.max(100, (overAt - System.currentTimeMillis()) / 50 + 5);
+            tasks.later(wait, () -> { if (session == null && reveal == null) rooms.sendBack(stageLocation()); });
+            tasks.later(Math.max(QUICK_RESULTS_TICKS, wait), () -> { if (generation == current && reveal == null) timer.hide(); });
         }
     }
 
@@ -230,7 +242,29 @@ public final class VoteService extends Module {
         if (reveal != null) reveal.forceStop("");
         reveal = null;
         timer.hide();
+        receipts.clear();
         rooms.sendBack(stageLocation());
+    }
+
+    /** Turns the timers into the results. */
+    void showResults(VoteSession closed) { timer.showResults(closed.results()); }
+
+    /**
+     * A director's override of one player's vote, for testing: {@code target} null takes the vote away. Works for
+     * any contestant in the vote, online or not.
+     */
+    public void setVote(UUID voter, UUID target) {
+        VoteSession current = require();
+        if (current.candidate(voter) == null) throw new IllegalArgumentException("That player isn't in this vote.");
+        if (target == null) {
+            current.unvote(voter);
+        } else {
+            VoteSession.Candidate chosen = current.candidate(target);
+            if (chosen == null) throw new IllegalArgumentException("That player isn't in this vote.");
+            current.vote(voter, chosen);
+        }
+        plugin.getLogger().info("A director set " + current.candidate(voter).name() + "'s vote to "
+                + (target == null ? "nobody" : current.candidate(target).name()) + ".");
     }
 
     // ---- Placement -----------------------------------------------------------------------------

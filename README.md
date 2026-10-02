@@ -71,17 +71,20 @@ The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leade
 
 Form options:
 
-- **Show Counts While Voting** shows running counts in the vote menu. Directors always see them.
+- **Show Counts While Voting** shows how many votes each player has in the vote menu. When it's off, nobody sees counts there, directors included.
 - **Results**: the reveal ceremony, or chat only.
 - **Voted-Out Player**:
   - Dies, then spectates (the default). Lightning strikes, they die where they stand (keeping their items), respawn on the same spot and become a spectator.
   - Becomes a spectator, without dying.
   - Stays a contestant.
 - **Rooms**: see below.
+- **Anonymous Votes** (Yes by default). Set it to No and, once voting closes, a small display over each voter shows who they voted for (or that they didn't vote), so everyone is held to their vote. These stay for 10 seconds and follow the players, and the vote isn't over until they're gone.
 
-With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), and `stay` or `nomove` (rooms).
+With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), and `public` (not anonymous).
 
-**The ceremony.** Stand on the middle of your stage, facing the audience, and run `/setvotestage`. When voting closes, contestants walk into a straight line on the stage, facing the way you faced. The line runs along whichever of X or Z has more floor. The stage is the floor at the same height as the spot you set, up to a wall, a gap or a step, so a raised platform works well. A spotlight then sweeps back and forth along the line, slows down and stops on whoever got the most votes. On a tie there's no spotlight. Contestants further than 40 blocks away (or in another world) are teleported into line instead.
+**Edit Votes.** While a vote runs, directors have an **Edit Votes** button in `/vote`. It lists who voted for whom with the totals. Click a voter to change their vote or take it away. Players aren't told. It's meant for testing.
+
+**The ceremony.** Stand on the middle of your stage, facing the audience, and run `/setvotestage`. When voting closes, contestants walk into a straight line on the stage, facing the way you faced. The line runs along whichever of X or Z has more floor. The stage is the floor at the same height as the spot you set, up to a wall, a gap or a step, so a raised platform works well. A spotlight then sweeps back and forth along the line, slows down and stops on whoever got the most votes. On a tie it slows down over one of the tied players as if it's about to land, then pulls back up into the sky without picking anyone. The result goes in chat; there are no on-screen titles. Contestants further than 40 blocks away (or in another world) are teleported into line instead.
 
 **Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option decides what happens afterwards:
 
@@ -89,7 +92,7 @@ With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `kee
 - **Move and Leave There** leaves them in the rooms.
 - **Don't Move Anyone** skips the rooms.
 
-**Timers.** Look at a wall and run `/votetimer` to hang a countdown (just `00:45`) flat on it. Look anywhere else and it floats in front of you. Add a size from 1 to 10 for a bigger or smaller one, for example `/votetimer 6`; the default is 4. You can place several. The last 10 seconds tick. A second or two after voting closes, each timer turns into the results: a player's head and their vote count for everyone who got votes, most first. With no votes at all it says so. `/votetimer remove` takes down the nearest timer, and `/votetimer clear` removes them all.
+**Timers.** Look at a wall and run `/votetimer` to hang a countdown (just `00:45`) flat on it. Look anywhere else and it floats in front of you. Add a size from 1 to 10 for a bigger or smaller one, for example `/votetimer 6`; the default is 4. You can place several. The last 10 seconds tick. Once the results are in (right after the spotlight, or a second or two after voting closes when there's no ceremony), each timer turns into the results: a player's head and their vote count for everyone who got votes, most first. With no votes at all it says so. `/votetimer remove` takes down the nearest timer, and `/votetimer clear` removes them all.
 
 All of this is also in `/tournament` → **Setup Tools** → **Vote Setup**.
 

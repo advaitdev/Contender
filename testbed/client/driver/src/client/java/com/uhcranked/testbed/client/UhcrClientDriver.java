@@ -394,6 +394,11 @@ public final class UhcrClientDriver implements ClientModInitializer {
             client.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
             return Map.of("performed", true, "target", target.getName().getString());
         }
+        if (type.equals("swing")) {
+            // A left click at nothing: the arm swing packet, as when clicking in-world displays.
+            client.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+            return Map.of("performed", true);
+        }
         if (type.equals("close")) {
             if (client.currentScreen != null) client.currentScreen.close();
             return Map.of("performed", true);

@@ -28,6 +28,10 @@ import java.util.*;
 /**
  * The tab bracket, drawn with text displays in the lobby. Point at a live match and swing to watch it;
  * the controls underneath switch rounds, standings and pages.
+ *
+ * <p>Everyone sees the live board: the current round, first page. A player who uses a control gets their own
+ * copy that only they can see, so switching pages never changes what anyone else (or a camera) sees.
+ * "Back to live view" returns them to the shared board.
  */
 public final class StageBoard extends Module {
     /** Text scale: bigger than a default display so it reads from across the lobby. */
@@ -36,18 +40,16 @@ public final class StageBoard extends Module {
     private static final int ROWS = 20;
     /** Space under the last row for the caption and the three rows of controls. */
     private static final double FOOTER = 1.8 * SCALE;
-    private final List<Cell> cells = new ArrayList<>();
+    private static final int BACK_TO_LIVE = -6;
     private final Map<UUID, Hover> hovers = new HashMap<>();
     private final Map<UUID, Long> clicks = new HashMap<>();
     private final Set<Chunk> tickets = new HashSet<>();
-    // The board grows upward from base (just above the floor); anchor is its current top-left reference.
-    private Location base, anchor;
-    private int rowsPerColumn;
+    // Boards grow upward from base (just above the floor).
+    private Location base;
     private Vector normal, right;
-    private BracketLayout.View view = BracketLayout.View.following();
-    private BracketLayout.Layout layout;
     private UUID stageId;
-    private int columns, columnPixels;
+    private final Board shared = new Board(null);
+    private final Map<UUID, Board> personal = new HashMap<>();
 
     private static final class Cell {
         final TextDisplay display;
@@ -106,7 +108,6 @@ public final class StageBoard extends Module {
     public void remove() {
         close();
         base = null;
-        anchor = null;
         for (String key : List.of("world", "x", "y", "z", "yaw", "version")) plugin.getConfig().set("tournament-board." + key, null);
         plugin.saveConfig();
     }
@@ -114,16 +115,16 @@ public final class StageBoard extends Module {
     private void setBase(Location location) {
         close();
         base = location.clone();
-        anchor = base.clone();
         normal = base.getDirection();
         double yaw = Math.toRadians(base.getYaw());
         right = new Vector(Math.cos(yaw), 0, Math.sin(yaw));
     }
 
-    /** Redraws after a theme or opacity change. */
+    /** Redraws after a theme or opacity change. Private views keep their round and page. */
     public void rebuild() {
-        destroyDisplays();
-        columns = 0;
+        clearHovers();
+        shared.destroy();
+        personal.values().forEach(Board::destroy);
         refresh();
     }
 
@@ -132,76 +133,158 @@ public final class StageBoard extends Module {
         Stage stage = plugin.getStages().current();
         if (stage != null && stage.cancelled()) stage = null;
         UUID id = stage == null ? null : stage.id();
-        if (!Objects.equals(stageId, id)) { view = BracketLayout.View.following(); stageId = id; clearHovers(); }
-        Theme theme = plugin.getThemes().current();
-        layout = stage == null ? null : plugin.getTabManager().layout(view);
-        List<TabRow> rows = layout == null
-                ? List.of(TabRow.label(Component.text("Waiting for the next event", theme.muted())))
-                : layout.rows();
-        int newColumns = Math.max(1, (rows.size() + ROWS - 1) / ROWS);
-        // Layout columns are padded to ROWS; draw only down to the last row any column uses.
-        int used = 0;
-        for (int index = 0; index < rows.size(); index++) {
-            if (!PlainTextComponentSerializer.plainText().serialize(rows.get(index).boardText()).isBlank()) used = Math.max(used, index % ROWS + 1);
+        if (!Objects.equals(stageId, id)) {
+            // A new event starts everyone on the live board again.
+            stageId = id;
+            for (UUID owner : Set.copyOf(personal.keySet())) closePersonal(owner);
+            clearHovers();
         }
-        int newRows = Math.clamp(used, 1, ROWS);
-        int pixels = Math.max(170, rows.stream().mapToInt(row -> TabText.width(row.boardText())).max().orElse(170) + 12);
-        if (columns != newColumns || columnPixels != pixels || rowsPerColumn != newRows || cells.isEmpty()) {
-            destroyDisplays();
-            columns = newColumns;
-            columnPixels = pixels;
-            rowsPerColumn = newRows;
-            anchor = base.clone().add(0, rowsPerColumn * ROW_HEIGHT + FOOTER, 0);
-            double width = pixels / 40.0 * SCALE, gap = 0.2 * SCALE;
-            for (int column = 0; column < columns; column++) for (int row = 0; row < rowsPerColumn; row++) {
-                double x = (column - (columns - 1) / 2.0) * (width + gap);
-                cells.add(cell(x, -row * ROW_HEIGHT, width));
-            }
-            Cell title = cell(0, 0.95 * SCALE, (width + gap) * columns);
-            title.display.setTransformationMatrix(new Matrix4f().scaling(SCALE * 1.8f));
-            cells.add(title);
-            cells.add(cell(0, -rowsPerColumn * ROW_HEIGHT - 0.2 * SCALE, (width + gap) * columns));
-            for (int row = 0; row < 3; row++) for (int side = 0; side < 2; side++) {
-                cells.add(cell((side == 0 ? -1 : 1) * 2.1 * SCALE, -rowsPerColumn * ROW_HEIGHT - (0.7 + row * 0.4) * SCALE, 4 * SCALE));
-            }
+        shared.refresh(stage);
+        for (Board board : List.copyOf(personal.values())) {
+            if (Bukkit.getPlayer(board.owner) == null) closePersonal(board.owner);
+            else board.refresh(stage);
         }
-        Map<Integer, Duel> playing = plugin.getTournaments().playing();
-        boolean bracket = stage != null && stage.hasRounds();
-        for (int i = 0; i < columns * rowsPerColumn; i++) {
-            int source = (i / rowsPerColumn) * ROWS + i % rowsPerColumn;
-            TabRow row = source < rows.size() ? rows.get(source) : TabRow.label(Component.empty());
-            Integer target = bracket && row.matchNumber() != null && playing.containsKey(row.matchNumber()) ? row.matchNumber() : null;
-            set(cells.get(i), row.boardText().append(TabText.padding(columnPixels - 12 - TabText.width(row.boardText()))), target);
-        }
-        int offset = columns * rowsPerColumn;
-        set(cells.get(offset++), Component.text(TabStyle.read(plugin.getConfig()).heading(stage == null ? null : stage.name()), theme.primary()), null);
-        Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
-        set(cells.get(offset++), caption, null);
-        if (!bracket || layout == null) {
-            while (offset < cells.size()) set(cells.get(offset++), Component.empty(), null);
-            return;
-        }
-        set(cells.get(offset++), DialogIcon.BACK.label("Previous round"), layout.round() > 1 ? -3 : null);
-        set(cells.get(offset++), DialogIcon.NEXT.label("Next round"), layout.round() < stage.rounds() ? -4 : null);
-        set(cells.get(offset++), DialogIcon.BOARD.label(layout.standings() ? "Matches" : "Standings"), -5);
-        set(cells.get(offset++), DialogIcon.REFRESH.label("Follow current round"), -6);
-        boolean pages = layout.pages() > 1;
-        set(cells.get(offset++), pages ? DialogIcon.BACK.label("Previous page") : Component.empty(), pages ? -1 : null);
-        set(cells.get(offset), pages ? DialogIcon.NEXT.label("Next page") : Component.empty(), pages ? -2 : null);
     }
 
-    private Cell cell(double x, double y, double width) {
-        Location location = anchor.clone().add(right.clone().multiply(x)).add(0, y, 0);
-        return new Cell(spawn(location, false), x, y + ROW_HEIGHT / 2, width);
+    private Stage currentStage() {
+        Stage stage = plugin.getStages().current();
+        return stage != null && stage.cancelled() ? null : stage;
     }
 
-    private TextDisplay spawn(Location location, boolean privateDisplay) {
+    /** The board this player sees. */
+    private Board boardFor(Player player) {
+        Board own = personal.get(player.getUniqueId());
+        return own != null ? own : shared;
+    }
+
+    private Board openPersonal(Player player) {
+        clearHover(player.getUniqueId());
+        Board board = new Board(player.getUniqueId());
+        personal.put(player.getUniqueId(), board);
+        for (Cell cell : shared.cells) player.hideEntity(plugin, cell.display);
+        return board;
+    }
+
+    private void closePersonal(UUID owner) {
+        clearHover(owner);
+        Board board = personal.remove(owner);
+        if (board == null) return;
+        board.destroy();
+        Player player = Bukkit.getPlayer(owner);
+        if (player != null) for (Cell cell : shared.cells) player.showEntity(plugin, cell.display);
+    }
+
+    /** One drawing of the board: the shared one (owner null) or a player's private view. */
+    private final class Board {
+        final UUID owner;
+        final List<Cell> cells = new ArrayList<>();
+        Location anchor;
+        int rowsPerColumn, columns, columnPixels;
+        BracketLayout.View view = BracketLayout.View.following();
+        BracketLayout.Layout layout;
+
+        Board(UUID owner) { this.owner = owner; }
+
+        void refresh(Stage stage) {
+            Theme theme = plugin.getThemes().current();
+            layout = stage == null ? null : plugin.getTabManager().layout(view);
+            List<TabRow> rows = layout == null
+                    ? List.of(TabRow.label(Component.text("Waiting for the next event", theme.muted())))
+                    : layout.rows();
+            int newColumns = Math.max(1, (rows.size() + ROWS - 1) / ROWS);
+            // Layout columns are padded to ROWS; draw only down to the last row any column uses.
+            int used = 0;
+            for (int index = 0; index < rows.size(); index++) {
+                if (!PlainTextComponentSerializer.plainText().serialize(rows.get(index).boardText()).isBlank()) used = Math.max(used, index % ROWS + 1);
+            }
+            int newRows = Math.clamp(used, 1, ROWS);
+            int pixels = Math.max(170, rows.stream().mapToInt(row -> TabText.width(row.boardText())).max().orElse(170) + 12);
+            if (columns != newColumns || columnPixels != pixels || rowsPerColumn != newRows || cells.isEmpty()) {
+                if (owner != null) clearHover(owner);
+                else clearHovers();
+                destroy();
+                columns = newColumns;
+                columnPixels = pixels;
+                rowsPerColumn = newRows;
+                anchor = base.clone().add(0, rowsPerColumn * ROW_HEIGHT + FOOTER, 0);
+                double width = pixels / 40.0 * SCALE, gap = 0.2 * SCALE;
+                for (int column = 0; column < columns; column++) for (int row = 0; row < rowsPerColumn; row++) {
+                    double x = (column - (columns - 1) / 2.0) * (width + gap);
+                    cells.add(cell(x, -row * ROW_HEIGHT, width));
+                }
+                Cell title = cell(0, 0.95 * SCALE, (width + gap) * columns);
+                title.display.setTransformationMatrix(new Matrix4f().scaling(SCALE * 1.8f));
+                cells.add(title);
+                cells.add(cell(0, -rowsPerColumn * ROW_HEIGHT - 0.2 * SCALE, (width + gap) * columns));
+                for (int row = 0; row < 3; row++) for (int side = 0; side < 2; side++) {
+                    cells.add(cell((side == 0 ? -1 : 1) * 2.1 * SCALE, -rowsPerColumn * ROW_HEIGHT - (0.7 + row * 0.4) * SCALE, 4 * SCALE));
+                }
+            }
+            Map<Integer, Duel> playing = plugin.getTournaments().playing();
+            boolean bracket = stage != null && stage.hasRounds();
+            for (int i = 0; i < columns * rowsPerColumn; i++) {
+                int source = (i / rowsPerColumn) * ROWS + i % rowsPerColumn;
+                TabRow row = source < rows.size() ? rows.get(source) : TabRow.label(Component.empty());
+                Integer target = bracket && row.matchNumber() != null && playing.containsKey(row.matchNumber()) ? row.matchNumber() : null;
+                set(cells.get(i), row.boardText().append(TabText.padding(columnPixels - 12 - TabText.width(row.boardText()))), target);
+            }
+            int offset = columns * rowsPerColumn;
+            set(cells.get(offset++), Component.text(TabStyle.read(plugin.getConfig()).heading(stage == null ? null : stage.name()), theme.primary()), null);
+            Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
+            if (owner != null && stage != null) caption = caption.append(Component.text("  |  Only you see this view", theme.muted()));
+            set(cells.get(offset++), caption, null);
+            if (!bracket || layout == null) {
+                while (offset < cells.size()) set(cells.get(offset++), Component.empty(), null);
+                return;
+            }
+            set(cells.get(offset++), DialogIcon.BACK.label("Previous round"), layout.round() > 1 ? -3 : null);
+            set(cells.get(offset++), DialogIcon.NEXT.label("Next round"), layout.round() < stage.rounds() ? -4 : null);
+            set(cells.get(offset++), DialogIcon.BOARD.label(layout.standings() ? "Matches" : "Standings"), -5);
+            // The shared board always shows the live view, so only a private view needs a way back.
+            set(cells.get(offset++), owner == null ? Component.empty() : DialogIcon.REFRESH.label("Back to live view"), owner == null ? null : BACK_TO_LIVE);
+            boolean pages = layout.pages() > 1;
+            set(cells.get(offset++), pages ? DialogIcon.BACK.label("Previous page") : Component.empty(), pages ? -1 : null);
+            set(cells.get(offset), pages ? DialogIcon.NEXT.label("Next page") : Component.empty(), pages ? -2 : null);
+        }
+
+        Cell cell(double x, double y, double width) {
+            Location location = anchor.clone().add(right.clone().multiply(x)).add(0, y, 0);
+            TextDisplay display = spawn(location, owner == null);
+            if (owner == null) {
+                for (UUID viewer : personal.keySet()) { Player player = Bukkit.getPlayer(viewer); if (player != null) player.hideEntity(plugin, display); }
+            } else {
+                Player player = Bukkit.getPlayer(owner);
+                if (player != null) player.showEntity(plugin, display);
+            }
+            return new Cell(display, x, y + ROW_HEIGHT / 2, width);
+        }
+
+        Cell selected(Player player) {
+            if (anchor == null || !player.getWorld().equals(anchor.getWorld())) return null;
+            Location eye = player.getEyeLocation();
+            BoardHitbox.Hit hit = BoardHitbox.intersect(eye.toVector(), eye.getDirection(), anchor.toVector(), normal, right, 24);
+            if (hit == null) return null;
+            if (player.getWorld().rayTraceBlocks(eye, eye.getDirection(), hit.distance(), FluidCollisionMode.NEVER, true) != null) return null;
+            for (Cell cell : cells) if (cell.target != null && BoardHitbox.contains(hit, cell.x, cell.y, cell.width, ROW_HEIGHT)) return cell;
+            return null;
+        }
+
+        void destroy() {
+            for (Cell cell : cells) cell.display.remove();
+            cells.clear();
+            columns = 0;
+            rowsPerColumn = 0;
+            layout = null;
+        }
+    }
+
+    private TextDisplay spawn(Location location, boolean visibleToAll) {
         Chunk chunk = location.getChunk();
         if (!tickets.contains(chunk) && chunk.addPluginChunkTicket(plugin)) tickets.add(chunk);
         Theme theme = plugin.getThemes().current();
         return location.getWorld().spawn(location, TextDisplay.class, entity -> {
             Tags.managed(entity, "board");
-            entity.setVisibleByDefault(!privateDisplay);
+            entity.setVisibleByDefault(visibleToAll);
             entity.setBillboard(Display.Billboard.FIXED);
             entity.setAlignment(TextDisplay.TextAlignment.LEFT);
             entity.setLineWidth(16384);
@@ -222,26 +305,16 @@ public final class StageBoard extends Module {
         for (Hover hover : hovers.values()) if (hover.cell() == cell) hover.display().text(text);
     }
 
-    private Cell selected(Player player) {
-        if (anchor == null || !player.getWorld().equals(anchor.getWorld())) return null;
-        Location eye = player.getEyeLocation();
-        BoardHitbox.Hit hit = BoardHitbox.intersect(eye.toVector(), eye.getDirection(), anchor.toVector(), normal, right, 24);
-        if (hit == null) return null;
-        if (player.getWorld().rayTraceBlocks(eye, eye.getDirection(), hit.distance(), FluidCollisionMode.NEVER, true) != null) return null;
-        for (Cell cell : cells) if (cell.target != null && BoardHitbox.contains(hit, cell.x, cell.y, cell.width, ROW_HEIGHT)) return cell;
-        return null;
-    }
-
     private void hover() {
-        if (anchor == null) return;
+        if (base == null) return;
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            Cell selected = selected(player);
+            Cell selected = boardFor(player).selected(player);
             Hover previous = hovers.get(player.getUniqueId());
             if (previous != null && previous.cell() == selected) continue;
             clearHover(player.getUniqueId());
             if (selected == null) continue;
             Location location = selected.display.getLocation().add(normal.clone().multiply(0.04));
-            TextDisplay display = spawn(location, true);
+            TextDisplay display = spawn(location, false);
             display.text(selected.text);
             player.showEntity(plugin, display);
             player.hideEntity(plugin, selected.display);
@@ -255,7 +328,8 @@ public final class StageBoard extends Module {
     public void onClick(PlayerAnimationEvent event) {
         if (event.getAnimationType() != PlayerAnimationType.ARM_SWING) return;
         Player player = event.getPlayer();
-        Cell cell = selected(player);
+        Board board = boardFor(player);
+        Cell cell = board.selected(player);
         if (cell == null) return;
         event.setCancelled(true);
         long now = System.currentTimeMillis();
@@ -268,8 +342,12 @@ public final class StageBoard extends Module {
                 if (duel == null) throw new IllegalStateException("That match has ended.");
                 plugin.getSpectate().watch(player, duel);
                 clearHover(player.getUniqueId());
-            } else if (layout != null) {
-                view = switch (target) {
+            } else if (target == BACK_TO_LIVE) {
+                closePersonal(player.getUniqueId());
+            } else if (board.layout != null) {
+                BracketLayout.View view = board.view;
+                BracketLayout.Layout layout = board.layout;
+                BracketLayout.View next = switch (target) {
                     case -1 -> new BracketLayout.View(view.round(), layout.page() - 1, view.standings());
                     case -2 -> new BracketLayout.View(view.round(), layout.page() + 1, view.standings());
                     case -3 -> new BracketLayout.View(layout.round() - 1, 0, false);
@@ -277,13 +355,16 @@ public final class StageBoard extends Module {
                     case -5 -> new BracketLayout.View(view.round(), 0, !view.standings());
                     default -> BracketLayout.View.following();
                 };
-                refresh();
+                Board own = personal.get(player.getUniqueId());
+                if (own == null) own = openPersonal(player);
+                own.view = next;
+                own.refresh(currentStage());
             }
         } catch (RuntimeException failure) { Msg.error(player, Msg.reason(failure)); }
     }
 
     @EventHandler public void onQuit(PlayerQuitEvent event) {
-        clearHover(event.getPlayer().getUniqueId());
+        closePersonal(event.getPlayer().getUniqueId());
         clicks.remove(event.getPlayer().getUniqueId());
     }
 
@@ -296,19 +377,13 @@ public final class StageBoard extends Module {
 
     private void clearHovers() { for (UUID id : Set.copyOf(hovers.keySet())) clearHover(id); }
 
-    private void destroyDisplays() {
+    private void close() {
         clearHovers();
-        for (Cell cell : cells) cell.display.remove();
-        cells.clear();
+        for (UUID owner : Set.copyOf(personal.keySet())) closePersonal(owner);
+        shared.destroy();
+        shared.view = BracketLayout.View.following();
         for (Chunk chunk : tickets) chunk.removePluginChunkTicket(plugin);
         tickets.clear();
-    }
-
-    private void close() {
-        destroyDisplays();
-        layout = null;
-        columns = 0;
-        rowsPerColumn = 0;
         clicks.clear();
     }
 }

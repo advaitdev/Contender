@@ -11,6 +11,7 @@
   rc.py waitclosed [seconds]      wait until no screen is open
   rc.py use <slot>                select a hotbar slot (0-8) and right-click with it
   rc.py attack                    left-click whatever the crosshair is on
+  rc.py swing                     swing the arm (a left click at nothing, used by in-world boards)
   rc.py hud on|off                show or hide the HUD (like F1)
   rc.py close                     press Escape on the open screen (via /dialog clear fallback)
 """
@@ -117,6 +118,8 @@ def main(argv):
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", body)))
     elif op == "use":
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", {"type": "useHotbar", "slot": int(argv[1])})))
+    elif op == "swing":
+        print(json.dumps(call("POST", "/v1/actors/Render_1/actions", {"type": "swing"})))
     elif op == "attack":
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", {"type": "attack"})))
     elif op == "close":

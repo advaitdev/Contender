@@ -124,6 +124,23 @@ public class Probe extends JavaPlugin implements Listener {
                     kit.setAllowBlockPlace(Boolean.parseBoolean(a[2]));
                     s.sendMessage(a[1] + " building " + a[2]);
                 }
+                case "findtext" -> {
+                    // findtext <text>: where the first text display containing this text is
+                    String needle = String.join(" ", java.util.Arrays.copyOfRange(a, 1, a.length));
+                    for (var world : Bukkit.getWorlds()) for (var display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                        String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(display.text());
+                        if (text.contains(needle) && display.isVisibleByDefault()) { var l = display.getLocation(); s.sendMessage("found " + world.getName() + " " + l.getX() + " " + l.getY() + " " + l.getZ()); return true; }
+                    }
+                    s.sendMessage("not found");
+                }
+                case "boardsee" -> {
+                    // boardsee <player>: board captions this player can see
+                    Player who = Bukkit.getPlayer(a[1]);
+                    for (var display : who.getWorld().getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                        String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(display.text());
+                        if ((text.contains("Round") || text.contains("Standings")) && text.contains("|") && who.canSee(display)) s.sendMessage(a[1] + " sees: " + text.trim());
+                    }
+                }
                 case "arenas" -> {
                     StringBuilder line = new StringBuilder(a[1] + ":");
                     for (var copy : c().getArenas().copies(a[1])) line.append(' ').append(copy.slot()).append('=').append(copy.status()).append(copy.isDirty() ? "*" : "");

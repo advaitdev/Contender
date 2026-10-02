@@ -28,13 +28,8 @@ matches:
   # How long a match waits for a player who disconnects before they forfeit the round.
   reconnect-seconds: 60
 
-spectators:
-  # Show a small allay where each spectator is, so players can see who's watching.
-  # Allays are hidden from fighters close by and in kits marked as spectator-invisible.
-  allay-avatars: true
-
 display:
-  # Colors for boards, holograms, vote numbers and fireworks.
+  # Colors for boards, holograms, vote timers and fireworks.
   # ocean, amethyst, sunset, gold, mint, crimson, frost or mono. Change this in /options > Display Colors.
   theme: ocean
   # Hide "Advancement Made" and "New Recipes Unlocked" pop-ups, which appear whenever a kit is handed out.

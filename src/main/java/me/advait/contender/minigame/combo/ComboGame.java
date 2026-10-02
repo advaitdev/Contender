@@ -235,8 +235,9 @@ public final class ComboGame extends ArenaGame {
             Tags.managed(entity, "combo");
             entity.setRemoveWhenFarAway(false);
             entity.setImmovable(false);
+            // No name, no "NPC" line, nothing above its head.
             entity.setDescription(null);
-            entity.customName(Component.text("Combo Bot"));
+            entity.customName(null);
             entity.setCustomNameVisible(false);
             entity.setGravity(true);
             entity.setInvulnerable(false);

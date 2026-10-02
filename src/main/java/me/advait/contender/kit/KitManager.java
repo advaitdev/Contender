@@ -63,7 +63,6 @@ public class KitManager {
             kit.setAllowBlockPlace(section.getBoolean("allow-block-place", false));
             kit.setAllowBlockBreak(section.getBoolean("allow-block-break", false));
             kit.setNaturalRegen(section.getBoolean("natural-regen", true));
-            kit.setSpectatorInvisible(section.getBoolean("spectator-invisible", false));
             kit.setNoClear(section.getBoolean("no-clear", false));
             kit.setPvpHurt(section.getBoolean("pvp-hurt", false));
             kit.setPveHurt(section.getBoolean("pve-hurt", false));
@@ -115,7 +114,6 @@ public class KitManager {
             config.set(path + ".allow-block-place", kit.isAllowBlockPlace());
             config.set(path + ".allow-block-break", kit.isAllowBlockBreak());
             config.set(path + ".natural-regen", kit.isNaturalRegen());
-            config.set(path + ".spectator-invisible", kit.isSpectatorInvisible());
             config.set(path + ".no-clear", kit.isNoClear());
             config.set(path + ".pvp-hurt", kit.isPvpHurt());
             config.set(path + ".pve-hurt", kit.isPveHurt());

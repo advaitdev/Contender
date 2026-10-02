@@ -104,12 +104,6 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }
-            case KitEditorGUI.SPECTATOR_INVISIBLE_SLOT -> {
-                saveKitFromInventory(event.getInventory(), kit);
-                kit.setSpectatorInvisible(!kit.isSpectatorInvisible());
-                MessageUtil.playClick(player);
-                KitEditorGUI.open(player, kit, isNew);
-            }
             case KitEditorGUI.NO_CLEAR_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kit.setNoClear(!kit.isNoClear());

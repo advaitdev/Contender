@@ -23,7 +23,7 @@ public interface Spectatable {
 
     void removeWatcher(UUID player);
 
-    /** Players competing, who see watchers' avatars only from a distance. */
+    /** Players competing. */
     Set<UUID> players();
 
     /** What watchers face when they arrive, or null to keep the spawn's facing. */
@@ -67,6 +67,4 @@ public interface Spectatable {
 
     double EYE_HEIGHT = 1.62;
 
-    /** Hide watcher avatars from competitors entirely. */
-    default boolean hidesAvatars() { return false; }
 }

@@ -636,7 +636,6 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
     @Override public void addWatcher(UUID player) { watchers.add(player); }
     @Override public void removeWatcher(UUID player) { watchers.remove(player); }
     @Override public boolean contains(Location location) { return arena.contains(location); }
-    @Override public boolean hidesAvatars() { return settings.kit().isSpectatorInvisible(); }
 
     // ---- Rules used by the listener ------------------------------------------------------------
 

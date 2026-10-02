@@ -25,18 +25,13 @@ import java.util.*;
 public final class SpectateService extends Module implements Activity {
     private final Map<UUID, Spectatable> watching = new HashMap<>();
     private final Set<UUID> moving = new HashSet<>();
-    private SpectatorAvatars avatars;
 
     public SpectateService(Contender plugin) { super(plugin); }
 
-    @Override protected void onEnable() {
-        avatars = new SpectatorAvatars(plugin, this);
-        tasks.repeat(2, 2, avatars::update);
-    }
+    @Override protected void onEnable() { }
 
     @Override protected void onDisable() {
         for (UUID id : List.copyOf(watching.keySet())) stop(id, true);
-        if (avatars != null) avatars.clear();
     }
 
     @Override public String displayName() { return "spectating"; }
@@ -82,7 +77,6 @@ public final class SpectateService extends Module implements Activity {
         if (target == null) return;
         target.removeWatcher(id);
         plugin.getRegistry().release(id, this);
-        if (avatars != null) avatars.remove(id);
         Player player = Bukkit.getPlayer(id);
         if (player == null) return;
         if (toLobby) plugin.getSnapshots().restoreToLobby(player);
@@ -100,7 +94,6 @@ public final class SpectateService extends Module implements Activity {
         Spectatable target = watching.remove(player.getUniqueId());
         if (target != null) target.removeWatcher(player.getUniqueId());
         plugin.getRegistry().release(player.getUniqueId(), this);
-        if (avatars != null) avatars.remove(player.getUniqueId());
     }
 
     @Override public void forceStop(String reason) {

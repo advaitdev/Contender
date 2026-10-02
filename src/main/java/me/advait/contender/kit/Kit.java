@@ -15,7 +15,6 @@ public class Kit {
     private boolean allowBlockPlace;
     private boolean allowBlockBreak;
     private boolean naturalRegen;
-    private boolean spectatorInvisible;
     private boolean noClear;
     private boolean pvpHurt;
     private boolean pveHurt;
@@ -30,7 +29,6 @@ public class Kit {
         this.allowBlockPlace = false;
         this.allowBlockBreak = false;
         this.naturalRegen = true;
-        this.spectatorInvisible = false;
         this.noClear = false;
     }
 
@@ -72,7 +70,6 @@ public class Kit {
         allowBlockPlace = other.allowBlockPlace;
         allowBlockBreak = other.allowBlockBreak;
         naturalRegen = other.naturalRegen;
-        spectatorInvisible = other.spectatorInvisible;
         noClear = other.noClear;
         pvpHurt = other.pvpHurt;
         pveHurt = other.pveHurt;
@@ -157,13 +154,7 @@ public class Kit {
         this.naturalRegen = naturalRegen;
     }
 
-    public boolean isSpectatorInvisible() {
-        return spectatorInvisible;
-    }
 
-    public void setSpectatorInvisible(boolean spectatorInvisible) {
-        this.spectatorInvisible = spectatorInvisible;
-    }
 
     public boolean isNoClear() {
         return noClear;

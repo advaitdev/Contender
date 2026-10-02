@@ -28,4 +28,5 @@ public final class DuelTeam {
     void revive(Collection<UUID> standing) { alive.clear(); alive.addAll(standing); }
     boolean down(UUID player) { return alive.remove(player); }
     void addPoint() { score++; }
+    void setScore(int score) { this.score = score; }
 }

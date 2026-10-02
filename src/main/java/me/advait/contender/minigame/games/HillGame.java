@@ -190,4 +190,15 @@ public final class HillGame extends ArenaGame {
         section.set("target", target);
         section.set("radius", radius);
     }
+
+    // ---- Director corrections ------------------------------------------------------------------
+
+    @Override public ScoreEdit scoreEdit(Participant participant) {
+        return participant.status == Status.WITHDRAWN ? null : new ScoreEdit("Points", 0, target - 1, (int) participant.score);
+    }
+
+    @Override protected void applyScore(Participant participant, int value) {
+        participant.score = value;
+        participant.value = value + " pts";
+    }
 }

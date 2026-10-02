@@ -32,6 +32,18 @@ public final class TournamentMatch {
         status = Status.PLAYING;
     }
     public void retry() { if (status == Status.PLAYING) status = Status.WAITING; }
+    /** Replaces a finished match's result: a director's correction. */
+    public void correct(DuelResult result) {
+        if (status != Status.FINISHED) throw new IllegalStateException("Only finished matches can be changed.");
+        if (result.reason() == DuelResult.Reason.CANCELLED) throw new IllegalArgumentException("Choose a result.");
+        this.result = result;
+    }
+    /** Clears a finished match so it is played again. */
+    public void reopen() {
+        if (status != Status.FINISHED) throw new IllegalStateException("Only finished matches can be replayed.");
+        result = null;
+        status = Status.WAITING;
+    }
     public void finish(DuelResult result) {
         if (status == Status.FINISHED) return;
         if (result.reason() == DuelResult.Reason.CANCELLED) { retry(); return; }

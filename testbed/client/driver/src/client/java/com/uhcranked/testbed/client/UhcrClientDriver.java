@@ -442,8 +442,17 @@ public final class UhcrClientDriver implements ClientModInitializer {
         List<ClickableWidget> widgets = clickableWidgets(screen);
         if (wanted >= 0 && wanted < widgets.size()) {
             ClickableWidget widget = widgets.get(wanted);
-            Click click = new Click(widget.getX() + widget.getWidth() / 2.0,
-                    widget.getY() + widget.getHeight() / 2.0, new MouseInput(0, 0));
+            if (request.has("text")) {
+                // Types into a text field, replacing what it holds.
+                if (!(widget instanceof net.minecraft.client.gui.widget.TextFieldWidget field)) throw new IllegalArgumentException("Widget is not a text field: " + id);
+                field.setText(request.get("text").getAsString());
+                return Map.of("performed", true, "path", "real client text field", "widgetId", id);
+            }
+            // "position" (0 to 1) clicks along a slider's track instead of the middle.
+            double x = request.has("position")
+                    ? widget.getX() + 4 + (widget.getWidth() - 8) * Math.clamp(request.get("position").getAsDouble(), 0, 1)
+                    : widget.getX() + widget.getWidth() / 2.0;
+            Click click = new Click(x, widget.getY() + widget.getHeight() / 2.0, new MouseInput(0, 0));
             widget.onClick(click, false);
             appendEvent("actor.widget_click", Map.of("widgetId", id,
                     "label", widget.getMessage().getString(), "actionId", actionId));

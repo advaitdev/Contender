@@ -2,6 +2,7 @@ package me.advait.contender.dialog;
 
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.Contender;
 import me.advait.contender.minigame.Minigame;
 import me.advait.contender.util.StringUtil;
@@ -11,6 +12,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static me.advait.contender.dialog.DialogPalette.*;
 
@@ -53,7 +55,7 @@ public final class MinigameDialogs {
         if (game.acceptsWatchers()) buttons.add(button(player, DialogIcon.PREVIEW, "Spectate", TEXT, "Watch the game.",
                 p -> { plugin.getSpectate().watch(p, require(game)); p.closeDialog(); }));
         buttons.add(button(player, DialogIcon.BOARD, "Leaderboard", TEXT, "See the current standings.", p -> new BracketDialogs(plugin).open(p)));
-        if (!game.finished()) buttons.add(button(player, DialogIcon.PLAYERS, "Manage Players", TEXT, "Withdraw someone from this game.", p -> players(p, game)));
+        if (!game.finished()) buttons.add(button(player, DialogIcon.PLAYERS, "Manage Players", TEXT, "Change scores or withdraw players.", p -> players(p, game)));
         new TournamentDialogs(plugin).addShowButtons(player, buttons);
         buttons.add(button(player, DialogIcon.SETTINGS, "Setup Tools", TEXT, "Maps, kits, courses and displays.", p -> new TournamentDialogs(plugin).tools(p)));
         buttons.add(button(player, DialogIcon.SKULL, "Hacker Controls", TEXT, "Hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin).open(p)));
@@ -71,18 +73,75 @@ public final class MinigameDialogs {
         for (Minigame.Participant participant : game.roster()) {
             if (participant.status == Minigame.Status.WITHDRAWN) continue;
             Component label = Component.textOfChildren(StringUtil.getPlayerHead(participant.id), text(" " + participant.name, TEXT),
-                    text("  " + switch (participant.status) {
-                        case PLAYING -> "In play";
-                        case OUT -> "Out";
-                        case DONE -> "Done";
-                        case WAITING -> "Waiting";
-                        case WITHDRAWN -> "Withdrawn";
-                    }, MUTED));
-            buttons.add(dialogs.button(player, label, DialogText.muted("Withdraw " + participant.name + ". They go back to the lobby."), true, WIDE,
-                    (p, view) -> { require(game).withdraw(participant.id); players(p, game); }));
+                    text("  " + status(participant.status), MUTED));
+            buttons.add(dialogs.button(player, label, DialogText.muted("Change their score or withdraw them."), true, WIDE,
+                    (p, view) -> playerPage(p, game, participant.id)));
         }
-        dialogs.show(player, "Manage Players", List.of(DialogBody.plainMessage(DialogText.muted(buttons.isEmpty() ? "Nobody is left in the game." : "Click a player to withdraw them."), 320)),
+        dialogs.show(player, "Manage Players", List.of(DialogBody.plainMessage(DialogText.muted(buttons.isEmpty() ? "Nobody is left in the game." : "Click a player to change their score or withdraw them."), 320)),
                 List.of(), buttons, 1, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> control(p, game)));
+    }
+
+    private static String status(Minigame.Status status) {
+        return switch (status) {
+            case PLAYING -> "In play";
+            case OUT -> "Out";
+            case DONE -> "Done";
+            case WAITING -> "Waiting";
+            case WITHDRAWN -> "Withdrawn";
+        };
+    }
+
+    /** The score this player can have corrected right now, or null. */
+    private static Minigame.ScoreEdit scoreEdit(Minigame game, Minigame.Participant participant) {
+        return game.state() == Minigame.State.RUNNING ? game.scoreEdit(participant) : null;
+    }
+
+    private void playerPage(Player player, Minigame game, UUID id) {
+        Minigame.Participant participant = require(game).participant(id);
+        if (participant == null || participant.status == Minigame.Status.WITHDRAWN) { players(player, game); return; }
+        Minigame.ScoreEdit edit = scoreEdit(game, participant);
+        Component info = DialogText.detail("Status", status(participant.status));
+        if (edit != null) info = DialogText.lines(info, DialogText.detail(edit.label(), Integer.toString(edit.current()), ACCENT));
+        List<ActionButton> buttons = new ArrayList<>();
+        if (edit != null) buttons.add(button(player, DialogIcon.SETTINGS, "Change Score", TEXT, "Fix it if something went wrong.", p -> scoreForm(p, game, id)));
+        buttons.add(button(player, DialogIcon.CLOSE, "Withdraw", DANGER, "They go back to the lobby.", p -> confirmWithdraw(p, game, id)));
+        dialogs.show(player, participant.name, List.of(DialogBody.plainMessage(info, 320)), List.of(), buttons, 1, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> players(p, game)));
+    }
+
+    private void scoreForm(Player player, Minigame game, UUID id) {
+        Minigame.Participant participant = require(game).participant(id);
+        Minigame.ScoreEdit edit = participant == null ? null : scoreEdit(game, participant);
+        if (edit == null) { playerPage(player, game, id); return; }
+        List<DialogInput> inputs = List.of(DialogInput.text("score", DialogIcon.SETTINGS.label(edit.label()))
+                .initial(Integer.toString(edit.current())).maxLength(6).width(WIDE).build());
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> playerPage(p, game, id)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save", ACCENT), null, true, NAV, (p, view) -> {
+                    int value;
+                    try { value = Integer.parseInt(java.util.Objects.requireNonNullElse(view.getText("score"), "").strip()); }
+                    catch (NumberFormatException invalid) { throw new IllegalArgumentException("Enter a whole number from " + edit.min() + " to " + edit.max() + "."); }
+                    require(game).correctScore(id, value);
+                    Dialogs.tell(p, participant.name + ": " + edit.label() + " set to " + value + ".");
+                    playerPage(p, game, id);
+                }), NAV);
+        dialogs.show(player, "Change Score", List.of(DialogBody.plainMessage(DialogText.lines(text(participant.name, TEXT),
+                DialogText.muted("Enter a whole number from " + edit.min() + " to " + edit.max() + ".")), 320)), inputs, buttons, 2, NAV, null);
+    }
+
+    private void confirmWithdraw(Player player, Minigame game, UUID id) {
+        Minigame.Participant participant = require(game).participant(id);
+        if (participant == null) { players(player, game); return; }
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> playerPage(p, game, id)),
+                dialogs.button(player, DialogIcon.CLOSE.label("Withdraw", DANGER), null, true, NAV, (p, view) -> {
+                    require(game).withdraw(id);
+                    players(p, game);
+                }), NAV);
+        dialogs.show(player, "Withdraw " + participant.name + "?", List.of(DialogBody.plainMessage(
+                DialogText.muted("They go back to the lobby and leave this game."), 320)), List.of(), buttons, 2, NAV, null);
     }
 
     private void confirmCancel(Player player, Minigame game) {

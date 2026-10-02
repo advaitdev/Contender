@@ -457,4 +457,19 @@ public final class ComboGame extends ArenaGame {
         section.set("retries", retries);
         section.set("cleared", cleared.stream().map(UUID::toString).toList());
     }
+
+    // ---- Director corrections ------------------------------------------------------------------
+
+    /** A finished turn's combo. Setting it by hand also clears an into-the-void result. */
+    @Override public ScoreEdit scoreEdit(Participant participant) {
+        if (participant.status != Status.DONE) return null;
+        int hits = cleared.contains(participant.id) ? (int) (participant.score - 1_000_000) : (int) participant.score;
+        return new ScoreEdit("Hits", 0, 9999, hits);
+    }
+
+    @Override protected void applyScore(Participant participant, int value) {
+        cleared.remove(participant.id);
+        participant.score = value;
+        participant.value = value + (value == 1 ? " hit" : " hits");
+    }
 }

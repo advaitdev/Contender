@@ -237,4 +237,15 @@ public final class GauntletGame extends ArenaGame {
         section.set("fights", totalFights);
         best.forEach((id, value) -> section.set("best-streak." + id, value));
     }
+
+    // ---- Director corrections ------------------------------------------------------------------
+
+    @Override public ScoreEdit scoreEdit(Participant participant) {
+        return participant.status == Status.WITHDRAWN ? null : new ScoreEdit("Wins", 0, 99, (int) participant.score);
+    }
+
+    @Override protected void applyScore(Participant participant, int value) {
+        participant.score = value;
+        participant.value = value + (value == 1 ? " win" : " wins");
+    }
 }

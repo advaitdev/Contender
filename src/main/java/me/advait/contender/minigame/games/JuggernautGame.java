@@ -281,4 +281,15 @@ public final class JuggernautGame extends ArenaGame {
         section.set("seconds", seconds);
         section.set("hearts", hearts);
     }
+
+    // ---- Director corrections ------------------------------------------------------------------
+
+    @Override public ScoreEdit scoreEdit(Participant participant) {
+        return participant.status == Status.WITHDRAWN ? null : new ScoreEdit("Seconds as Juggernaut", 0, seconds, (int) participant.score);
+    }
+
+    @Override protected void applyScore(Participant participant, int value) {
+        participant.score = value;
+        participant.value = time(value);
+    }
 }

@@ -97,6 +97,23 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
     public String label() { return label; }
     @Override public String displayName() { return label == null ? "Duel #" + id : label; }
     public DuelSettings settings() { return settings; }
+
+    /**
+     * A director's correction of the round wins, one score per side. Each stays below the number needed to
+     * win; End Match Now finishes a match.
+     */
+    public void correctScores(List<Integer> scores) {
+        if (isOver() || phase == Phase.ENDING || phase == Phase.CLOSED) throw new IllegalStateException("This match has already ended.");
+        if (scores.size() != teams.size()) throw new IllegalArgumentException("Give a score for each side.");
+        for (int score : scores) {
+            if (score < 0 || score >= settings.winsNeeded()) throw new IllegalArgumentException("Each side needs fewer than "
+                    + settings.winsNeeded() + " round wins. To finish the match, use End Match Now.");
+        }
+        for (int i = 0; i < teams.size(); i++) teams.get(i).setScore(scores.get(i));
+        Msg.notice(audience(), Msg.text("Score corrected  ", DialogPalette.MUTED).append(scoreLine()));
+        plugin.getLogger().info(displayName() + ": a director set the score to " + scores.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining("-")) + ".");
+        plugin.getStages().refreshDisplays();
+    }
     public Kit kit() { return settings.kit(); }
     public ArenaCopy arena() { return arena; }
     public ArenaMap layout() { return arena.layout(); }

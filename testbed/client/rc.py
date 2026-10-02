@@ -5,6 +5,8 @@
   rc.py screen                    widgets on the open screen (id, label, size, label width)
   rc.py shot [name]               screenshot (and dialog crop) copied to shots/<name>.png
   rc.py click <id|label>          click a widget by id (widget-3) or exact/partial label
+  rc.py slide <id|label> <0-1>    click a slider at that point along its track
+  rc.py type <id|label> <text>    replace a text field's contents
   rc.py cmd "<command>"           run a command as Render_1
   rc.py chat "<message>"          send chat
   rc.py wait <title> [seconds]    wait until a screen with this title (substring) is open
@@ -113,6 +115,12 @@ def main(argv):
         s = screen()
         widget = find_widget(s, " ".join(argv[1:]))
         print(json.dumps(call("POST", "/v1/actors/Render_1/click", {"widgetId": widget})))
+    elif op == "slide":
+        # slide <id|label> <position 0-1>: click a slider at that point along its track
+        print(json.dumps(call("POST", "/v1/actors/Render_1/click", {"widgetId": find_widget(screen(), argv[1]), "position": float(argv[2])})))
+    elif op == "type":
+        # type <id|label> <text>: replace a text field's contents
+        print(json.dumps(call("POST", "/v1/actors/Render_1/click", {"widgetId": find_widget(screen(), argv[1]), "text": " ".join(argv[2:])})))
     elif op in ("cmd", "chat"):
         body = {"type": "command", "command": argv[1]} if op == "cmd" else {"type": "chat", "message": argv[1]}
         print(json.dumps(call("POST", "/v1/actors/Render_1/actions", body)))

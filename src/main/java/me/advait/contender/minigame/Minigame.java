@@ -147,6 +147,28 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     public State state() { return state; }
     public Collection<Participant> roster() { return Collections.unmodifiableCollection(roster.values()); }
     public Participant participant(UUID player) { return roster.get(player); }
+
+    /** A score a director can correct by hand, such as points on the hill. {@code current} is its value now. */
+    public record ScoreEdit(String label, int min, int max, int current) { }
+
+    /** The correctable score for this player right now, or null when it can't be changed by hand. */
+    public ScoreEdit scoreEdit(Participant participant) { return null; }
+
+    /** Stores a corrected score. Only called with a value inside {@link #scoreEdit}'s range. */
+    protected void applyScore(Participant participant, int value) { throw new UnsupportedOperationException(); }
+
+    /** A director's correction, while the game is running. */
+    public final void correctScore(UUID player, int value) {
+        if (state != State.RUNNING) throw new IllegalStateException("Scores can only be changed while the game is running.");
+        Participant participant = participant(player);
+        ScoreEdit edit = participant == null ? null : scoreEdit(participant);
+        if (edit == null) throw new IllegalStateException("This score can't be changed by hand.");
+        if (value < edit.min() || value > edit.max()) throw new IllegalArgumentException("Enter a whole number from " + edit.min() + " to " + edit.max() + ".");
+        applyScore(participant, value);
+        save();
+        plugin.getStages().refreshDisplays();
+        plugin.getLogger().info(name + ": a director set " + participant.name + "'s " + edit.label().toLowerCase(java.util.Locale.ROOT) + " to " + value + ".");
+    }
     public boolean isPlaying(UUID player) { Participant p = roster.get(player); return p != null && p.status == Status.PLAYING; }
 
     /** Online participants still in play. */

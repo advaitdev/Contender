@@ -157,4 +157,14 @@ public final class LastStandGame extends ArenaGame {
         section.set("lives", lives);
         kills.forEach((id, count) -> section.set("kills." + id, count));
     }
+
+    // ---- Director corrections ------------------------------------------------------------------
+
+    /** Lives can be given back to a player still in play, for example after a death caused by a bug. */
+    @Override public ScoreEdit scoreEdit(Participant participant) {
+        if (participant.status != Status.PLAYING) return null;
+        return new ScoreEdit("Lives Left", 1, lives, livesLeft.getOrDefault(participant.id, lives));
+    }
+
+    @Override protected void applyScore(Participant participant, int value) { livesLeft.put(participant.id, value); }
 }

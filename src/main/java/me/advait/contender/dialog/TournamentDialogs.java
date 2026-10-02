@@ -86,7 +86,8 @@ public final class TournamentDialogs {
         if (canCreate) buttons.add(menuAction(player, DialogIcon.TOURNAMENT, "New Event", ACCENT,
                 "Start a round robin or a minigame.", this::formats));
         else buttons.add(menuAction(player, tournament.isRunning() ? DialogIcon.PAUSE : DialogIcon.NEXT,
-                tournament.isRunning() ? "Pause Tournament" : "Start Tournament", ACCENT,
+                tournament.isRunning() ? "Pause Tournament"
+                        : tournament.matches().stream().anyMatch(m -> m.status() != TournamentMatch.Status.WAITING) ? "Resume Tournament" : "Start Tournament", ACCENT,
                 tournament.isRunning() ? "Let active matches finish and pause new ones." : "Start available matches from this bracket.", p -> {
                     current(tournament.id());
                     if (tournament.isRunning()) manager.pause(); else manager.resume();
@@ -414,6 +415,9 @@ public final class TournamentDialogs {
                 DialogText.detail("Final score", match.result().team1Score() + " - " + match.result().team2Score()));
         else contents = DialogText.paragraphs(contents, DialogText.detail("Status", tournament.isCancelled() ? "Cancelled"
                 : match.status() == TournamentMatch.Status.PLAYING ? "Playing" : "Waiting", tournament.isCancelled() ? DANGER : MUTED));
+        var live = plugin.getTournaments().playing().get(number);
+        if (live != null && live.teams().size() == 2) contents = DialogText.lines(contents,
+                DialogText.detail("Score so far", live.teams().get(0).score() + " - " + live.teams().get(1).score(), ACCENT));
         if (match.status() == TournamentMatch.Status.WAITING && !tournament.isCancelled()) {
             inputs.add(DialogInput.numberRange("wins", DialogIcon.DUEL.label("Round Wins Needed"), 1, 8)
                     .initial((float) (match.bestOf() / 2 + 1)).step(1f).width(INPUT_WIDTH).build());
@@ -422,10 +426,17 @@ public final class TournamentDialogs {
             }));
             buttons.add(menuAction(player, DialogIcon.PLAYERS, "Award a Win", TEXT, "Choose the winner of a forfeit.", p -> award(p, id, match, page)));
         }
+        if (match.status() == TournamentMatch.Status.FINISHED && !tournament.isCancelled()) {
+            buttons.add(menuAction(player, DialogIcon.SETTINGS, "Change Result", TEXT, "Fix the score if something went wrong.", p -> changeResult(p, id, match, page)));
+            if (!tournament.isComplete()) buttons.add(menuAction(player, DialogIcon.REFRESH, "Replay Match", DANGER,
+                    "Clear the result and play this match again.", p -> confirmReplay(p, id, match, page)));
+        }
         var duel = plugin.getTournaments().playing().get(number);
         if (duel != null && !tournament.isCancelled()) {
             buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate Match", ACCENT,
                     "Join this match as a spectator.", p -> { current(id); plugin.getSpectate().watch(p, duel); p.closeDialog(); }));
+            if (duel.settings().winsNeeded() > 1) buttons.add(menuAction(player, DialogIcon.SETTINGS, "Change Score", TEXT,
+                    "Fix the round wins so far.", p -> changeLiveScore(p, id, match, page)));
             buttons.add(menuAction(player, DialogIcon.SAVE, "End Match Now", TEXT,
                     "Finish with the current score.", p -> { current(id); duel.endNow(); matches(p, id, page); }));
             buttons.add(menuAction(player, DialogIcon.CLOSE, "Cancel Match", DANGER,
@@ -433,6 +444,58 @@ public final class TournamentDialogs {
         }
         dialogs.show(player, "Match #" + number, List.of(body(contents)), inputs, buttons, 1, NAV_WIDTH,
                 nav(player, DialogIcon.BACK, "Back", MUTED, "Return to the match list.", (p, response) -> matches(p, id, page)));
+    }
+    private void changeResult(Player player, UUID id, TournamentMatch match, int page) {
+        Tournament tournament = current(id);
+        var result = match.result();
+        if (result == null) throw new IllegalStateException("This match has no result yet.");
+        String first = tournament.entries().get(match.first()).name(), second = tournament.entries().get(match.second()).name();
+        int max = Math.max(match.bestOf() / 2 + 1, Math.max(result.team1Score(), result.team2Score()));
+        roundsForm(player, "Change Result", DialogText.muted("More round wins takes the match point. Equal scores make it a draw."),
+                first, second, max, result.team1Score(), result.team2Score(), p -> match(p, id, match.number(), page), (p, scores) -> {
+                    current(id);
+                    plugin.getTournaments().correctResult(match, scores[0], scores[1]);
+                    Dialogs.tell(p, "Match #" + match.number() + " is now " + first + " " + scores[0] + " - " + scores[1] + " " + second + ".");
+                    match(p, id, match.number(), page);
+                });
+    }
+    private void changeLiveScore(Player player, UUID id, TournamentMatch match, int page) {
+        Tournament tournament = current(id);
+        var duel = plugin.getTournaments().playing().get(match.number());
+        if (duel == null) throw new IllegalStateException("This match isn't being played right now.");
+        String first = tournament.entries().get(match.first()).name(), second = tournament.entries().get(match.second()).name();
+        int max = duel.settings().winsNeeded() - 1;
+        roundsForm(player, "Change Score", DialogText.muted("Fix the round wins so far. To finish the match, use End Match Now."),
+                first, second, max, duel.teams().get(0).score(), duel.teams().get(1).score(), p -> match(p, id, match.number(), page), (p, scores) -> {
+                    current(id);
+                    plugin.getTournaments().correctLiveScore(match, scores[0], scores[1]);
+                    Dialogs.tell(p, "Match #" + match.number() + " score is now " + scores[0] + " - " + scores[1] + ".");
+                    match(p, id, match.number(), page);
+                });
+    }
+    /** Two round-win sliders and a paired Back / Save row. */
+    private void roundsForm(Player player, String title, Component intro, String first, String second, int max, int firstNow, int secondNow,
+                            Consumer<Player> back, BiConsumer<Player, int[]> save) {
+        List<DialogInput> inputs = List.of(
+                DialogInput.numberRange("first", DialogIcon.PLAYERS.label(first + " Round Wins"), 0, max)
+                        .initial((float) Math.min(firstNow, max)).step(1f).width(INPUT_WIDTH).build(),
+                DialogInput.numberRange("second", DialogIcon.PLAYERS.label(second + " Round Wins"), 0, max)
+                        .initial((float) Math.min(secondNow, max)).step(1f).width(INPUT_WIDTH).build());
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                nav(player, DialogIcon.BACK, "Back", MUTED, "Return without changing anything.", (p, view) -> back.accept(p)),
+                nav(player, DialogIcon.SAVE, "Save", ACCENT, "Save this score.", (p, view) ->
+                        save.accept(p, new int[] {Dialogs.number(view, "first", 0, max), Dialogs.number(view, "second", 0, max)})), NAV_WIDTH);
+        dialogs.show(player, title, List.of(body(intro)), inputs, buttons, 2, NAV_WIDTH, null);
+    }
+    private void confirmReplay(Player player, UUID id, TournamentMatch match, int page) {
+        Tournament tournament = current(id);
+        String first = tournament.entries().get(match.first()).name(), second = tournament.entries().get(match.second()).name();
+        menu(player, "Replay Match?", DialogText.paragraphs(text("#" + match.number() + "  " + first + " vs " + second, TEXT),
+                DialogText.muted("The result is cleared and the match goes back in the queue.")), List.of(
+                menuAction(player, DialogIcon.REFRESH, "Replay Match", DANGER, "Clear the result and play it again.", p -> {
+                    current(id); plugin.getTournaments().replay(match); matches(p, id, page);
+                })), p -> match(p, id, match.number(), page));
     }
     private void award(Player player, UUID id, TournamentMatch match, int page) {
         Tournament tournament = current(id);

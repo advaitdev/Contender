@@ -130,6 +130,34 @@ public final class TournamentService extends Module {
         afterResult();
     }
 
+    /** A director's correction of a finished match. More round wins takes the match point; equal is a draw. */
+    public void correctResult(TournamentMatch match, int firstScore, int secondScore) {
+        requireMatch(match);
+        Integer winner = firstScore == secondScore ? null : firstScore > secondScore ? 1 : 2;
+        match.correct(new DuelResult(DuelResult.Reason.FINISHED, firstScore, secondScore, winner));
+        save();
+        plugin.getStages().refreshDisplays();
+        plugin.getLogger().info("Match #" + match.number() + " result changed to " + firstScore + "-" + secondScore + ".");
+    }
+
+    /** Clears a finished match's result so it is played again. */
+    public void replay(TournamentMatch match) {
+        requireMatch(match);
+        if (tournament.isComplete()) throw new IllegalStateException("The tournament has finished. Change the result instead.");
+        match.reopen();
+        save();
+        plugin.getStages().refreshDisplays();
+        plugin.getLogger().info("Match #" + match.number() + " will be played again.");
+    }
+
+    /** A director's correction of a live match's round wins. */
+    public void correctLiveScore(TournamentMatch match, int firstScore, int secondScore) {
+        requireMatch(match);
+        Duel duel = playing.get(match.number());
+        if (duel == null) throw new IllegalStateException("This match isn't being played right now.");
+        duel.correctScores(List.of(firstScore, secondScore));
+    }
+
     public void save() {
         if (tournament == null) return;
         try { store.save(tournament); }

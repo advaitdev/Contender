@@ -146,7 +146,7 @@ final class VoteRooms {
      * The spot moved onto the floor: up a block for a step or a slightly sunken center, or down up to two blocks.
      * Null when there's no room for a player with solid ground underneath.
      */
-    private static Location standable(Location spot) {
+    static Location standable(Location spot) {
         for (int lift = 1; lift >= -2; lift--) {
             Location feet = spot.clone().add(0, lift, 0);
             Block block = feet.getBlock();

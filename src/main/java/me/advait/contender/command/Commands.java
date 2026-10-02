@@ -60,13 +60,18 @@ public final class Commands {
                 }
                 case "clear" -> { plugin.getVotes().removeTimers(); Msg.success(player, "All vote timers removed."); }
                 default -> {
-                    boolean wall = plugin.getVotes().placeTimer(player);
+                    float size = 4f;
+                    if (!action.isEmpty()) {
+                        try { size = Float.parseFloat(action); }
+                        catch (NumberFormatException invalid) { Msg.error(player, "Use /votetimer [size 1-10], /votetimer remove or /votetimer clear."); return true; }
+                    }
+                    boolean wall = plugin.getVotes().placeTimer(player, size);
                     Msg.success(player, (wall ? "Vote timer hung on the wall." : "Vote timer placed in front of you.")
                             + " It shows during votes. Timers: " + plugin.getVotes().timerCount() + ".");
                 }
             }
             return true;
-        }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove", "clear") : List.of());
+        }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove", "clear", "4", "6", "8") : List.of());
         for (var room : me.advait.contender.vote.VoteService.Room.values()) {
             String name = room == me.advait.contender.vote.VoteService.Room.VOTING ? "setvotingroom" : "setjudgeroom";
             String who = room == me.advait.contender.vote.VoteService.Room.VOTING ? "Contestants" : "Everyone who isn't voting";
@@ -85,7 +90,7 @@ public final class Commands {
         set(commands, "setvotestage", (sender, command, label, args) -> {
             if (!(sender instanceof Player player)) { Msg.error(sender, "Use this in game."); return true; }
             if (args.length == 1 && args[0].equalsIgnoreCase("remove")) { plugin.getVotes().clearStage(); Msg.success(player, "Vote stage removed."); }
-            else { plugin.getVotes().setStage(player.getLocation()); Msg.success(player, "Vote stage set. Candidates will stand in a circle around this spot."); }
+            else { plugin.getVotes().setStage(player.getLocation()); Msg.success(player, "Vote stage set. Contestants will line up here for the results, facing the way you face now."); }
             return true;
         }, null);
 
@@ -196,25 +201,27 @@ public final class Commands {
         if (args.length == 0) { new VoteDialogs(plugin).open(player); return; }
         VoteSession session = plugin.getVotes().session();
         if (session == null) { Msg.error(player, "No vote is running."); return; }
-        int number;
-        try { number = Integer.parseInt(args[0]); }
-        catch (NumberFormatException invalid) { Msg.error(player, "Use /vote <number>."); return; }
-        VoteSession.Candidate candidate = session.byNumber(number);
-        if (candidate == null) { Msg.error(player, "Nobody has number " + number + "."); return; }
+        // By name; a number still works for anyone using the old numbering.
+        VoteSession.Candidate candidate = session.candidates().stream().filter(c -> c.name().equalsIgnoreCase(args[0])).findFirst().orElse(null);
+        if (candidate == null && args[0].matches("\\d+")) candidate = session.byNumber(Integer.parseInt(args[0]));
+        if (candidate == null) { Msg.error(player, args[0] + " isn't in this vote. Use /vote to see who is."); return; }
         plugin.getVotes().vote(player, candidate);
-        Msg.success(player, "You voted for " + candidate.number() + " (" + candidate.name() + ").");
+        Msg.success(player, "You voted for " + candidate.name() + ".");
     }
 
     private void startVote(CommandSender sender, String[] args) {
         if (args.length == 0 && sender instanceof Player player) { new VoteDialogs(plugin).start(player); return; }
-        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [eliminate] [stay|nomove]."); return; }
+        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove]."); return; }
         int seconds;
         try { seconds = Integer.parseInt(args[0]); }
         catch (NumberFormatException invalid) { Msg.error(sender, "Use /startvote <seconds>."); return; }
         Set<String> flags = new HashSet<>();
         for (int i = 1; i < args.length; i++) flags.add(args[i].toLowerCase(Locale.ROOT));
         VoteService.RoomMode rooms = flags.contains("nomove") ? VoteService.RoomMode.OFF : flags.contains("stay") ? VoteService.RoomMode.STAY : VoteService.RoomMode.RETURN;
-        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), flags.contains("eliminate"), rooms));
+        // The voted-out player dies and spectates unless told otherwise.
+        VoteService.Elimination elimination = flags.contains("keep") ? VoteService.Elimination.KEEP
+                : flags.contains("spectate") || flags.contains("eliminate") ? VoteService.Elimination.SPECTATE : VoteService.Elimination.KILL;
+        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms));
         Msg.success(sender, "Vote started for " + seconds + " seconds.");
     }
 }

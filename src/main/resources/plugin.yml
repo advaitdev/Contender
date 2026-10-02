@@ -42,11 +42,11 @@ commands:
     usage: "/tier [player]"
   vote:
     description: "Vote, or see the vote"
-    usage: "/vote [number]"
+    usage: "/vote [player]"
   startvote:
     description: "Start a community vote"
     permission: contender.master
-    usage: "/startvote [seconds] [live] [quick] [eliminate] [stay|nomove]"
+    usage: "/startvote [seconds] [live] [quick] [spectate|keep] [stay|nomove]"
   endvote:
     description: "Close the vote and show the results"
     permission: contender.master
@@ -54,7 +54,7 @@ commands:
   votetimer:
     description: "Add a vote timer where you look (on a wall or floating), or remove one"
     permission: contender.master
-    usage: "/votetimer [remove|clear]"
+    usage: "/votetimer [size 1-10|remove|clear]"
   setvotestage:
     description: "Set where candidates gather for the vote results"
     permission: contender.master

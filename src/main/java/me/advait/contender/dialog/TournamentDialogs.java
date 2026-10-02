@@ -226,12 +226,12 @@ public final class TournamentDialogs {
                 menuAction(player, DialogIcon.PREVIEW, "Set Judge Room Here", TEXT, "Everyone who isn't voting (spectators, camera crew, directors) is sent here.", p -> {
                     votes.setRoom(VoteService.Room.JUDGE, p.getLocation()); Dialogs.tell(p, "Judge room set here."); voteSetup(p);
                 }),
-                menuAction(player, DialogIcon.CLOCK, "Add Vote Timer", TEXT, "Look at a wall to hang it there. Otherwise it floats in front of you.", p -> {
+                menuAction(player, DialogIcon.CLOCK, "Add Vote Timer", TEXT, "Look at a wall to hang it there. For another size, use /votetimer <1-10>.", p -> {
                     boolean wall = votes.placeTimer(p); p.closeDialog();
                     Dialogs.tell(p, wall ? "Vote timer hung on the wall. It shows during votes." : "Vote timer placed in front of you. It shows during votes.");
                 }),
-                menuAction(player, DialogIcon.STAR, "Set Vote Stage Here", TEXT, "Candidates gather in a circle here for the results.", p -> {
-                    votes.setStage(p.getLocation()); Dialogs.tell(p, "Vote stage set. Candidates will stand in a circle around this spot."); voteSetup(p);
+                menuAction(player, DialogIcon.STAR, "Set Vote Stage Here", TEXT, "Contestants line up here for the results, facing the way you face.", p -> {
+                    votes.setStage(p.getLocation()); Dialogs.tell(p, "Vote stage set. Contestants will line up here, facing the way you face now."); voteSetup(p);
                 })));
         if (votes.timerPlaced()) buttons.add(menuAction(player, DialogIcon.CLOSE, "Remove Nearest Timer", DANGER, "Take down the closest timer.", p -> {
             if (!votes.removeNearestTimer(p)) throw new IllegalStateException("No vote timer within 12 blocks.");

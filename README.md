@@ -67,23 +67,29 @@ The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leade
 
 ## Votes
 
-**Start a Vote** in `/tournament` (or `/startvote`) opens the vote form, or start one directly with `/startvote <seconds> [live] [quick] [eliminate]`. Every candidate gets a number above their head, and players vote with `/vote <number>` or the vote menu. Nobody can vote for themselves.
+**Start a Vote** in `/tournament` (or `/startvote`) opens the vote form. Players vote with `/vote <name>` or by clicking a player in `/vote`. Nobody can vote for themselves.
 
-- `live` shows running counts.
-- `quick` skips the reveal and posts the result in chat.
-- `eliminate` makes the loser a spectator.
+Form options:
 
-Set the reveal spot with `/setvotestage`. When the vote closes, candidates gather in a circle there, the counts tick up together and a spotlight settles on whoever was voted out.
+- **Show Counts While Voting** shows running counts in the vote menu. Directors always see them.
+- **Results**: the reveal ceremony, or chat only.
+- **Voted-Out Player**:
+  - Dies, then spectates (the default). Lightning strikes, they die where they stand (keeping their items), respawn on the same spot and become a spectator.
+  - Becomes a spectator, without dying.
+  - Stays a contestant.
+- **Rooms**: see below.
 
-**Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option in Start a Vote decides what happens afterwards:
+With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), and `stay` or `nomove` (rooms).
+
+**The ceremony.** Stand on the middle of your stage, facing the audience, and run `/setvotestage`. When voting closes, contestants walk into a straight line on the stage, facing the way you faced. The line runs along whichever of X or Z has more floor. The stage is the floor at the same height as the spot you set, up to a wall, a gap or a step, so a raised platform works well. A spotlight then sweeps back and forth along the line, slows down and stops on whoever got the most votes. On a tie there's no spotlight. Contestants further than 40 blocks away (or in another world) are teleported into line instead.
+
+**Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option decides what happens afterwards:
 
 - **Move, Then Send Back** (the default) returns everyone to where they were once the results finish.
 - **Move and Leave There** leaves them in the rooms.
 - **Don't Move Anyone** skips the rooms.
 
-With `/startvote`, add `stay` or `nomove` for the last two.
-
-**Timers.** Look at a wall and run `/votetimer` to hang a countdown flat on it. Look anywhere else and it floats in front of you instead. You can place several, for example one in each room. Each shows the time left and how many contestants have voted, and a new timer shows a preview for a few seconds. `/votetimer remove` takes down the nearest one, and `/votetimer clear` removes them all.
+**Timers.** Look at a wall and run `/votetimer` to hang a countdown (just `00:45`) flat on it. Look anywhere else and it floats in front of you. Add a size from 1 to 10 for a bigger or smaller one, for example `/votetimer 6`; the default is 4. You can place several. The last 10 seconds tick. A second or two after voting closes, each timer turns into the results: a player's head and their vote count for everyone who got votes, most first. With no votes at all it says so. `/votetimer remove` takes down the nearest timer, and `/votetimer clear` removes them all.
 
 All of this is also in `/tournament` → **Setup Tools** → **Vote Setup**.
 
@@ -140,7 +146,7 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 | `/bracket` | Choose what your tab list shows |
 | `/options` | Settings |
 | `/role`, `/tier` | Player roles, MCTiers lookups |
-| `/vote`, `/startvote`, `/endvote` | Votes |
+| `/vote [name]`, `/startvote`, `/endvote` | Votes |
 | `/votetimer`, `/setvotestage`, `/setvotingroom`, `/setjudgeroom` | Vote timers, the reveal stage and the voting rooms |
 | `/hacks`, `/hackers`, `/pickhacker`, `/sabotage` | Hacks and sabotage |
 | `/interview`, `/uninterview` | Interviews |

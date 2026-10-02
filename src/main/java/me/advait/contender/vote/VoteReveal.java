@@ -1,5 +1,6 @@
 package me.advait.contender.vote;
 
+import io.papermc.paper.entity.LookAnchor;
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
 import me.advait.contender.activity.ActivityRegistry;
@@ -9,7 +10,6 @@ import me.advait.contender.core.Tasks;
 import me.advait.contender.dialog.DialogPalette;
 import me.advait.contender.display.Holograms;
 import me.advait.contender.display.Theme;
-import me.advait.contender.role.PlayerRole;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -18,43 +18,55 @@ import org.bukkit.Material;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.util.*;
 
 /**
- * The results ceremony. Candidates stand in a circle around the vote stage, every tally counts up at once,
- * then a spotlight circles the ring, slows down and stops on whoever was voted out.
- * Without a saved stage the same reveal plays wherever the candidates are standing.
+ * The results ceremony. Candidates walk into a straight line on the vote stage (along whichever of X or Z has
+ * more room), then a spotlight sweeps back and forth along the line, slows down and stops on whoever was voted
+ * out. Without a saved stage the results are announced wherever everyone is standing.
  */
 final class VoteReveal implements Activity, Listener {
-    private static final int COUNT_STEP = 12;
+    /** Gap between neighbors in the line; squeezed down to the minimum when the stage is short. */
+    private static final double SPACING = 2.0, MIN_SPACING = 1.0;
+    /** How far along each direction the stage floor is checked. */
+    private static final int MAX_REACH = 24;
+    /** Players further away than this (or in another world) are teleported instead of walked into place. */
+    private static final double WALK_RANGE = 40;
+    /** Anyone still not in place after this many ticks is put there directly. */
+    private static final int WALK_TIMEOUT = 100;
     private final Contender plugin;
     private final VoteService service;
     private final VoteSession session;
-    private final VoteBadges badges;
-    private final boolean eliminate;
+    private final VoteService.Elimination elimination;
     private final Tasks tasks;
-    private final Set<UUID> gathered = new LinkedHashSet<>();
+    /** Candidates on the stage, in order along the line. */
+    private final List<UUID> line = new ArrayList<>();
     private final Map<UUID, Location> spots = new HashMap<>();
+    private final Set<UUID> placed = new HashSet<>();
     private final List<Display> displays = new ArrayList<>();
+    private Vector facing = new Vector(0, 0, 1);
+    private BukkitTask walking;
+    private int walkTicks;
     private boolean moving;
     private UUID votedOut;
     private boolean finished;
 
-    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteBadges badges, boolean eliminate) {
+    record Layout(List<Location> spots, Vector facing) { }
+
+    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteService.Elimination elimination) {
         this.plugin = plugin;
         this.service = service;
         this.session = session;
-        this.badges = badges;
-        this.eliminate = eliminate;
+        this.elimination = elimination;
         this.tasks = new Tasks(plugin, "Vote reveal");
     }
 
@@ -62,110 +74,206 @@ final class VoteReveal implements Activity, Listener {
 
     void play() {
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        List<VoteSession.Tally> results = session.results();
-        Location stage = service.stageLocation();
-        if (stage != null) gather(stage, results);
+        List<VoteSession.Candidate> leaders = session.leaders();
+        int top = leaders.isEmpty() ? 0 : session.votesFor(leaders.getFirst().id());
         Theme theme = plugin.getThemes().current();
-        Location headline = stage != null ? stage.clone().add(0, 4.2, 0) : null;
-        if (headline != null) {
-            TextDisplay title = Holograms.text(headline, Component.text("The votes are in", theme.primary()), 0.01f,
-                    Display.Billboard.CENTER, theme.background(0), "vote_reveal");
-            displays.add(title);
-            tasks.later(2, () -> Holograms.animate(title, Holograms.scaled(3.2f), 10));
-        }
         Msg.title(onlineAll(), Component.text("The votes are in", theme.primary()), Msg.text(session.totalVotes() + (session.totalVotes() == 1 ? " vote" : " votes") + " cast", DialogPalette.MUTED), 8, 50, 10);
         Sounds.REVEAL.playAll();
-        for (VoteSession.Tally tally : results) badges.showCount(tally.candidate(), 0);
-        int top = results.isEmpty() ? 0 : results.getFirst().votes();
-        for (int step = 1; step <= top; step++) {
-            int value = step;
-            tasks.later(40L + (long) step * COUNT_STEP, () -> countStep(results, value, top));
-        }
-        long afterCount = 40L + (long) top * COUNT_STEP + 30;
-        List<VoteSession.Candidate> leaders = session.leaders();
-        if (leaders.isEmpty()) {
-            tasks.later(afterCount, () -> conclude(List.of(), 0));
+        Location stage = service.stageLocation();
+        if (stage != null) lineUp(stage);
+        if (line.size() < 2 || leaders.isEmpty()) {
+            // Give the timers a moment to turn into the results first.
+            tasks.later(50, () -> conclude(leaders, top));
             return;
         }
-        if (stage != null && gathered.size() > 1) tasks.later(afterCount, () -> spotlight(leaders, top));
-        else tasks.later(afterCount, () -> conclude(leaders, top));
+        walk(() -> tasks.later(15, () -> spotlight(leaders, top)));
     }
 
-    private void gather(Location stage, List<VoteSession.Tally> results) {
+    // ---- The line ------------------------------------------------------------------------------
+
+    private void lineUp(Location stage) {
         List<VoteSession.Candidate> present = new ArrayList<>();
-        for (VoteSession.Tally tally : results) {
+        for (VoteSession.Tally tally : session.results()) {
             Player player = Bukkit.getPlayer(tally.candidate().id());
             if (player == null || player.isDead() || !plugin.getRegistry().isFree(player.getUniqueId())) continue;
             present.add(tally.candidate());
         }
+        if (present.isEmpty()) return;
         present.sort(Comparator.comparingInt(VoteSession.Candidate::number));
-        double radius = Math.max(3.5, present.size() * 0.75);
+        Layout layout = layout(stage, present.size(), preferredFacing(stage));
+        facing = layout.facing();
         for (int i = 0; i < present.size(); i++) {
-            double angle = Math.PI * 2 * i / present.size() - Math.PI / 2;
-            Location spot = stage.clone().add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
-            Vector facing = stage.toVector().subtract(spot.toVector()).setY(0);
-            spot.setDirection(facing.lengthSquared() < 1e-6 ? new Vector(0, 0, 1) : facing);
-            spot.setPitch(0);
             Player player = Bukkit.getPlayer(present.get(i).id());
             try {
                 plugin.getRegistry().claim(player.getUniqueId(), this, ActivityRegistry.Involvement.PLAYING);
             } catch (IllegalStateException busy) { continue; }
-            gathered.add(player.getUniqueId());
+            Location spot = layout.spots().get(i);
+            line.add(player.getUniqueId());
             spots.put(player.getUniqueId(), spot);
-            moving = true;
-            try { player.teleport(spot); } finally { moving = false; }
+            boolean far = !player.getWorld().equals(spot.getWorld()) || player.getLocation().distanceSquared(spot) > WALK_RANGE * WALK_RANGE;
+            if (far) {
+                moving = true;
+                try { player.teleport(spot); } finally { moving = false; }
+                placed.add(player.getUniqueId());
+            }
         }
-        plugin.getCelebrations().ring(stage.clone().add(0, 0.1, 0), radius, 64);
     }
 
-    private void countStep(List<VoteSession.Tally> results, int value, int top) {
-        for (VoteSession.Tally tally : results) {
-            if (tally.votes() < value) continue;
-            badges.showCount(tally.candidate(), value);
-            badges.pop(tally.candidate().id(), 1.6f);
+    /** The way the director faced when setting the stage, or toward the judges, so the line faces the audience. */
+    private Vector preferredFacing(Location stage) {
+        if (service.stageHasFacing()) return stage.getDirection().setY(0);
+        Location judges = service.roomLocation(VoteService.Room.JUDGE);
+        if (judges != null && judges.getWorld().equals(stage.getWorld())) {
+            Vector toward = judges.toVector().subtract(stage.toVector()).setY(0);
+            if (toward.lengthSquared() > 1e-6) return toward;
         }
-        for (Player player : onlinePlayers()) Sounds.DRUM.play(player, 0.8f + 0.9f * value / Math.max(1, top));
+        return new Vector(0, 0, 1);
     }
 
-    /** A beam travels around the ring, slowing down, and stops on the voted-out player. */
+    /**
+     * Spots in a straight line through the stage center, along X or Z, whichever has more open floor. The line is
+     * kept on the floor (shifted if the center is near one end), and everyone faces across it, toward the side
+     * closest to {@code preferred}.
+     */
+    static Layout layout(Location stage, int count, Vector preferred) {
+        Location found = VoteRooms.standable(stage);
+        Location center = found != null ? found : stage.clone();
+        int plusX = reach(center, new Vector(1, 0, 0)), minusX = reach(center, new Vector(-1, 0, 0));
+        int plusZ = reach(center, new Vector(0, 0, 1)), minusZ = reach(center, new Vector(0, 0, -1));
+        int alongX = plusX + minusX, alongZ = plusZ + minusZ;
+        // On a square stage, run the line across the way the director faced.
+        boolean onX = alongX != alongZ ? alongX > alongZ : Math.abs(preferred.getZ()) >= Math.abs(preferred.getX());
+        Vector axis = onX ? new Vector(1, 0, 0) : new Vector(0, 0, 1);
+        int plus = onX ? plusX : plusZ, minus = onX ? minusX : minusZ;
+        double spacing = count <= 1 ? 0 : Math.max(MIN_SPACING, Math.min(SPACING, (plus + minus) / (double) (count - 1)));
+        double total = spacing * (count - 1);
+        double start = -total / 2;
+        if (total <= plus + minus) start = Math.clamp(start, -minus, plus - total);
+        Vector side = onX ? new Vector(0, 0, 1) : new Vector(1, 0, 0);
+        if (side.dot(preferred) < 0) side.multiply(-1);
+        List<Location> spots = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            Location spot = center.clone().add(axis.clone().multiply(start + i * spacing));
+            Location floor = VoteRooms.standable(spot);
+            if (floor != null) spot = floor;
+            spot.setDirection(side);
+            spot.setPitch(0);
+            spots.add(spot);
+        }
+        return new Layout(spots, side);
+    }
+
+    /**
+     * Open floor, in whole blocks, from the center along a direction. The stage ends at a wall, a gap, or a change
+     * in floor height, so a raised platform counts only its own top.
+     */
+    private static int reach(Location center, Vector step) {
+        int reach = 0;
+        for (int distance = 1; distance <= MAX_REACH; distance++) {
+            Location floor = VoteRooms.standable(center.clone().add(step.clone().multiply(distance)));
+            if (floor == null || Math.abs(floor.getY() - center.getY()) > 0.5) break;
+            reach = distance;
+        }
+        return reach;
+    }
+
+    /** Pushes everyone toward their spot each tick until they're all in place, then runs {@code then}. */
+    private void walk(Runnable then) {
+        walkTicks = 0;
+        walking = tasks.repeat(1, 1, () -> {
+            walkTicks++;
+            boolean done = true;
+            for (UUID id : line) {
+                if (placed.contains(id)) continue;
+                Player player = Bukkit.getPlayer(id);
+                Location target = spots.get(id);
+                if (player == null || target == null) { placed.add(id); continue; }
+                Vector to = target.toVector().subtract(player.getLocation().toVector());
+                double rise = to.getY();
+                to.setY(0);
+                double distance = to.length();
+                if (distance < 0.3 || walkTicks > WALK_TIMEOUT) {
+                    if (distance >= 0.3) { moving = true; try { player.teleport(target); } finally { moving = false; } }
+                    player.setVelocity(new Vector(0, Math.min(0, player.getVelocity().getY()), 0));
+                    face(player, target);
+                    placed.add(id);
+                    continue;
+                }
+                done = false;
+                // Fast across the floor, easing off near the spot; a hop for a step up.
+                Vector velocity = to.normalize().multiply(Math.clamp(distance * 0.3, 0.1, 0.45));
+                @SuppressWarnings("deprecation") boolean grounded = player.isOnGround();
+                velocity.setY(rise > 0.6 && grounded ? 0.42 : player.getVelocity().getY());
+                player.setVelocity(velocity);
+            }
+            if (done) {
+                tasks.cancel(walking);
+                walking = null;
+                then.run();
+            }
+        });
+    }
+
+    private void face(Player player, Location spot) {
+        Location eye = spot.clone().add(0, player.getEyeHeight(), 0);
+        player.lookAt(eye.getX() + facing.getX() * 10, eye.getY(), eye.getZ() + facing.getZ() * 10, LookAnchor.EYES);
+    }
+
+    // ---- The spotlight -------------------------------------------------------------------------
+
+    /** A beam sweeps back and forth along the line, slowing down, and stops on the voted-out player. */
     private void spotlight(List<VoteSession.Candidate> leaders, int top) {
-        List<UUID> ring = new ArrayList<>();
-        for (UUID id : gathered) if (Bukkit.getPlayer(id) != null) ring.add(id);
-        if (ring.size() < 2) { conclude(leaders, top); return; }
-        Theme theme = plugin.getThemes().current();
-        UUID target = leaders.size() == 1 && ring.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
+        List<UUID> standing = new ArrayList<>();
+        for (UUID id : line) if (Bukkit.getPlayer(id) != null) standing.add(id);
+        UUID target = leaders.size() == 1 && standing.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
         // With a tie (or nobody here to land on) the beam would point at the wrong person.
-        if (target == null) { conclude(leaders, top); return; }
-        int targetIndex = ring.indexOf(target);
-        int steps = ring.size() * 2 + targetIndex + 1;
-        Location first = beamAt(ring.getFirst());
-        BlockDisplay beam = Holograms.block(first, Material.WHITE_STAINED_GLASS.createBlockData(), Holograms.box(0.9f, 14f, 0.9f, 0), "vote_reveal");
+        if (standing.size() < 2 || target == null) { conclude(leaders, top); return; }
+        List<Integer> steps = sweep(standing.size(), standing.indexOf(target));
+        Theme theme = plugin.getThemes().current();
+        BlockDisplay beam = Holograms.block(beamAt(standing.getFirst()), Material.WHITE_STAINED_GLASS.createBlockData(), Holograms.box(0.9f, 14f, 0.9f, 0), "vote_reveal");
         beam.setGlowing(true);
         beam.setGlowColorOverride(Color.fromRGB(theme.primary().value()));
         beam.setBrightness(new Display.Brightness(15, 15));
         beam.setTeleportDuration(3);
         displays.add(beam);
         long time = 0;
-        for (int step = 0; step < steps; step++) {
-            int index = step % ring.size();
-            double progress = (double) step / steps;
+        for (int step = 0; step < steps.size(); step++) {
+            UUID at = standing.get(steps.get(step));
+            double progress = (double) step / steps.size();
             time += Math.round(3 + 14 * progress * progress);
-            boolean last = step == steps - 1;
+            boolean last = step == steps.size() - 1;
             tasks.later(time, () -> {
-                Player player = Bukkit.getPlayer(ring.get(index));
-                if (player != null) beam.teleport(beamAt(ring.get(index)));
+                if (beam.isValid()) beam.teleport(beamAt(at));
                 for (Player viewer : onlinePlayers()) Sounds.TICK.play(viewer, last ? 2f : 1.2f);
                 if (last) tasks.later(16, () -> conclude(leaders, top));
             });
         }
     }
 
-    private Location beamAt(UUID player) {
-        Player online = Bukkit.getPlayer(player);
-        Location spot = spots.getOrDefault(player, online == null ? null : online.getLocation());
-        // The beam comes down from the sky and stops above the badge, so the count stays readable.
-        return spot == null ? null : spot.clone().add(0, 3.7, 0);
+    /**
+     * Positions the beam visits: left to right, back again, and on until it has turned around at least twice and
+     * reaches the target. Index 0 is one end of the line.
+     */
+    static List<Integer> sweep(int count, int target) {
+        List<Integer> steps = new ArrayList<>(List.of(0));
+        int position = 0, direction = 1, turns = 0;
+        while (steps.size() < 200) {
+            if (position + direction < 0 || position + direction >= count) { direction = -direction; turns++; }
+            position += direction;
+            steps.add(position);
+            if (turns >= 2 && position == target) break;
+        }
+        return steps;
     }
+
+    private Location beamAt(UUID player) {
+        Location spot = spots.get(player);
+        if (spot == null) { Player online = Bukkit.getPlayer(player); spot = online == null ? null : online.getLocation(); }
+        // The beam comes down from the sky and stops just above their head.
+        return spot == null ? null : spot.clone().add(0, 2.3, 0);
+    }
+
+    // ---- Results -------------------------------------------------------------------------------
 
     private void conclude(List<VoteSession.Candidate> leaders, int votes) {
         if (finished) return;
@@ -178,11 +286,6 @@ final class VoteReveal implements Activity, Listener {
             String names = String.join(" & ", leaders.stream().map(VoteSession.Candidate::name).toList());
             Msg.title(everyone, Component.text("It's a tie", theme.primary()), Msg.text(names + " · " + votes + (votes == 1 ? " vote" : " votes") + " each", DialogPalette.MUTED), 5, 70, 15);
             Msg.broadcast(Msg.text("The vote is tied between " + names + " with " + votes + (votes == 1 ? " vote" : " votes") + " each.", DialogPalette.ACCENT));
-            for (VoteSession.Candidate leader : leaders) {
-                badges.setText(leader.id(), Component.text(Integer.toString(leader.number()), theme.primary()).appendNewline()
-                        .append(Component.text("Tied", DialogPalette.WARNING)));
-                badges.pop(leader.id(), 1.9f);
-            }
             Sounds.ANNOUNCE.playAll();
         } else {
             VoteSession.Candidate out = leaders.getFirst();
@@ -191,19 +294,29 @@ final class VoteReveal implements Activity, Listener {
                 player.getWorld().strikeLightningEffect(player.getLocation());
                 plugin.getCelebrations().fireworks(player.getLocation(), 4);
             }
-            badges.setText(out.id(), Component.text(Integer.toString(out.number()), DialogPalette.DANGER).appendNewline()
-                    .append(Component.text("Voted out", DialogPalette.DANGER)));
-            badges.pop(out.id(), 2.1f);
             Msg.title(everyone, Component.text(out.name(), DialogPalette.DANGER),
                     Msg.text("was voted out with " + votes + (votes == 1 ? " vote" : " votes"), DialogPalette.MUTED), 5, 80, 20);
             Msg.broadcast(Msg.text(out.name(), DialogPalette.DANGER).append(Msg.text(" was voted out with " + votes + (votes == 1 ? " vote." : " votes."), DialogPalette.TEXT)));
             Sounds.ELIMINATED.playAll();
-            // Applied in finish(), once the reveal no longer holds the player, so their game mode changes too.
-            if (eliminate) votedOut = out.id();
+            if (elimination == VoteService.Elimination.KILL) {
+                // Let go of them first, so they can die, respawn on the spot and turn into a spectator.
+                release(out.id());
+                service.voteOut(out.id(), elimination);
+            } else if (elimination == VoteService.Elimination.SPECTATE) {
+                // Applied in finish(), once the reveal no longer holds the player, so their game mode changes too.
+                votedOut = out.id();
+            }
         }
         plugin.getLogger().info("Vote results: " + String.join(", ", session.results().stream()
                 .map(tally -> tally.candidate().name() + " " + tally.votes()).toList()));
         tasks.later(140, this::finish);
+    }
+
+    private void release(UUID id) {
+        line.remove(id);
+        spots.remove(id);
+        placed.remove(id);
+        plugin.getRegistry().release(id, this);
     }
 
     private void finish() {
@@ -217,29 +330,23 @@ final class VoteReveal implements Activity, Listener {
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> Holograms.remove(display), 8L);
         }
         displays.clear();
-        for (UUID id : gathered) plugin.getRegistry().release(id, this);
-        gathered.clear();
+        for (UUID id : List.copyOf(line)) plugin.getRegistry().release(id, this);
+        line.clear();
         service.revealFinished(this);
-        if (votedOut != null) {
-            try { plugin.getRoleManager().setRole(votedOut, PlayerRole.SPECTATOR); }
-            catch (RuntimeException failure) { plugin.getLogger().warning("Could not make the voted-out player a spectator: " + failure.getMessage()); }
-        }
+        if (votedOut != null) service.voteOut(votedOut, VoteService.Elimination.SPECTATE);
     }
 
-    @Override public void forceStop(String reason) {
-        finish();
-    }
+    @Override public void forceStop(String reason) { finish(); }
 
-    @Override public void handleQuit(Player player) {
-        plugin.getRegistry().release(player.getUniqueId(), this);
-        gathered.remove(player.getUniqueId());
-    }
+    @Override public void handleQuit(Player player) { release(player.getUniqueId()); }
 
-    /** Candidates stay on their spot during the reveal but can look around. */
+    /** Candidates walk into the line, then stay on their spot but can look around. */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!gathered.contains(event.getPlayer().getUniqueId()) || !event.hasChangedPosition()) return;
+        UUID id = event.getPlayer().getUniqueId();
+        if (!line.contains(id) || !event.hasChangedPosition()) return;
         if (event instanceof PlayerTeleportEvent) { if (!moving) event.setCancelled(true); return; }
+        if (!placed.contains(id)) return; // still walking into place
         Location held = event.getFrom().clone();
         held.setYaw(event.getTo().getYaw());
         held.setPitch(event.getTo().getPitch());

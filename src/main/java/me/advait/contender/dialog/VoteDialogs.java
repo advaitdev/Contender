@@ -52,8 +52,7 @@ public final class VoteDialogs {
             Player online = Bukkit.getPlayer(candidate.id());
             Component head = online == null ? StringUtil.getPlayerHead(candidate.id()) : StringUtil.getPlayerHead(online);
             boolean selected = candidate.id().equals(mine), self = candidate.id().equals(player.getUniqueId());
-            Component label = Component.textOfChildren(text(candidate.number() + "  ", ACCENT), head,
-                    text(" " + candidate.name(), manage ? DANGER : self ? MUTED : TEXT));
+            Component label = Component.textOfChildren(head, text(" " + candidate.name(), manage ? DANGER : self ? MUTED : TEXT));
             if (showCounts) label = label.append(text("  " + session.votesFor(candidate.id()), MUTED));
             if (selected) label = label.append(Component.space()).append(DialogIcon.SAVE.sprite());
             String hint = manage ? "Remove " + candidate.name() + " from this vote." : self ? "You can't vote for yourself."
@@ -89,7 +88,7 @@ public final class VoteDialogs {
                 DialogText.detail("Time left", String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60), seconds <= 10 ? DANGER : TEXT),
                 DialogText.detail("Votes cast", Integer.toString(session.totalVotes()))), 340));
         body.add(DialogBody.plainMessage(DialogText.muted(manage ? "Click a player to remove them from this vote."
-                : canVote ? "Pick someone's number. Click it again to undo." : "You can watch the vote, but only contestants can vote."), 340));
+                : canVote ? "Pick a player. Click them again to undo." : "You can watch the vote, but only contestants can vote."), 340));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
         // Escape runs the footer button, so the footer stays a plain Close and Refresh goes in the grid.
         Dialogs.navigationRow(buttons, null, dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, CELL, (p, view) -> open(p, page, manage)), CELL);
@@ -108,7 +107,8 @@ public final class VoteDialogs {
                         .labelFormat("%s: %ss").build(),
                 toggle("live", DialogIcon.EYE, "Show Counts While Voting", false, "Yes", "No, keep them secret"),
                 toggle("ceremony", DialogIcon.STAR, "Results", true, "Reveal ceremony", "Chat only"),
-                toggle("eliminate", DialogIcon.SKULL, "Voted-Out Player", false, "Becomes a spectator", "Stays a contestant")));
+                DialogInput.singleOption("elimination", DialogIcon.SKULL.label("Voted-Out Player"), java.util.Arrays.stream(VoteService.Elimination.values())
+                        .map(option -> Dialogs.option(option.name(), option.label, option == VoteService.Elimination.KILL)).toList()).width(300).build()));
         // The rooms choice only appears once a voting or judge room is set.
         boolean rooms = plugin.getVotes().anyRoom();
         if (rooms) inputs.add(DialogInput.singleOption("rooms", DialogIcon.SPAWN.label("Rooms"), java.util.Arrays.stream(VoteService.RoomMode.values())
@@ -119,14 +119,14 @@ public final class VoteDialogs {
                 dialogs.button(player, DialogIcon.NEXT.label("Start Vote", ACCENT), null, true, NAV, (p, view) -> {
                     VoteService.RoomMode mode = rooms ? VoteService.RoomMode.valueOf(Dialogs.text(view, "rooms")) : VoteService.RoomMode.OFF;
                     plugin.getVotes().start(new VoteService.Options(Dialogs.number(view, "seconds", 10, 600),
-                            bool(view, "live"), bool(view, "ceremony"), bool(view, "eliminate"), mode));
+                            bool(view, "live"), bool(view, "ceremony"), VoteService.Elimination.valueOf(Dialogs.text(view, "elimination")), mode));
                     open(p);
                 }), NAV);
         boolean stage = plugin.getVotes().stageLocation() != null;
         // One line, so Start Vote stays on screen at small GUI sizes.
         dialogs.show(player, "Start a Vote", List.of(DialogBody.plainMessage(stage
-                ? DialogText.muted("Each contestant gets a number over their head.")
-                : text("Set a vote stage in Vote Setup for the circle reveal.", WARNING), 320)), inputs, buttons, 2, NAV, null);
+                ? DialogText.muted("Contestants line up on the vote stage for the results.")
+                : text("Set a vote stage in Vote Setup for the lineup and spotlight.", WARNING), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private static DialogInput toggle(String key, DialogIcon icon, String label, boolean value, String yes, String no) {

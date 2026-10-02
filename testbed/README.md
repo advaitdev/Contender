@@ -35,7 +35,7 @@ Useful commands:
 - Actions: `bots cmd|chat <name|all> ...`, `bots attack|use|swing|slot|info <name> ...`
 - Diagnostics: `bots chatlog off|chat|all` (what bots see, in `plugins/FakePlayers/chat.log`), `bots verify on|off` (encode every packet like a real connection), `bots sys`. Slow ticks go to `plugins/FakePlayers/slow-ticks.log`.
 
-The fake players plugin is UHCR's FakePlayers tool (`tools/fakeplayers` in the UHCR repos) without its MultiPaper parts. Bots confirm teleports and respawn like a vanilla client. `fakeplayers/build.sh` builds it against the test server, and the built jar is also kept in `dist/FakePlayers.jar`.
+The fake players plugin is UHCR's FakePlayers tool (`tools/fakeplayers` in the UHCR repos) without its MultiPaper parts. Bots confirm teleports and respawn like a vanilla client, and their movement fires PlayerMoveEvent the way a real client's does, so plugins can hold them still or keep them inside an area. `fakeplayers/build.sh` builds it against the test server, and the built jar is also kept in `dist/FakePlayers.jar`.
 - `probe game <type> <map|-> <kit|-> <k=v,...|-> <players...>` starts a minigame (`mace_race`, `combo`, `manhunt`, `last_stand`, `king_of_the_hill`, `winner_stays_on`, `juggernaut`)
 - `probe tournament <map> <kit> <bestOf> <players...>` and `probe trounds` show a round robin and its standings
 - `probe vote <seconds>`, `probe votefor <voter> <number>`

@@ -93,6 +93,7 @@ public class Bot extends ServerPlayer {
             case ClientboundPlayerPositionPacket teleport -> clientReplies.add(() -> {
                 this.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(teleport.id()));
                 rehome(this.getBukkitEntity().getLocation());
+                remember(this.getBukkitEntity().getLocation()); // a teleport, not a move
             });
             case ClientboundSystemChatPacket chat -> ChatCapture.record(this, chat.overlay() ? "actionbar" : "system", chat.content());
             case ClientboundPlayerChatPacket chat -> ChatCapture.record(this, "chat", chat.chatType().decorate(
@@ -140,7 +141,54 @@ public class Bot extends ServerPlayer {
         super.tick();
         // What the packet listener does for real players when they send movement. A real client sends none
         // while it waits for the chunks around it, so moving earlier would load them on the main thread.
-        if (terrainLoaded()) this.doTick();
+        if (terrainLoaded()) {
+            this.doTick();
+            reportMove();
+        }
+    }
+
+    private org.bukkit.World lastWorld;
+    private double lastX, lastY, lastZ;
+    private float lastYaw, lastPitch;
+
+    private void remember(Location location) {
+        lastWorld = location.getWorld();
+        lastX = location.getX(); lastY = location.getY(); lastZ = location.getZ();
+        lastYaw = location.getYaw(); lastPitch = location.getPitch();
+    }
+
+    /**
+     * A real client's movement reaches plugins as a PlayerMoveEvent, which they can cancel or redirect (to hold
+     * players still, keep them inside an arena, freeze a countdown). The bot moves on the server instead, so it
+     * reports each move the same way and goes back if a plugin says no.
+     */
+    private void reportMove() {
+        org.bukkit.entity.Player player = this.getBukkitEntity();
+        Location to = player.getLocation();
+        if (lastWorld == null || !lastWorld.equals(to.getWorld())) { remember(to); return; }
+        boolean moved = to.getX() != lastX || to.getY() != lastY || to.getZ() != lastZ;
+        if (!moved && to.getYaw() == lastYaw && to.getPitch() == lastPitch) return;
+        Location from = new Location(lastWorld, lastX, lastY, lastZ, lastYaw, lastPitch);
+        org.bukkit.event.player.PlayerMoveEvent event = new org.bukkit.event.player.PlayerMoveEvent(player, from, to.clone());
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            putBack(from);
+        } else if (!event.getTo().equals(to)) {
+            putBack(event.getTo());
+        } else {
+            remember(to);
+        }
+    }
+
+    /** Like the server correcting a real client: no teleport event, and the bot stops where it's put. */
+    private void putBack(Location location) {
+        if (!location.getWorld().equals(this.getBukkitEntity().getWorld())) {
+            this.getBukkitEntity().teleport(location);
+        } else {
+            this.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+            this.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        }
+        remember(location);
     }
 
     /** Whether the chunks a move this tick could touch (the 3x3 around the bot) are loaded. */

@@ -46,7 +46,7 @@ public final class JuggernautGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Juggernaut", "Juggernaut",
-                    "Take down the Juggernaut to take their place.", true, true, false,
+                    "Take down the Juggernaut to take their place. The first player listed starts as the Juggernaut.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 2, 15, 5, 1, "%s: %s min"),
                             GameForm.number("hearts", DialogIcon.HEART, "Juggernaut Hearts", 2, 5, 3, 1, "%s: %sx")), 3),
                     (p, result) -> {
@@ -105,7 +105,8 @@ public final class JuggernautGame extends ArenaGame {
 
     @Override protected void begin() {
         List<Player> candidates = fighters(null);
-        if (!candidates.isEmpty()) crown(candidates.get(random.nextInt(candidates.size())), null);
+        // The first player listed starts as the Juggernaut.
+        if (!candidates.isEmpty()) crown(candidates.getFirst(), null);
         tasks.repeat(1, 1, this::follow);
     }
 

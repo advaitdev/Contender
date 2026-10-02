@@ -16,6 +16,7 @@ public final class Tournament {
     private final int sortingSeconds;
     private final int maxParallel;
     private final int rounds;
+    private final int schedule;
     private boolean running;
     private boolean cancelled;
     private boolean started;
@@ -27,6 +28,10 @@ public final class Tournament {
     }
     public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
                       boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel, int rounds) {
+        this(id, name, mapId, kitId, entries, teams, waitForRound, bestOf, sortingSeconds, maxParallel, rounds, RoundRobinSchedule.CURRENT);
+    }
+    public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
+                      boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel, int rounds, int schedule) {
         if (name == null || name.isBlank() || name.length() > 64) throw new IllegalArgumentException("Choose a tournament name between 1 and 64 characters.");
         if (sortingSeconds < 5 || sortingSeconds > 60 || maxParallel < 1 || maxParallel > 100) throw new IllegalArgumentException("Invalid tournament settings.");
         Set<UUID> players = new HashSet<>();
@@ -46,13 +51,16 @@ public final class Tournament {
         this.sortingSeconds = sortingSeconds;
         this.maxParallel = maxParallel;
         this.rounds = rounds;
+        this.schedule = schedule;
         List<TournamentMatch> scheduled = new ArrayList<>();
-        for (var pairing : RoundRobinSchedule.create(entries.size(), rounds)) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
+        for (var pairing : RoundRobinSchedule.create(entries.size(), rounds, schedule)) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
         matches = List.copyOf(scheduled);
     }
     public UUID id() { return id; }
     public String name() { return name; }
     public String mapId() { return mapId; }
+    /** Which {@link RoundRobinSchedule} layout the matches use. */
+    public int schedule() { return schedule; }
     public String kitId() { return kitId; }
     public List<TournamentEntry> entries() { return entries; }
     public List<TournamentMatch> matches() { return matches; }

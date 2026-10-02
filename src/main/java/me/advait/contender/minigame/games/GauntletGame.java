@@ -28,7 +28,8 @@ import java.util.*;
 
 /**
  * Winner stays on: the champion fights challengers one at a time, the loser goes to the back of the queue,
- * and everyone else watches. Most wins takes it; the longest streak breaks ties.
+ * and everyone else watches. The queue starts in the order the director listed the players.
+ * Most wins takes it; the longest streak breaks ties.
  */
 public final class GauntletGame extends ArenaGame {
     public static final class Type implements MinigameType {
@@ -41,7 +42,7 @@ public final class GauntletGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("Winner Stays On", "Winner Stays On",
-                    "One fight at a time. One round per fight.", true, true, false,
+                    "One fight at a time, one round each. Players go in the order listed.", true, true, false,
                     List.of(GameForm.number("fights", DialogIcon.DUEL, "Total Fights", 2, 100, 12, 1, null)), 2),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());
@@ -93,8 +94,7 @@ public final class GauntletGame extends ArenaGame {
     }
 
     @Override protected void setup(List<Player> players) {
-        List<UUID> order = new ArrayList<>(players.stream().map(Player::getUniqueId).toList());
-        Collections.shuffle(order);
+        List<UUID> order = players.stream().map(Player::getUniqueId).toList();
         queue.addAll(order);
         for (Player player : players) {
             bench(player);

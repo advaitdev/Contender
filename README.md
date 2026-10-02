@@ -30,7 +30,7 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 
 ## Events
 
-**Round Robin.** Everyone plays everyone. Matches run in parallel as players and arena copies free up. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu. If something goes wrong, open the match from **Matches**:
+**Round Robin.** Everyone plays everyone. Round 1 follows the roster order: 1st vs 2nd, 3rd vs 4th, and so on. Matches run in parallel as players and arena copies free up. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu. If something goes wrong, open the match from **Matches**:
 
 - **Change Result** fixes a finished match's score. The standings update right away.
 - **Replay Match** clears a finished match so it's played again.
@@ -50,6 +50,8 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 | King of the Hill | Stand on the hill to score. First to the target, or the most when time runs out. |
 | Winner Stays On | One fight at a time. The winner keeps fighting until someone beats them. |
 | Juggernaut | One player gets extra hearts and glows. Take them down to take their place; the longest time as Juggernaut wins. |
+
+Players go in the order you type them in the Players box. That sets the Combo turn order, the Winner Stays On queue (the first two fight first) and the first Juggernaut.
 
 Minigames that need building have their own page in **Setup Tools** → **Minigames**:
 

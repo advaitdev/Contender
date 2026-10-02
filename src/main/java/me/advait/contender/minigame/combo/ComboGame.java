@@ -51,7 +51,7 @@ public final class ComboGame extends ArenaGame {
             DialogInput difficulty = DialogInput.singleOption("difficulty", DialogIcon.DUEL.label("Bot Difficulty"), Arrays.stream(ComboDifficulty.values())
                     .map(d -> Dialogs.option(d.name(), d.label(), d == ComboDifficulty.NORMAL)).toList()).width(300).build();
             new GameForm(plugin).open(director, new GameForm.Spec("Combo", "Combo",
-                    "One turn each against a practice bot.", true, true, false,
+                    "One turn each against a practice bot, in the order listed.", true, true, false,
                     List.of(difficulty, GameForm.number("retries", DialogIcon.REFRESH, "Retry Allowance", 0, 20, 5, 1, "%s: up to %s hits")), 1),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());
@@ -122,13 +122,7 @@ public final class ComboGame extends ArenaGame {
     }
 
     @Override protected void setup(List<Player> players) {
-        List<UUID> order = new ArrayList<>(roster.keySet());
-        Collections.shuffle(order);
-        // Turn order follows the roster's iteration order, so rebuild it shuffled.
-        Map<UUID, Participant> shuffled = new LinkedHashMap<>();
-        for (UUID id : order) shuffled.put(id, roster.get(id));
-        roster.clear();
-        roster.putAll(shuffled);
+        // Turns follow the roster, which is in the order the director listed the players.
         for (Player player : players) {
             bench(player);
             player.teleport(watchSpot());

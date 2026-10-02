@@ -18,6 +18,7 @@ public final class TournamentStore {
         yaml.set("teams", tournament.teams());
         yaml.set("wait-for-round", tournament.waitForRound());
         yaml.set("sorting-seconds", tournament.sortingSeconds());
+        yaml.set("schedule", tournament.schedule());
         yaml.set("max-parallel", tournament.maxParallel());
         yaml.set("bracket-rounds", tournament.rounds());
         yaml.set("cancelled", tournament.isCancelled());
@@ -55,7 +56,8 @@ public final class TournamentStore {
         Tournament tournament = new Tournament(UUID.fromString(yaml.getString("id")), yaml.getString("name"),
                 yaml.getString("map"), yaml.getString("kit"), entries, yaml.getBoolean("teams"),
                 yaml.getBoolean("wait-for-round"), 3, yaml.getInt("sorting-seconds", 10), yaml.getInt("max-parallel", 20),
-                yaml.getInt("bracket-rounds", RoundRobinSchedule.fullRounds(entries.size())));
+                yaml.getInt("bracket-rounds", RoundRobinSchedule.fullRounds(entries.size())),
+                yaml.getInt("schedule", 1));
         for (TournamentMatch match : tournament.matches()) {
             String path = "matches." + match.number();
             match.setBestOf(yaml.getInt(path + ".best-of", 3));

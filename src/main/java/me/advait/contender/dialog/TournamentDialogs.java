@@ -299,7 +299,7 @@ public final class TournamentDialogs {
         if (error != null) contents.add(body(text(error, DANGER)));
         contents.add(body(DialogText.lines(DialogText.detail("Players", "Alice, Bob, Charlie"),
                 DialogText.detail("Teams", "One team per line, e.g. Red: Alice, Bob"))));
-        contents.add(body(DialogText.muted("Offline contestants can be entered too.\nOnly contestants can play.")));
+        contents.add(body(DialogText.muted("Round 1 goes in list order: 1st vs 2nd, 3rd vs 4th.\nOffline contestants can be entered too.")));
         List<DialogInput> inputs = List.of(
                 DialogInput.singleOption("roster", DialogIcon.PLAYERS.label("Roster Type"), List.of(
                         Dialogs.option("solo", "Players (1v1)", !draft.teams()), Dialogs.option("teams", "Teams", draft.teams()))).width(INPUT_WIDTH).build(),

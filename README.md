@@ -24,11 +24,17 @@ Drop the jar from `dist/` into `plugins/` and start the server. Operators have b
 3. **Maps.** Build an arena, select it with the WorldEdit wand, then `/arena` → **New Map from Selection**. Set both spawns from the map's page. Contender pastes copies of it into its own world so many matches can run at once.
 4. **Kits.** `/tournament` → **Setup Tools** → **Kits** → **Create New Kit**. Name it, then lay out the items and armor.
 
+Outside a game, players can't break or place blocks anywhere unless **Lobby Settings** (`/options`) allows it. Operators can still build with the admin build bypass. In a match or minigame the kit's **Break Blocks** and **Place Blocks** settings apply instead, and only blocks placed during that match can be broken.
+
 `/tournament` is the main menu. Everything below starts from there unless a command is given.
 
 ## Events
 
-**Round Robin.** Everyone plays everyone. Matches run in parallel as players and arena copies free up. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu.
+**Round Robin.** Everyone plays everyone. Matches run in parallel as players and arena copies free up. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu. If something goes wrong, open the match from **Matches**:
+
+- **Change Result** fixes a finished match's score. The standings update right away.
+- **Replay Match** clears a finished match so it's played again.
+- **Change Score** corrects a live match's round wins.
 
 **Duel.** `/duel` starts a single match outside any event.
 
@@ -49,13 +55,15 @@ Minigames that need building have their own page in **Setup Tools** → **Miniga
 - **Mace Race courses.** Choose **New Course**, name it, and you get a hotbar of building tools. Right-click the blaze rod to drop a checkpoint where you stand, even in midair. Sneak to place it on the block you're looking at instead. The other tools change a checkpoint's mob, move it, insert one before it, or remove it, and the bed sets the start. Checkpoints glow and are joined by a particle trail while you build. The last checkpoint is the finish. Courses made with the old named-mob setup show an **Import** button.
 - **Manhunt.** Choose **Prepare a Fresh End** before each game. It takes a few seconds, and the End stays frozen until the game starts.
 
+During a minigame, **Manage Players** lets you correct a player's score (hill points, time as Juggernaut, Winner Stays On wins, a finished Combo turn, or lives left) or withdraw them.
+
 If the server restarts mid-event, a tournament comes back paused with its results so far, and a minigame comes back stopped with its standings. Everyone returns to the lobby with their own items.
 
 ## Watching
 
 `/spectate` lists live matches and minigames. Spectators fly in Spectator mode inside the arena and show up as small allays to the fighters (hidden when close, or if the kit says so). `/lobby` leaves.
 
-The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leaderboard where you stand. Players can click a match on it to watch. **Display Colors** switches the color scheme for the board, holograms, vote numbers and fireworks: Ocean, Amethyst, Sunset, Gold, Mint, Crimson, Frost or Mono.
+The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leaderboard where you stand. Players can click a match on it to watch. Switching rounds, standings or pages only changes the board for the player who clicked. Everyone else keeps the live board, and **Back to live view** returns to it. **Display Colors** switches the color scheme for the board, holograms, vote numbers and fireworks: Ocean, Amethyst, Sunset, Gold, Mint, Crimson, Frost or Mono.
 
 ## Votes
 

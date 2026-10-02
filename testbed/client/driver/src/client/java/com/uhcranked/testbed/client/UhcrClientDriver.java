@@ -345,7 +345,7 @@ public final class UhcrClientDriver implements ClientModInitializer {
         if (client.player == null || client.getNetworkHandler() == null) throw new IllegalStateException("Client is not connected");
         String type = request.get("type").getAsString();
         if (type.equals("command")) {
-            String command = request.get("command").getAsString().replaceFirst("^/+", "");
+            String command = request.get("command").getAsString().replaceFirst("^/", "");
             client.getNetworkHandler().sendChatCommand(command);
             appendEvent("actor.command", Map.of("alias", client.getSession().getUsername(),
                     "command", command, "actionId", actionId));

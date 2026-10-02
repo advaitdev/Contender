@@ -86,6 +86,27 @@ public class Probe extends JavaPlugin implements Listener {
                 }
                 case "savemap" -> c().getArenas().saveBlocks(c().getMapManager().getMap(a[1])).whenComplete((ok, fail) -> getLogger().info("savemap " + (fail == null ? "ok" : fail.toString())));
                 case "endduel" -> c().getDuels().duels().forEach(d -> d.endNow());
+                case "createmap" -> {
+                    long start = System.currentTimeMillis();
+                    c().getArenas().create(Bukkit.getPlayer(a[1]), a[2], Integer.parseInt(a[3])).whenComplete((map, fail) ->
+                            getLogger().info("createmap " + (fail == null ? "ok " + map.getId() : fail.toString()) + " in " + (System.currentTimeMillis() - start) + " ms"));
+                }
+                case "setspawn" -> {
+                    var map = c().getMapManager().getMap(a[1]);
+                    c().getArenas().setSpawn(map, a[2], new org.bukkit.Location(Bukkit.getWorld(a[3]), Double.parseDouble(a[4]), Double.parseDouble(a[5]), Double.parseDouble(a[6])));
+                    s.sendMessage("spawn " + a[2] + " set");
+                }
+                case "phases" -> {
+                    StringBuilder line = new StringBuilder("phases:");
+                    for (var d : c().getDuels().duels()) line.append(' ').append(d.displayName()).append('=').append(d.phase()).append("/r").append(d.round());
+                    s.sendMessage(line.toString());
+                }
+                case "arenas" -> {
+                    StringBuilder line = new StringBuilder(a[1] + ":");
+                    for (var copy : c().getArenas().copies(a[1])) line.append(' ').append(copy.slot()).append('=').append(copy.status()).append(copy.isDirty() ? "*" : "");
+                    s.sendMessage(line.toString());
+                }
+                case "dirtyall" -> c().getArenas().copies(a[1]).forEach(copy -> { if (copy.status() == me.advait.contender.arena.ArenaCopy.Status.IN_USE) copy.markDirty(); });
                 case "game" -> {
                     var type = c().getMinigames().type(a[1]);
                     var map = a[2].equals("-") ? null : c().getMapManager().getMap(a[2]);

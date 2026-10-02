@@ -53,6 +53,7 @@ public final class ArenaService extends Module {
     private final Map<ArenaCopy, List<CompletableFuture<Void>>> urgent = new LinkedHashMap<>();
     private final Map<Integer, String> trusted = new HashMap<>();
     private ArenaCopy pasting;
+    private static final long PASTE_LOG_MILLIS = Long.getLong("contender.pasteLogMillis", 2000);
     private boolean closed;
 
     public ArenaService(Contender plugin, MapManager maps) {
@@ -80,6 +81,9 @@ public final class ArenaService extends Module {
         applyRules(world);
         readState();
         for (ArenaMap map : maps.getMaps()) rebuildPool(map);
+        // Copies saved on a clean stop are reused without pasting, so nothing would read the schematics until the
+        // first round reset of the show, which would then wait for it. Read them now in the background instead.
+        for (ArenaMap map : maps.getMaps()) if (map.isComplete()) template(map);
         tasks.repeat(10, 5, this::work);
     }
 
@@ -300,7 +304,9 @@ public final class ArenaService extends Module {
         if (!forRound) copy.status(ArenaCopy.Status.PASTING);
         BlockBounds bounds = copy.layout().getBounds();
         long started = System.nanoTime();
+        long[] stages = new long[2]; // when chunks were ready, when the paste finished
         chunks.run(world, bounds, () -> {
+            stages[0] = System.nanoTime();
             clearAllEntities(copy);
             var target = BukkitAdapter.adapt(world);
             return async(() -> {
@@ -309,6 +315,7 @@ public final class ArenaService extends Module {
                             .to(BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()))
                             .ignoreAirBlocks(false).copyEntities(true).copyBiomes(false).build());
                 }
+                stages[1] = System.nanoTime();
                 return null;
             });
         }).whenComplete((ignored, failure) -> {
@@ -330,7 +337,8 @@ public final class ArenaService extends Module {
                 trusted.put(copy.slot(), schematic);
             }
             long millis = (System.nanoTime() - started) / 1_000_000;
-            if (millis > 2000) plugin.getLogger().info("Pasted " + copy.mapId() + " copy " + copy.slot() + " in " + millis + " ms.");
+            if (millis > PASTE_LOG_MILLIS) plugin.getLogger().info("Pasted " + copy.mapId() + " copy " + copy.slot() + " in " + millis + " ms (loading chunks "
+                    + (stages[0] - started) / 1_000_000 + " ms, pasting " + (stages[1] - stages[0]) / 1_000_000 + " ms).");
             tasks.later(1, this::work);
         });
     }

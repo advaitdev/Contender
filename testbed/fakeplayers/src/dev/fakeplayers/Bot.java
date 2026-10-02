@@ -95,6 +95,8 @@ public class Bot extends ServerPlayer {
                 rehome(this.getBukkitEntity().getLocation());
                 remember(this.getBukkitEntity().getLocation()); // a teleport, not a move
             });
+            case net.minecraft.network.protocol.game.ClientboundSoundPacket sound -> logSound(sound.getSound().value().location().toString(), sound.getVolume(), sound.getPitch());
+            case net.minecraft.network.protocol.game.ClientboundSoundEntityPacket sound -> logSound(sound.getSound().value().location().toString(), sound.getVolume(), sound.getPitch());
             case ClientboundSystemChatPacket chat -> ChatCapture.record(this, chat.overlay() ? "actionbar" : "system", chat.content());
             case ClientboundPlayerChatPacket chat -> ChatCapture.record(this, "chat", chat.chatType().decorate(
                     chat.unsignedContent() != null ? chat.unsignedContent() : Component.literal(chat.body().content())));
@@ -104,6 +106,14 @@ public class Bot extends ServerPlayer {
             case ClientboundSetActionBarTextPacket bar -> ChatCapture.record(this, "actionbar", bar.text());
             default -> { }
         }
+    }
+
+    /** With /bots sounds on, every sound a bot hears goes to the server log, to find out what's making a noise. */
+    static volatile boolean logSounds;
+
+    private void logSound(String sound, float volume, float pitch) {
+        if (logSounds) org.bukkit.Bukkit.getLogger().info("[FakePlayers] " + this.getGameProfile().name() + " heard " + sound
+                + String.format(java.util.Locale.ROOT, " (volume %.2f, pitch %.2f)", volume, pitch));
     }
 
     @Override

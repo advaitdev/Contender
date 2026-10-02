@@ -98,7 +98,8 @@ public class Probe extends JavaPlugin implements Listener {
                 }
                 case "phases" -> {
                     StringBuilder line = new StringBuilder("phases:");
-                    for (var d : c().getDuels().duels()) line.append(' ').append(d.displayName()).append('=').append(d.phase()).append("/r").append(d.round());
+                    for (var d : c().getDuels().duels()) line.append(' ').append(d.displayName()).append('=').append(d.phase()).append("/r").append(d.round())
+                            .append(" score=").append(String.join("-", d.teams().stream().map(t -> String.valueOf(t.score())).toList()));
                     s.sendMessage(line.toString());
                 }
                 case "buildtest" -> {

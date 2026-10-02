@@ -58,6 +58,12 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
     private Phase phase = Phase.SORTING;
     private int round;
     private int draws;
+    /** Bumped by a replay, so steps scheduled for the replaced round do nothing. */
+    private int roundToken;
+    /** The last round that was scored, so a replay can take its point back. */
+    private DuelTeam lastRoundWinner;
+    private int lastRoundNumber;
+    private boolean lastRoundCounted;
     private boolean resultReported;
     private DuelResult result;
 
@@ -102,6 +108,30 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
      * A director's correction of the round wins, one score per side. Each stays below the number needed to
      * win; End Match Now finishes a match.
      */
+    /**
+     * Plays a round again: the one being fought, or the one that just ended (its point is taken back). The arena is
+     * reset and the round starts over with the same score, for when someone disconnected or something glitched.
+     */
+    public void replayRound() {
+        if (isOver() || phase == Phase.ENDING || phase == Phase.CLOSED) throw new IllegalStateException("This match has already ended.");
+        boolean fighting = phase == Phase.FIGHTING;
+        if (!fighting && !lastRoundCounted) throw new IllegalStateException("No round has been played yet.");
+        int replayed = fighting ? round : lastRoundNumber;
+        roundToken++;
+        if (!fighting) {
+            if (lastRoundWinner == null) draws = Math.max(0, draws - 1);
+            else lastRoundWinner.setScore(Math.max(0, lastRoundWinner.score() - 1));
+        }
+        lastRoundCounted = false;
+        hud.hide();
+        round = replayed - 1;
+        Msg.send(audience(), Msg.text("Round " + replayed + " will be played again.", DialogPalette.ACCENT));
+        Msg.notice(audience(), Msg.text("Replaying round " + replayed + "  ", DialogPalette.ACCENT).append(scoreLine()));
+        plugin.getLogger().info(displayName() + ": a director is replaying round " + replayed + ".");
+        resetRound();
+        plugin.getStages().refreshDisplays();
+    }
+
     public void correctScores(List<Integer> scores) {
         if (isOver() || phase == Phase.ENDING || phase == Phase.CLOSED) throw new IllegalStateException("This match has already ended.");
         if (scores.size() != teams.size()) throw new IllegalArgumentException("Give a score for each side.");
@@ -256,7 +286,9 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
     private void countdown(int seconds, boolean sorting, Runnable then) {
         int[] remaining = {seconds};
         BukkitTask[] task = new BukkitTask[1];
+        int token = roundToken;
         Runnable step = () -> {
+            if (token != roundToken) { tasks.cancel(task[0]); return; }
             int left = remaining[0]--;
             if (left <= 0) {
                 tasks.cancel(task[0]);
@@ -283,7 +315,8 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         if (!absent.isEmpty()) {
             // Hold the countdown until the side returns; its forfeit timer ends the match if it doesn't.
             Msg.actionBar(audience(), Msg.text("Waiting for " + absent.getFirst().name() + " to reconnect", DialogPalette.WARNING));
-            tasks.later(20, this::beginFight);
+            int token = roundToken;
+            tasks.later(20, () -> { if (token == roundToken) beginFight(); });
             return;
         }
         if (round == 1) {
@@ -317,6 +350,10 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         phase = Phase.ROUND_OVER;
         if (winner == null) draws++;
         else winner.addPoint();
+        lastRoundWinner = winner;
+        lastRoundNumber = round;
+        lastRoundCounted = true;
+        int token = roundToken;
         Set<UUID> audience = audience();
         var theme = plugin.getThemes().current();
         Component scoreLine = scoreLine();
@@ -329,13 +366,13 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         }
         hud.score(teams, winner);
         DuelTeam champion = winner != null && winner.score() >= settings.winsNeeded() ? winner : null;
-        if (champion != null) { tasks.later(30, () -> finish(champion, DuelResult.Reason.FINISHED)); return; }
+        if (champion != null) { tasks.later(30, () -> { if (token == roundToken) finish(champion, DuelResult.Reason.FINISHED); }); return; }
         if (draws > MAX_DRAWS) {
             DuelTeam leader = leader();
-            tasks.later(30, () -> finish(leader, DuelResult.Reason.FINISHED));
+            tasks.later(30, () -> { if (token == roundToken) finish(leader, DuelResult.Reason.FINISHED); });
             return;
         }
-        tasks.later(50, this::resetRound);
+        tasks.later(50, () -> { if (token == roundToken) resetRound(); });
     }
 
     private DuelTeam leader() {
@@ -370,8 +407,9 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
     }
 
     private void attemptReset(int attempt) {
+        int token = roundToken;
         plugin.getArenas().resetForRound(arena).whenComplete((ignored, failure) -> {
-            if (phase != Phase.RESETTING) return;
+            if (phase != Phase.RESETTING || token != roundToken) return;
             if (failure != null) {
                 plugin.getLogger().log(Level.WARNING, displayName() + ": arena reset failed (attempt " + (attempt + 1) + "): " + Msg.reason(failure));
                 if (attempt < 2) { tasks.later(60, () -> attemptReset(attempt + 1)); return; }
@@ -385,7 +423,8 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         if (isOver()) return;
         if (teams.stream().anyMatch(team -> online(team.players()).isEmpty())) {
             // A side is entirely offline; its forfeit timer decides. Check again shortly.
-            tasks.later(20, this::startRound);
+            int token = roundToken;
+            tasks.later(20, () -> { if (token == roundToken) startRound(); });
             return;
         }
         round++;
@@ -395,7 +434,8 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
             if (player == null || player.isDead()) continue;
             if (!teleport(player, entry.getValue())) {
                 plugin.getLogger().warning(displayName() + ": could not move " + player.getName() + " to their spawn; retrying.");
-                tasks.later(20, this::retryStart);
+                int token = roundToken;
+                tasks.later(20, () -> { if (token == roundToken) retryStart(); });
                 round--;
                 return;
             }
@@ -454,7 +494,7 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
             Msg.title(audience, Msg.text("Draw", theme.secondary()), scoreLine(), 4, 60, 10);
             Msg.send(audience, Msg.text("The match ended in a draw.", DialogPalette.MUTED));
         } else {
-            Msg.title(audience, Msg.text(winner.name(), theme.primary()),
+            Msg.title(audience, me.advait.contender.util.StringUtil.headed(winner.players(), Msg.text(winner.name(), theme.primary())),
                     Msg.text(reason == DuelResult.Reason.FORFEIT ? "wins by forfeit" : "wins the match  ", DialogPalette.MUTED)
                             .append(reason == DuelResult.Reason.FORFEIT ? Component.empty() : scoreLine()), 4, 60, 10);
             Msg.send(audience, Msg.text(winner.name(), DialogPalette.ACCENT).append(Msg.text(

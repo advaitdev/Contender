@@ -35,6 +35,7 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 - **Change Result** fixes a finished match's score. The standings update right away.
 - **Replay Match** clears a finished match so it's played again.
 - **Change Score** corrects a live match's round wins.
+- **Replay Round** plays a live match's round again. Mid-fight, the round restarts on a fresh arena. Between rounds, the round that just ended is replayed and its point is taken back. `/replayround [player]` does the same for any match, including one-off duels. With no name, it uses the match you're in or watching.
 
 **Duel.** `/duel` starts a single match outside any event.
 
@@ -54,6 +55,8 @@ Minigames that need building have their own page in **Setup Tools** → **Miniga
 
 - **Mace Race courses.** Choose **New Course**, name it, and you get a hotbar of building tools. Right-click the blaze rod to drop a checkpoint where you stand, even in midair. Sneak to place it on the block you're looking at instead. The other tools change a checkpoint's mob, move it, insert one before it, or remove it, and the bed sets the start. Checkpoints glow and are joined by a particle trail while you build. The last checkpoint is the finish. Courses made with the old named-mob setup show an **Import** button.
 - **Manhunt.** Choose **Prepare a Fresh End** before each game. It takes a few seconds, and the End stays frozen until the game starts.
+
+When a minigame starts, directors and spectators who aren't busy are brought into the arena to watch, and they go back to the lobby when it ends. Turn this off with `minigames.bring-watchers: false` in `config.yml`.
 
 During a minigame, **Manage Players** lets you correct a player's score (hill points, time as Juggernaut, Winner Stays On wins, a finished Combo turn, or lives left) or withdraw them.
 
@@ -154,7 +157,7 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 | `/hacks`, `/hackers`, `/pickhacker`, `/sabotage` | Hacks and sabotage |
 | `/interview`, `/uninterview` | Interviews |
 | `/setinterviewerposition`, `/setintervieweeposition` | Interview marks |
-| `/endduel`, `/cancelduel` | End a match now (keeping the score) or cancel it |
+| `/endduel`, `/cancelduel`, `/replayround` | End a match now (keeping the score), cancel it, or replay a round |
 | `/cancelall` | Stop everything and send everyone to the lobby |
 | `/contender status`, `/contender reload` | Health check, reload config |
 
@@ -164,7 +167,8 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 
 | Command | What it does |
 | --- | --- |
-| `/bots spawn 8 [radius]` | Spawns Bot_1 to Bot_8 on random spots around you |
+| `/bots spawn 8` | Spawns Bot_1 to Bot_8. They join like real players, so they arrive at the lobby |
+| `/bots spawn 8 16` | Spawns them spread out within 16 blocks of you instead |
 | `/bots spawn Alice Bob` | Spawns bots with these names where you stand |
 | `/bots wander on\|off` | Bots walk around near where they are |
 | `/bots fight on\|off` | Bots chase and hit the nearest player |

@@ -25,7 +25,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <pre>
  * Spawning and removing
- *   /bots spawn &lt;count&gt; [radius]       Bot_1, Bot_2, ... on random spots around you (default radius 16)
+ *   /bots spawn &lt;count&gt; [radius]       Bot_1, Bot_2, ... joining like real players (so a lobby plugin places
+ *                                       them); with a radius, spread out around you and kept there instead
  *   /bots spawn &lt;name...&gt;              bots with these names, where you stand
  *   /bots spawnn &lt;count&gt; [prefix]       prefix1..prefixN where you stand
  *   /bots remove [all|name...]          disconnect bots
@@ -46,6 +47,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * Diagnostics
  *   /bots chatlog &lt;off|chat|all&gt;       record what bots see to plugins/FakePlayers/chat.log
  *   /bots verify &lt;on|off&gt;              encode every packet like a real connection, to catch broken ones
+ *   /bots sounds &lt;on|off&gt;              log every sound the bots hear
  *   /bots sys                           memory, load and CPUs
  * </pre>
  * Ticks slower than 35 ms are appended to plugins/FakePlayers/slow-ticks.log.
@@ -106,7 +108,9 @@ public class FakePlayersPlugin extends JavaPlugin implements Listener {
                 case "spawn" -> {
                     if (args.length < 2) return false;
                     if (args[1].matches("\\d+")) {
-                        int radius = args.length > 2 ? Integer.parseInt(args[2]) : 16;
+                        // Without a radius they join like real players, so the server's join handling (a lobby
+                        // teleport, say) places them. With one, they're spread out around you and kept there.
+                        int radius = args.length > 2 ? Integer.parseInt(args[2]) : 0;
                         spawnSpread(sender, Integer.parseInt(args[1]), radius, origin(sender));
                     } else {
                         for (int i = 1; i < args.length; i++) spawn(sender, args[i], origin(sender), 8);
@@ -226,6 +230,10 @@ public class FakePlayersPlugin extends JavaPlugin implements Listener {
                     ChatCapture.setMode(this, mode);
                     sender.sendMessage("Chat capture " + mode.name().toLowerCase(Locale.ROOT) + " (plugins/FakePlayers/chat.log)");
                 }
+                case "sounds" -> {
+                    Bot.logSounds = args.length < 2 ? !Bot.logSounds : on(args[1]);
+                    sender.sendMessage("Sound logging " + (Bot.logSounds ? "on (server log)" : "off"));
+                }
                 case "verify" -> {
                     FakeConnection.verifyPackets = args.length < 2 ? !FakeConnection.verifyPackets : on(args[1]);
                     sender.sendMessage("Packet checks " + (FakeConnection.verifyPackets ? "on" : "off"));
@@ -282,14 +290,14 @@ public class FakePlayersPlugin extends JavaPlugin implements Listener {
                     if (bot == null) { getLogger().warning("Could not spawn " + name); return; }
                     bots.put(name, bot);
                     // Servers that send joining players to a lobby spawn would stack every bot there; put it back.
-                    Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (radius > 0) Bukkit.getScheduler().runTaskLater(this, () -> {
                         Player player = bot.getBukkitEntity();
                         if (!bot.hasDisconnected() && player.getLocation().distanceSquared(at) > 4) player.teleport(at);
                     }, 5L);
                 });
             }, i / SPAWNS_PER_TICK);
         }
-        sender.sendMessage("Spawning " + names.size() + " bots within " + radius + " blocks");
+        sender.sendMessage(radius > 0 ? "Spawning " + names.size() + " bots within " + radius + " blocks" : "Spawning " + names.size() + " bots");
     }
 
     /** Moves every bot to a random surface spot within radius of x z, in its own world, spread over ticks. */
@@ -314,8 +322,8 @@ public class FakePlayersPlugin extends JavaPlugin implements Listener {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) return List.of("spawn", "spawnn", "remove", "list", "wander", "fight", "tphere", "gather", "cmd", "sudo", "chat",
-                "tp", "attack", "use", "swing", "slot", "look", "walk", "vel", "info", "chatlog", "verify", "sys");
-        if (args.length == 2 && Set.of("wander", "fight", "verify").contains(args[0].toLowerCase(Locale.ROOT))) return List.of("on", "off");
+                "tp", "attack", "use", "swing", "slot", "look", "walk", "vel", "info", "chatlog", "sounds", "verify", "sys");
+        if (args.length == 2 && Set.of("wander", "fight", "verify", "sounds").contains(args[0].toLowerCase(Locale.ROOT))) return List.of("on", "off");
         if (args.length == 2 && args[0].equalsIgnoreCase("chatlog")) return List.of("off", "chat", "all");
         List<String> names = new ArrayList<>(bots.keySet());
         if (args.length == 2 && Set.of("cmd", "sudo", "chat", "remove").contains(args[0].toLowerCase(Locale.ROOT))) names.add("all");

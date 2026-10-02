@@ -26,7 +26,7 @@ public enum Sounds {
     SABOTAGE("entity.elder_guardian.curse", 0.6f, 1.2f),
     WHOOSH("entity.breeze.wind_burst", 0.8f, 1f),
     FIZZLE("block.beacon.deactivate", 1f, 0.9f),
-    POP("entity.item.pickup", 0.8f, 1.2f);
+    POP("block.note_block.bell", 0.6f, 1.6f);
 
     private final Sound sound;
 

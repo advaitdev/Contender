@@ -105,6 +105,10 @@ commands:
     description: "End a match now with its current score"
     permission: contender.master
     usage: "/endduel [player]"
+  replayround:
+    description: "Play a match's current round again, or the round that just ended"
+    permission: contender.master
+    usage: "/replayround [player]"
   cancelduel:
     description: "Cancel a match without recording a result"
     permission: contender.master

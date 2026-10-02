@@ -273,7 +273,8 @@ public final class TournamentService extends Module {
         var standings = finished.standings();
         if (standings.isEmpty()) return;
         int top = standings.getFirst().points();
-        List<String> leaders = standings.stream().filter(s -> s.points() == top).map(s -> s.entry().name()).toList();
+        List<TournamentEntry> leading = standings.stream().filter(s -> s.points() == top).map(Tournament.Standing::entry).toList();
+        List<String> leaders = leading.stream().map(TournamentEntry::name).toList();
         var theme = plugin.getThemes().current();
         Msg.broadcast(Msg.text(finished.name() + " is complete.", DialogPalette.ACCENT));
         for (int i = 0; i < Math.min(5, standings.size()); i++) {
@@ -282,8 +283,13 @@ public final class TournamentService extends Module {
                     .append(Msg.text("  " + row.points() + (row.points() == 1 ? " win" : " wins"), DialogPalette.ACCENT)));
         }
         Component subtitle = Msg.text(leaders.size() == 1 ? "wins with " + top + (top == 1 ? " point" : " points") : "tied at " + top + " points", DialogPalette.MUTED);
+        Component title = Component.empty();
+        for (int i = 0; i < leading.size(); i++) {
+            if (i > 0) title = title.append(Component.text(" & ", theme.muted()));
+            title = title.append(me.advait.contender.util.StringUtil.headed(leading.get(i).players(), Component.text(leading.get(i).name(), theme.primary())));
+        }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Msg.title(player, Component.text(String.join(" & ", leaders), theme.primary()), subtitle, 10, 70, 20);
+            Msg.title(player, title, subtitle, 10, 70, 20);
             Sounds.VICTORY.play(player);
         }
         plugin.getStages().ended(stage);

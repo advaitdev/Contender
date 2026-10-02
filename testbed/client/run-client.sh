@@ -41,6 +41,8 @@ if [ "${1:-}" != "--show" ]; then
   export DISPLAY=:99
   export LIBGL_ALWAYS_SOFTWARE=1
 fi
+# A silent audio device, so the sound system starts and the driver can log which sounds play.
+export ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null}
 export JAVA_TOOL_OPTIONS="-Duhcr.testbed=true -Duhcr.testbed.runId=$RUN_ID -Duhcr.testbed.tokenFile=$RUN/token -Duhcr.testbed.actionsFile=$RUN/artifacts/actions.jsonl -Duhcr.testbed.client.port=25999 -Duhcr.testbed.client.artifacts=$RUN/artifacts"
 cd "$RUN/game"
 exec java -Xmx2G \

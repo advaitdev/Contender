@@ -121,6 +121,11 @@ public final class Commands {
             if (duel != null) { duel.endNow(); Msg.success(sender, "Ending the match with the current score."); }
             return true;
         }, online);
+        set(commands, "replayround", (sender, command, label, args) -> {
+            Duel duel = targetDuel(sender, args);
+            if (duel != null) { duel.replayRound(); Msg.success(sender, "Replaying the round."); }
+            return true;
+        }, online);
         set(commands, "cancelduel", (sender, command, label, args) -> {
             Duel duel = targetDuel(sender, args);
             if (duel == null) return true;

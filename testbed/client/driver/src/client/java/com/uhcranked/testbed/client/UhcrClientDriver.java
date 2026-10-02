@@ -72,6 +72,11 @@ public final class UhcrClientDriver implements ClientModInitializer {
             controller.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
             controller.start();
             appendEvent("client.ready", Map.of("port", port));
+            // Log every sound the client plays, including ones it makes on its own (item pickups, firework bursts),
+            // so a noise can be traced to its source. Lines start with [sound] in the client log.
+            net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STARTED.register(client ->
+                    client.getSoundManager().registerListener((sound, soundSet, range) ->
+                            org.slf4j.LoggerFactory.getLogger("testbed").info("[sound] " + sound.getId() + " " + sound.getCategory())));
         } catch (Exception failure) {
             throw new IllegalStateException("UHCR render driver refused to start", failure);
         }

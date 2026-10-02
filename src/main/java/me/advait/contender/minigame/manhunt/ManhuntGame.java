@@ -192,8 +192,17 @@ public final class ManhuntGame extends Minigame {
         Component title = Component.text(winner.many + " win", winner == Team.RUNNER ? theme.primary() : theme.secondary());
         Msg.broadcast(Msg.text(name + " is over. ", DialogPalette.ACCENT).append(title));
         Msg.broadcast(Msg.text("  " + winner.many + ": " + names(winner), DialogPalette.TEXT));
+        // The winners' heads, with their names, under the team's title.
+        Component winners = Component.empty();
+        boolean first = true;
+        for (Participant participant : roster()) {
+            if (team(participant.id) != winner || participant.status == Status.WITHDRAWN) continue;
+            if (!first) winners = winners.append(Msg.text(", ", DialogPalette.MUTED));
+            winners = winners.append(me.advait.contender.util.StringUtil.headed(List.of(participant.id), Msg.text(participant.name, DialogPalette.MUTED)));
+            first = false;
+        }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Msg.title(player, title, Msg.text(names(winner), DialogPalette.MUTED), 8, 70, 16);
+            Msg.title(player, title, winners, 8, 70, 16);
             Sounds.VICTORY.play(player);
         }
         for (Participant participant : roster()) {

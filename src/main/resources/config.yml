@@ -68,3 +68,8 @@ tablist:
 # 0 is transparent; 100 is solid. Change this in /options > Board Background.
 tournament-board:
   background-opacity: 30
+
+minigames:
+  # Directors and spectators who aren't busy are brought to watch when a minigame starts, and sent back to the
+  # lobby when it ends. Round robin tournaments don't do this.
+  bring-watchers: true

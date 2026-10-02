@@ -465,6 +465,8 @@ public final class TournamentDialogs {
         if (duel != null && !tournament.isCancelled()) {
             buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate Match", ACCENT,
                     "Join this match as a spectator.", p -> { current(id); plugin.getSpectate().watch(p, duel); p.closeDialog(); }));
+            buttons.add(menuAction(player, DialogIcon.REFRESH, "Replay Round", TEXT,
+                    "Play this round again, or the one that just ended.", p -> confirmReplayRound(p, id, match, page)));
             if (duel.settings().winsNeeded() > 1) buttons.add(menuAction(player, DialogIcon.SETTINGS, "Change Score", TEXT,
                     "Fix the round wins so far.", p -> changeLiveScore(p, id, match, page)));
             buttons.add(menuAction(player, DialogIcon.SAVE, "End Match Now", TEXT,
@@ -517,6 +519,17 @@ public final class TournamentDialogs {
                 nav(player, DialogIcon.SAVE, "Save", ACCENT, "Save this score.", (p, view) ->
                         save.accept(p, new int[] {Dialogs.number(view, "first", 0, max), Dialogs.number(view, "second", 0, max)})), NAV_WIDTH);
         dialogs.show(player, title, List.of(body(intro)), inputs, buttons, 2, NAV_WIDTH, null);
+    }
+    private void confirmReplayRound(Player player, UUID id, TournamentMatch match, int page) {
+        menu(player, "Replay Round?", DialogText.muted("The round being played stops and starts over on a fresh arena.\n"
+                + "Between rounds, the round that just ended is played again and its point is taken back."), List.of(
+                menuAction(player, DialogIcon.REFRESH, "Replay Round", ACCENT, "Start the round over.", p -> {
+                    current(id);
+                    var duel = plugin.getTournaments().playing().get(match.number());
+                    if (duel == null) throw new IllegalStateException("This match isn't being played right now.");
+                    duel.replayRound();
+                    match(p, id, match.number(), page);
+                })), p -> match(p, id, match.number(), page));
     }
     private void confirmReplay(Player player, UUID id, TournamentMatch match, int page) {
         Tournament tournament = current(id);

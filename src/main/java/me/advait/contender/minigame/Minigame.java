@@ -283,6 +283,20 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         plugin.getStages().refreshDisplays();
     }
 
+    /**
+     * Directors and spectators who aren't busy come to watch as the game starts (minigames.bring-watchers), so the
+     * crew is in place for the countdown. They go back to the lobby when it ends, like anyone watching.
+     */
+    private void bringWatchers() {
+        if (!plugin.getConfig().getBoolean("minigames.bring-watchers", true)) return;
+        for (Player viewer : List.copyOf(Bukkit.getOnlinePlayers())) {
+            if (viewer.isDead() || !plugin.getRegistry().isFree(viewer.getUniqueId()) || roster.containsKey(viewer.getUniqueId())) continue;
+            if (plugin.getRoleManager().getRole(viewer.getUniqueId()) == me.advait.contender.role.PlayerRole.CONTESTANT) continue;
+            try { plugin.getSpectate().watch(viewer, this); }
+            catch (RuntimeException failure) { plugin.getLogger().info("Could not bring " + viewer.getName() + " to watch " + name + ": " + failure.getMessage()); }
+        }
+    }
+
     private void enter(List<Player> players) {
         List<Player> present = new ArrayList<>();
         for (Player player : players) {
@@ -303,6 +317,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         state = State.COUNTDOWN;
         save();
         plugin.getStages().refreshDisplays();
+        bringWatchers();
         countdown(countdownSeconds(), () -> {
             state = State.RUNNING;
             // Anyone who disconnected during the countdown is handled by the game's own rules now.
@@ -461,8 +476,9 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         }
         if (rows.isEmpty()) return;
         String winner = nameOf(rows.getFirst().player(), rows.getFirst().fallbackName());
+        Component title = me.advait.contender.util.StringUtil.headed(List.of(rows.getFirst().player()), Component.text(winner, theme.primary()));
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Msg.title(player, Component.text(winner, theme.primary()), Msg.text("wins " + name, DialogPalette.MUTED), 8, 70, 16);
+            Msg.title(player, title, Msg.text("wins " + name, DialogPalette.MUTED), 8, 70, 16);
             Sounds.VICTORY.play(player);
         }
         Player champion = Bukkit.getPlayer(rows.getFirst().player());

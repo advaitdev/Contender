@@ -33,7 +33,7 @@ Useful commands:
 - `bots spawn <names...>` or `bots spawn <count> [radius]`, `bots remove [all|name]`, `bots list`
 - Movement: `bots wander on|off [names]`, `bots fight on|off [names]`, `bots tphere`, `bots gather <radius> [x z]`, `bots walk|look|vel|tp`
 - Actions: `bots cmd|chat <name|all> ...`, `bots attack|use|swing|slot|info <name> ...`
-- Diagnostics: `bots chatlog off|chat|all` (what bots see, in `plugins/FakePlayers/chat.log`), `bots verify on|off` (encode every packet like a real connection), `bots sys`. Slow ticks go to `plugins/FakePlayers/slow-ticks.log`.
+- Diagnostics: `bots chatlog off|chat|all` (what bots see, in `plugins/FakePlayers/chat.log`), `bots sounds on|off` (every sound a bot is sent, in the server log), `bots verify on|off` (encode every packet like a real connection), `bots sys`. Slow ticks go to `plugins/FakePlayers/slow-ticks.log`.
 
 The fake players plugin is UHCR's FakePlayers tool (`tools/fakeplayers` in the UHCR repos) without its MultiPaper parts. Bots confirm teleports and respawn like a vanilla client, and their movement fires PlayerMoveEvent the way a real client's does, so plugins can hold them still or keep them inside an area. `fakeplayers/build.sh` builds it against the test server, and the built jar is also kept in `dist/FakePlayers.jar`.
 - `probe game <type> <map|-> <kit|-> <k=v,...|-> <players...>` starts a minigame (`mace_race`, `combo`, `manhunt`, `last_stand`, `king_of_the_hill`, `winner_stays_on`, `juggernaut`)
@@ -59,6 +59,8 @@ client/check-dialogs.py              # open every menu and flag buttons below th
 ```
 
 Give the client permissions with `tools/rcon.py "op Render_1" "role Render_1 director"`. Move its camera with server teleports, for example `tp Render_1 x y z yaw pitch` or `execute as Render_1 at @s run tp @s ~ ~ ~ facing entity Alice eyes`.
+
+The client plays sound through a silent audio device, and every sound it plays goes to `.work/client/client.log` as a `[sound]` line. That includes sounds the client makes on its own, like item pickups and firework bursts. Use it to find where a noise comes from.
 
 Most players see a smaller GUI than the default 640x360. Minecraft's Auto GUI scale is 4 at 1080p (480x270) and gives 426x240 at 1440p and 4K. Check menus used during the show at those sizes with `GUI_SCALE=3 client/restart-client.sh` (426x240) and `WIDTH=1920 HEIGHT=1080 GUI_SCALE=4 client/restart-client.sh` (480x270). Long setup forms may scroll. `client/run-client.sh --show` opens a visible window instead of using Xvfb.
 

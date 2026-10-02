@@ -284,6 +284,21 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     }
 
     /**
+     * On a standard tab list, the game's players are listed in standings order, above everyone else: the turn
+     * queue in Combo, points in King of the Hill, and so on. (Vanilla would put anyone in Spectator mode, such as
+     * players waiting their turn, at the bottom in name order.)
+     */
+    private void applyListOrder() {
+        List<StandingsLayout.Row> rows = standings();
+        int order = rows.size() + 1;
+        for (StandingsLayout.Row row : rows) {
+            Player player = Bukkit.getPlayer(row.player());
+            if (player != null && player.getPlayerListOrder() != order) player.setPlayerListOrder(order);
+            order--;
+        }
+    }
+
+    /**
      * Directors and spectators who aren't busy come to watch as the game starts (minigames.bring-watchers), so the
      * crew is in place for the countdown. They go back to the lobby when it ends, like anyone watching.
      */
@@ -317,6 +332,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         state = State.COUNTDOWN;
         save();
         plugin.getStages().refreshDisplays();
+        applyListOrder();
         bringWatchers();
         countdown(countdownSeconds(), () -> {
             state = State.RUNNING;
@@ -337,6 +353,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
             tasks.repeat(20, 20, () -> {
                 if (state != State.RUNNING) return;
                 tick();
+                applyListOrder();
                 plugin.getStages().refreshDisplays();
             });
             save();
@@ -406,6 +423,10 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
             if (player == null || player.isDead()) continue;
             player.sendActionBar(Component.empty());
             plugin.getSnapshots().restoreToLobby(player);
+        }
+        for (Participant participant : roster.values()) {
+            Player player = Bukkit.getPlayer(participant.id);
+            if (player != null) player.setPlayerListOrder(0);
         }
         if (tasks != null) tasks.close();
         plugin.getHackers().refresh();

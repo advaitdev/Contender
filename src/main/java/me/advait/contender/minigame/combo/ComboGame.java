@@ -134,7 +134,9 @@ public final class ComboGame extends ArenaGame {
             player.teleport(watchSpot());
         }
         for (Participant participant : roster.values()) participant.value = "Waiting";
-        broadcast(Msg.text("Turn order: " + String.join(", ", roster.values().stream().filter(p -> p.status == Status.PLAYING).map(p -> p.name).toList()), DialogPalette.MUTED));
+        // Everyone online, so directors and the crew see it too, not just the players.
+        Msg.broadcast(Msg.text("Turn order: ", DialogPalette.MUTED).append(Msg.text(String.join(", ", roster.values().stream()
+                .filter(p -> p.status == Status.PLAYING).map(p -> p.name).toList()), DialogPalette.TEXT)));
         broadcast(Msg.text("Land as many hits as you can before the bot hits back." + (retries > 0 ? " A hit back within your first " + retries + " restarts the try." : ""), DialogPalette.MUTED));
     }
 
@@ -438,14 +440,15 @@ public final class ComboGame extends ArenaGame {
     // ---- Results -------------------------------------------------------------------------------
 
     @Override protected List<StandingsLayout.Row> standings() {
+        // While the game runs, everyone stays in turn order so the board reads as a queue; at the end it's a ranking.
         List<Participant> order = new ArrayList<>(roster().stream().filter(p -> p.status != Status.WITHDRAWN || p.score > 0).toList());
-        order.sort(Comparator.comparingInt((Participant p) -> p.status == Status.DONE ? 0 : pending(p) ? 1 : 2)
-                .thenComparing(Comparator.comparingDouble((Participant p) -> p.score).reversed()));
         if (finished()) order.sort(Comparator.comparingDouble((Participant p) -> p.status == Status.DONE ? p.score : -1).reversed());
+        UUID next = fighter == null ? null : order.stream().filter(p -> pending(p) && !p.id.equals(fighter)).map(p -> p.id).findFirst().orElse(null);
+        if (fighter == null && !finished()) next = order.stream().filter(this::pending).map(p -> p.id).findFirst().orElse(null);
         List<StandingsLayout.Row> rows = new ArrayList<>();
         for (Participant p : order) {
             String value = p.status == Status.DONE ? p.value : p.id.equals(fighter) ? "Combo " + hits
-                    : finished() ? "No turn" : state == State.READY ? "Waiting" : p.value.isBlank() ? "Waiting" : p.value;
+                    : finished() ? "No turn" : state == State.READY ? "Waiting" : p.id.equals(next) ? "Up next" : "Waiting";
             rows.add(new StandingsLayout.Row(p.id, p.name, value, p.id.equals(fighter) || cleared.contains(p.id), p.status != Status.DONE && finished()));
         }
         return rows;

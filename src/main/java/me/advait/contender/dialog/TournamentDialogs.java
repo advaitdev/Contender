@@ -6,6 +6,7 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import me.advait.contender.Contender;
+import me.advait.contender.vote.VoteService;
 import me.advait.contender.player.PlayerIdentityResolver;
 import me.advait.contender.tab.TabStyle;
 import me.advait.contender.tournament.*;
@@ -126,7 +127,8 @@ public final class TournamentDialogs {
                 menuAction(player, DialogIcon.MAP, "Maps", TEXT, "Save arenas and set their spawns.", p -> new ArenaDialogs(plugin).open(p)),
                 menuAction(player, DialogIcon.DUEL, "Kits", TEXT, "Create kits or change their items and rules.", this::editKits),
                 menuAction(player, DialogIcon.MACE, "Minigames", TEXT, "Race courses, the Manhunt world, and other game setup.", this::minigameTools),
-                menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board, timer and vote stage. Set the lobby.", this::venue),
+                menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board and set the lobby.", this::venue),
+                menuAction(player, DialogIcon.STAR, "Vote Setup", TEXT, "Voting and judge rooms, timers and the results stage.", this::voteSetup),
                 menuAction(player, DialogIcon.BELL, "Interview Room", TEXT, "Set where hackers are interviewed.", this::interview),
                 menuAction(player, DialogIcon.GLOW, "Display Colors", TEXT, "Choose the color scheme for boards and effects.", p -> new SettingsDialogs(plugin).theme(p, this::tools)),
                 menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title above the tab list and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools)),
@@ -198,7 +200,6 @@ public final class TournamentDialogs {
     }
     private void venue(Player player) {
         var board = plugin.getBoard();
-        var votes = plugin.getVotes();
         menu(player, "Board & Lobby", DialogText.muted("Everything is placed from where you stand and the way you face."), List.of(
                 menuAction(player, DialogIcon.BOARD, "Place Board Here", TEXT, "Show the bracket on a big board in front of you.", p -> {
                     board.place(p); p.closeDialog(); Dialogs.tell(p, "Board placed in front of you.");
@@ -206,15 +207,43 @@ public final class TournamentDialogs {
                 menuAction(player, DialogIcon.SPAWN, "Set Lobby Here", TEXT, "Players return here after their games.", p -> {
                     plugin.getLobby().setLocation(p.getLocation()); Dialogs.tell(p, "Lobby set here."); venue(p);
                 }),
-                menuAction(player, DialogIcon.CLOCK, "Place Vote Timer Here", TEXT, "A big countdown during votes.", p -> {
-                    votes.placeTimer(p); p.closeDialog(); Dialogs.tell(p, "Vote timer placed.");
+                menuAction(player, DialogIcon.BOARD, "Board Background", TEXT, "Make the board background more or less see-through.", p -> new SettingsDialogs(plugin).board(p, this::venue)),
+                menuAction(player, DialogIcon.CLOSE, "Remove Board", DANGER, "Take the board down.", p -> { board.remove(); venue(p); })), this::tools);
+    }
+    private void voteSetup(Player player) {
+        var votes = plugin.getVotes();
+        var voting = votes.roomLocation(VoteService.Room.VOTING);
+        var judges = votes.roomLocation(VoteService.Room.JUDGE);
+        Component status = DialogText.lines(
+                DialogText.detail("Voting room", voting == null ? "Not set" : "Set", voting == null ? MUTED : SUCCESS),
+                DialogText.detail("Judge room", judges == null ? "Not set" : "Set", judges == null ? MUTED : SUCCESS),
+                DialogText.detail("Timers", Integer.toString(votes.timerCount()), votes.timerPlaced() ? SUCCESS : MUTED),
+                DialogText.detail("Vote stage", votes.stageLocation() == null ? "Not set" : "Set", votes.stageLocation() == null ? MUTED : SUCCESS));
+        List<ActionButton> buttons = new ArrayList<>(List.of(
+                menuAction(player, DialogIcon.SPAWN, "Set Voting Room Here", TEXT, "Contestants are sent here when a vote starts, facing the way you face.", p -> {
+                    votes.setRoom(VoteService.Room.VOTING, p.getLocation()); Dialogs.tell(p, "Voting room set here."); voteSetup(p);
+                }),
+                menuAction(player, DialogIcon.PREVIEW, "Set Judge Room Here", TEXT, "Everyone who isn't voting (spectators, camera crew, directors) is sent here.", p -> {
+                    votes.setRoom(VoteService.Room.JUDGE, p.getLocation()); Dialogs.tell(p, "Judge room set here."); voteSetup(p);
+                }),
+                menuAction(player, DialogIcon.CLOCK, "Add Vote Timer", TEXT, "Look at a wall to hang it there. Otherwise it floats in front of you.", p -> {
+                    boolean wall = votes.placeTimer(p); p.closeDialog();
+                    Dialogs.tell(p, wall ? "Vote timer hung on the wall. It shows during votes." : "Vote timer placed in front of you. It shows during votes.");
                 }),
                 menuAction(player, DialogIcon.STAR, "Set Vote Stage Here", TEXT, "Candidates gather in a circle here for the results.", p -> {
-                    votes.setStage(p.getLocation()); Dialogs.tell(p, "Vote stage set. Candidates will stand in a circle around this spot."); venue(p);
-                }),
-                menuAction(player, DialogIcon.BOARD, "Board Background", TEXT, "Make the board background more or less see-through.", p -> new SettingsDialogs(plugin).board(p, this::venue)),
-                menuAction(player, DialogIcon.CLOSE, "Remove Board", DANGER, "Take the board down.", p -> { board.remove(); venue(p); }),
-                menuAction(player, DialogIcon.CLOSE, "Remove Vote Timer", DANGER, "Forget the timer position.", p -> { votes.removeTimer(); venue(p); })), this::tools);
+                    votes.setStage(p.getLocation()); Dialogs.tell(p, "Vote stage set. Candidates will stand in a circle around this spot."); voteSetup(p);
+                })));
+        if (votes.timerPlaced()) buttons.add(menuAction(player, DialogIcon.CLOSE, "Remove Nearest Timer", DANGER, "Take down the closest timer.", p -> {
+            if (!votes.removeNearestTimer(p)) throw new IllegalStateException("No vote timer within 12 blocks.");
+            voteSetup(p);
+        }));
+        if (voting != null) buttons.add(menuAction(player, DialogIcon.CLOSE, "Remove Voting Room", DANGER, "Contestants stay where they are during votes.", p -> {
+            votes.clearRoom(VoteService.Room.VOTING); voteSetup(p);
+        }));
+        if (judges != null) buttons.add(menuAction(player, DialogIcon.CLOSE, "Remove Judge Room", DANGER, "Everyone else stays where they are during votes.", p -> {
+            votes.clearRoom(VoteService.Room.JUDGE); voteSetup(p);
+        }));
+        menu(player, "Vote Setup", status, buttons, this::tools);
     }
     private Tournament current(UUID id) {
         Tournament tournament = plugin.getTournaments().current();

@@ -52,10 +52,36 @@ public final class Commands {
         }, null);
         set(commands, "votetimer", (sender, command, label, args) -> {
             if (!(sender instanceof Player player)) { Msg.error(sender, "Use this in game."); return true; }
-            if (args.length == 1 && args[0].equalsIgnoreCase("remove")) { plugin.getVotes().removeTimer(); Msg.success(player, "Vote timer removed."); }
-            else { plugin.getVotes().placeTimer(player); Msg.success(player, "Vote timer placed. It shows during votes."); }
+            String action = args.length == 0 ? "" : args[0].toLowerCase(java.util.Locale.ROOT);
+            switch (action) {
+                case "remove" -> {
+                    if (plugin.getVotes().removeNearestTimer(player)) Msg.success(player, "Removed the nearest vote timer.");
+                    else Msg.error(player, "No vote timer within 12 blocks.");
+                }
+                case "clear" -> { plugin.getVotes().removeTimers(); Msg.success(player, "All vote timers removed."); }
+                default -> {
+                    boolean wall = plugin.getVotes().placeTimer(player);
+                    Msg.success(player, (wall ? "Vote timer hung on the wall." : "Vote timer placed in front of you.")
+                            + " It shows during votes. Timers: " + plugin.getVotes().timerCount() + ".");
+                }
+            }
             return true;
-        }, null);
+        }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove", "clear") : List.of());
+        for (var room : me.advait.contender.vote.VoteService.Room.values()) {
+            String name = room == me.advait.contender.vote.VoteService.Room.VOTING ? "setvotingroom" : "setjudgeroom";
+            String who = room == me.advait.contender.vote.VoteService.Room.VOTING ? "Contestants" : "Everyone who isn't voting";
+            set(commands, name, (sender, command, label, args) -> {
+                if (!(sender instanceof Player player)) { Msg.error(sender, "Use this in game."); return true; }
+                if (args.length == 1 && args[0].equalsIgnoreCase("remove")) {
+                    plugin.getVotes().clearRoom(room);
+                    Msg.success(player, "The " + room.label + " was removed.");
+                } else {
+                    plugin.getVotes().setRoom(room, player.getLocation());
+                    Msg.success(player, "The " + room.label + " is set here. " + who + " will be sent here when a vote starts, facing the way you face now.");
+                }
+                return true;
+            }, (sender, command, alias, args) -> args.length == 1 ? List.of("remove") : List.of());
+        }
         set(commands, "setvotestage", (sender, command, label, args) -> {
             if (!(sender instanceof Player player)) { Msg.error(sender, "Use this in game."); return true; }
             if (args.length == 1 && args[0].equalsIgnoreCase("remove")) { plugin.getVotes().clearStage(); Msg.success(player, "Vote stage removed."); }
@@ -181,13 +207,14 @@ public final class Commands {
 
     private void startVote(CommandSender sender, String[] args) {
         if (args.length == 0 && sender instanceof Player player) { new VoteDialogs(plugin).start(player); return; }
-        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [eliminate]."); return; }
+        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [eliminate] [stay|nomove]."); return; }
         int seconds;
         try { seconds = Integer.parseInt(args[0]); }
         catch (NumberFormatException invalid) { Msg.error(sender, "Use /startvote <seconds>."); return; }
         Set<String> flags = new HashSet<>();
         for (int i = 1; i < args.length; i++) flags.add(args[i].toLowerCase(Locale.ROOT));
-        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), flags.contains("eliminate")));
+        VoteService.RoomMode rooms = flags.contains("nomove") ? VoteService.RoomMode.OFF : flags.contains("stay") ? VoteService.RoomMode.STAY : VoteService.RoomMode.RETURN;
+        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), flags.contains("eliminate"), rooms));
         Msg.success(sender, "Vote started for " + seconds + " seconds.");
     }
 }

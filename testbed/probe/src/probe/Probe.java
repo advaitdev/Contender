@@ -141,6 +141,14 @@ public class Probe extends JavaPlugin implements Listener {
                         if ((text.contains("Round") || text.contains("Standings")) && text.contains("|") && who.canSee(display)) s.sendMessage(a[1] + " sees: " + text.trim());
                     }
                 }
+                case "spots" -> {
+                    // spots <world> <x> <y> <z> <count>: where VoteRooms would put that many players
+                    var method = Class.forName("me.advait.contender.vote.VoteRooms").getDeclaredMethod("spots", org.bukkit.Location.class, int.class);
+                    method.setAccessible(true);
+                    @SuppressWarnings("unchecked")
+                    var spots = (java.util.List<org.bukkit.Location>) method.invoke(null, new org.bukkit.Location(Bukkit.getWorld(a[1]), Double.parseDouble(a[2]), Double.parseDouble(a[3]), Double.parseDouble(a[4])), Integer.parseInt(a[5]));
+                    for (var l : spots) s.sendMessage(String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f", l.getX(), l.getY(), l.getZ()));
+                }
                 case "arenas" -> {
                     StringBuilder line = new StringBuilder(a[1] + ":");
                     for (var copy : c().getArenas().copies(a[1])) line.append(' ').append(copy.slot()).append('=').append(copy.status()).append(copy.isDirty() ? "*" : "");

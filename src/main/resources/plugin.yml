@@ -46,19 +46,27 @@ commands:
   startvote:
     description: "Start a community vote"
     permission: contender.master
-    usage: "/startvote [seconds] [live] [quick] [eliminate]"
+    usage: "/startvote [seconds] [live] [quick] [eliminate] [stay|nomove]"
   endvote:
     description: "Close the vote and show the results"
     permission: contender.master
     usage: "/endvote"
   votetimer:
-    description: "Place or remove the vote timer"
+    description: "Add a vote timer where you look (on a wall or floating), or remove one"
     permission: contender.master
-    usage: "/votetimer [remove]"
+    usage: "/votetimer [remove|clear]"
   setvotestage:
     description: "Set where candidates gather for the vote results"
     permission: contender.master
     usage: "/setvotestage [remove]"
+  setvotingroom:
+    description: "Set where contestants are sent when a vote starts"
+    permission: contender.master
+    usage: "/setvotingroom [remove]"
+  setjudgeroom:
+    description: "Set where everyone who isn't voting is sent when a vote starts"
+    permission: contender.master
+    usage: "/setjudgeroom [remove]"
   hacks:
     description: "See or change your hacks"
     usage: "/hacks"

@@ -73,7 +73,19 @@ The **Board** (Setup Tools → Board & Lobby) places a floating bracket or leade
 - `quick` skips the reveal and posts the result in chat.
 - `eliminate` makes the loser a spectator.
 
-Set the reveal spot with `/setvotestage`. When the vote closes, candidates gather in a circle there, the counts tick up together and a spotlight settles on whoever was voted out. `/votetimer` places a countdown hologram.
+Set the reveal spot with `/setvotestage`. When the vote closes, candidates gather in a circle there, the counts tick up together and a spotlight settles on whoever was voted out.
+
+**Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option in Start a Vote decides what happens afterwards:
+
+- **Move, Then Send Back** (the default) returns everyone to where they were once the results finish.
+- **Move and Leave There** leaves them in the rooms.
+- **Don't Move Anyone** skips the rooms.
+
+With `/startvote`, add `stay` or `nomove` for the last two.
+
+**Timers.** Look at a wall and run `/votetimer` to hang a countdown flat on it. Look anywhere else and it floats in front of you instead. You can place several, for example one in each room. Each shows the time left and how many contestants have voted, and a new timer shows a preview for a few seconds. `/votetimer remove` takes down the nearest one, and `/votetimer clear` removes them all.
+
+All of this is also in `/tournament` → **Setup Tools** → **Vote Setup**.
 
 ## Interviews
 
@@ -129,7 +141,7 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 | `/options` | Settings |
 | `/role`, `/tier` | Player roles, MCTiers lookups |
 | `/vote`, `/startvote`, `/endvote` | Votes |
-| `/votetimer`, `/setvotestage` | Vote displays |
+| `/votetimer`, `/setvotestage`, `/setvotingroom`, `/setjudgeroom` | Vote timers, the reveal stage and the voting rooms |
 | `/hacks`, `/hackers`, `/pickhacker`, `/sabotage` | Hacks and sabotage |
 | `/interview`, `/uninterview` | Interviews |
 | `/setinterviewerposition`, `/setintervieweeposition` | Interview marks |

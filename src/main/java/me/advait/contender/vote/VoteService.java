@@ -18,15 +18,35 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import java.util.*;
 
 /**
- * Community votes: numbered badges above every candidate while the vote runs, a timer in the lobby,
- * and a reveal ceremony at the end. Votes never change roles unless the director asks for it.
+ * Community votes: numbered badges above every candidate while the vote runs, countdown timers, optional
+ * voting and judge rooms, and a reveal ceremony at the end. Votes never change roles unless the director asks.
  */
 public final class VoteService extends Module {
-    public record Options(int seconds, boolean liveCounts, boolean ceremony, boolean eliminate) { }
+    /** The two places players can be sent while a vote runs. */
+    public enum Room {
+        VOTING("voting", "voting room"), JUDGE("judges", "judge room");
+        final String key;
+        public final String label;
+        Room(String key, String label) { this.key = key; this.label = label; }
+    }
+
+    /** What happens to players when a vote starts, and after its results. */
+    public enum RoomMode {
+        RETURN("Move, Then Send Back"), STAY("Move and Leave There"), OFF("Don't Move Anyone");
+        public final String label;
+        RoomMode(String label) { this.label = label; }
+    }
+
+    public record Options(int seconds, boolean liveCounts, boolean ceremony, boolean eliminate, RoomMode rooms) {
+        public Options(int seconds, boolean liveCounts, boolean ceremony, boolean eliminate) {
+            this(seconds, liveCounts, ceremony, eliminate, RoomMode.RETURN);
+        }
+    }
 
     private VoteSession session;
     private VoteBadges badges;
     private VoteTimerDisplay timer;
+    private VoteRooms rooms;
     private VoteReveal reveal;
     private Options options;
 
@@ -35,6 +55,7 @@ public final class VoteService extends Module {
     @Override protected void onEnable() {
         badges = new VoteBadges(plugin);
         timer = new VoteTimerDisplay(plugin);
+        rooms = new VoteRooms(plugin);
         tasks.repeat(1, 1, () -> badges.follow());
         tasks.repeat(20, 20, this::second);
     }
@@ -66,6 +87,7 @@ public final class VoteService extends Module {
         session = new VoteSession(VoteSession.number(players), chosen.liveCounts(), System.currentTimeMillis() + chosen.seconds() * 1000L);
         if (plugin.getTournaments().current() != null && plugin.getTournaments().current().isRunning()) plugin.getTournaments().pause();
         for (VoteSession.Candidate candidate : session.candidates()) badges.show(candidate);
+        rooms.gather(chosen.rooms());
         var theme = plugin.getThemes().current();
         for (Player player : Bukkit.getOnlinePlayers()) {
             Msg.title(player, Component.text("Vote", theme.primary()), Msg.text("Use /vote to choose a number", DialogPalette.MUTED), 8, 50, 12);
@@ -78,7 +100,7 @@ public final class VoteService extends Module {
     private void second() {
         if (session == null) return;
         int left = (int) Math.max(0, Math.ceil((session.endsAt() - System.currentTimeMillis()) / 1000.0));
-        timer.update(left);
+        timer.update(left, session.totalVotes(), session.candidates().size());
         Component bar = Msg.text("Vote  ", DialogPalette.ACCENT).append(Msg.text(String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60),
                 left <= 10 ? DialogPalette.DANGER : DialogPalette.TEXT));
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -131,6 +153,7 @@ public final class VoteService extends Module {
             }
             // Leave the final counts up for a moment, unless a new vote has started by then.
             tasks.later(200, () -> { if (session == null && reveal == null) badges.clear(); });
+            tasks.later(100, () -> { if (session == null && reveal == null) rooms.sendBack(stageLocation()); });
         }
     }
 
@@ -149,6 +172,7 @@ public final class VoteService extends Module {
         if (reveal != finished) return;
         reveal = null;
         badges.clear();
+        rooms.sendBack(stageLocation());
     }
 
     /** Stops a vote or a reveal without results. */
@@ -158,13 +182,23 @@ public final class VoteService extends Module {
         reveal = null;
         badges.clear();
         timer.hide();
+        rooms.sendBack(stageLocation());
     }
 
     // ---- Placement -----------------------------------------------------------------------------
 
-    public void placeTimer(Player player) { timer.place(player); }
-    public void removeTimer() { timer.remove(); }
+    /** Adds a timer where the player looks; returns true when it hangs on a wall. */
+    public boolean placeTimer(Player player) { return timer.place(player); }
+    /** Removes the timer nearest the player; returns false when none is within 12 blocks. */
+    public boolean removeNearestTimer(Player player) { return timer.removeNearest(player); }
+    public void removeTimers() { timer.removeAll(); }
+    public int timerCount() { return timer.count(); }
     public boolean timerPlaced() { return timer.placed(); }
+
+    public void setRoom(Room room, Location location) { rooms.set(room, location); }
+    public void clearRoom(Room room) { rooms.clear(room); }
+    public Location roomLocation(Room room) { return rooms.location(room); }
+    public boolean anyRoom() { return rooms.anySet(); }
 
     public void setStage(Location location) {
         if (plugin.getArenas().isArenaWorld(location.getWorld())) throw new IllegalArgumentException("Set the vote stage outside the arena world.");
@@ -191,11 +225,15 @@ public final class VoteService extends Module {
 
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         if (session != null) session.unvote(event.getPlayer().getUniqueId());
+        rooms.forget(event.getPlayer().getUniqueId());
     }
 
     @EventHandler public void onJoin(PlayerJoinEvent event) {
         if (session == null) return;
-        VoteSession.Candidate candidate = session.candidate(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        VoteSession.Candidate candidate = session.candidate(player.getUniqueId());
         if (candidate != null) badges.show(candidate);
+        // After the lobby has placed them, send a late arrival to their room as well.
+        tasks.later(5, () -> { if (session != null && player.isOnline()) rooms.admit(player, options.rooms()); });
     }
 }

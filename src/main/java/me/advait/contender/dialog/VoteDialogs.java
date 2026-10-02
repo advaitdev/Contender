@@ -103,25 +103,30 @@ public final class VoteDialogs {
 
     /** The director's start screen. */
     public void start(Player player) {
-        List<DialogInput> inputs = List.of(
+        List<DialogInput> inputs = new ArrayList<>(List.of(
                 DialogInput.numberRange("seconds", DialogIcon.CLOCK.label("Length"), 10, 600).initial(60f).step(10f).width(300)
                         .labelFormat("%s: %ss").build(),
                 toggle("live", DialogIcon.EYE, "Show Counts While Voting", false, "Yes", "No, keep them secret"),
                 toggle("ceremony", DialogIcon.STAR, "Results", true, "Reveal ceremony", "Chat only"),
-                toggle("eliminate", DialogIcon.SKULL, "Voted-Out Player", false, "Becomes a spectator", "Stays a contestant"));
+                toggle("eliminate", DialogIcon.SKULL, "Voted-Out Player", false, "Becomes a spectator", "Stays a contestant")));
+        // The rooms choice only appears once a voting or judge room is set.
+        boolean rooms = plugin.getVotes().anyRoom();
+        if (rooms) inputs.add(DialogInput.singleOption("rooms", DialogIcon.SPAWN.label("Rooms"), java.util.Arrays.stream(VoteService.RoomMode.values())
+                .map(mode -> Dialogs.option(mode.name(), mode.label, mode == VoteService.RoomMode.RETURN)).toList()).width(300).build());
         List<ActionButton> buttons = new ArrayList<>();
         Dialogs.navigationRow(buttons,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).open(p)),
                 dialogs.button(player, DialogIcon.NEXT.label("Start Vote", ACCENT), null, true, NAV, (p, view) -> {
+                    VoteService.RoomMode mode = rooms ? VoteService.RoomMode.valueOf(Dialogs.text(view, "rooms")) : VoteService.RoomMode.OFF;
                     plugin.getVotes().start(new VoteService.Options(Dialogs.number(view, "seconds", 10, 600),
-                            bool(view, "live"), bool(view, "ceremony"), bool(view, "eliminate")));
+                            bool(view, "live"), bool(view, "ceremony"), bool(view, "eliminate"), mode));
                     open(p);
                 }), NAV);
         boolean stage = plugin.getVotes().stageLocation() != null;
         // One line, so Start Vote stays on screen at small GUI sizes.
         dialogs.show(player, "Start a Vote", List.of(DialogBody.plainMessage(stage
                 ? DialogText.muted("Each contestant gets a number over their head.")
-                : text("Set a vote stage in Board & Lobby for the circle reveal.", WARNING), 320)), inputs, buttons, 2, NAV, null);
+                : text("Set a vote stage in Vote Setup for the circle reveal.", WARNING), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private static DialogInput toggle(String key, DialogIcon icon, String label, boolean value, String yes, String no) {

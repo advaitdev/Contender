@@ -149,6 +149,24 @@ With Simple Voice Chat installed, **Directors Heard Everywhere** (`/options` →
 | `/cancelall` | Stop everything and send everyone to the lobby |
 | `/contender status`, `/contender reload` | Health check, reload config |
 
+## Testing with fake players
+
+`dist/FakePlayers.jar` adds server-side fake players for rehearsals. It's based on the UHCR FakePlayers tool. To Contender and every other plugin they're real players: they join, show in the tab list, get kits, fight, vote and run commands. Only the network connection is fake. Put it in `plugins/` on a test server (Paper 26.2) and take it out before the real event.
+
+| Command | What it does |
+| --- | --- |
+| `/bots spawn 8 [radius]` | Spawns Bot_1 to Bot_8 on random spots around you |
+| `/bots spawn Alice Bob` | Spawns bots with these names where you stand |
+| `/bots wander on\|off` | Bots walk around near where they are |
+| `/bots fight on\|off` | Bots chase and hit the nearest player |
+| `/bots tphere`, `/bots gather <radius>` | Bring every bot to you, or spread them out |
+| `/bots cmd <bot\|all> <command>` | Run a command as a bot, for example `/bots cmd all vote 2` |
+| `/bots chat <bot\|all> <message>` | Send chat as a bot |
+| `/bots remove [all\|name]` | Remove bots |
+| `/bots chatlog chat` | Record what the bots see in chat to `plugins/FakePlayers/chat.log` |
+
+Fake players start as contestants, so `/role` them like anyone else.
+
 ## Building
 
 ```sh

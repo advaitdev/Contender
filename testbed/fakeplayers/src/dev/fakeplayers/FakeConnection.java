@@ -12,7 +12,11 @@ import org.bukkit.Bukkit;
 
 import java.net.InetSocketAddress;
 
-/** A connection with no client behind it: outgoing packets are dropped. */
+/**
+ * A connection with no client behind it. Outgoing packets go to the bot (so it can reply like a client and
+ * record chat) and are then dropped. They can also be encoded the way the real pipeline would, to catch
+ * packets a real client would be kicked for.
+ */
 public class FakeConnection extends Connection {
 
     public FakeConnection() {
@@ -22,6 +26,8 @@ public class FakeConnection extends Connection {
         this.preparing = false;
     }
 
+    /** Encode every packet like the real pipeline (/bots verify on|off). Catches broken packets; costs some CPU. */
+    static volatile boolean verifyPackets = true;
     private static volatile net.minecraft.network.ProtocolInfo<net.minecraft.network.protocol.game.ClientGamePacketListener> game;
     static final java.util.concurrent.atomic.AtomicLong encoded = new java.util.concurrent.atomic.AtomicLong();
     static final java.util.concurrent.atomic.AtomicLong failures = new java.util.concurrent.atomic.AtomicLong();
@@ -51,7 +57,16 @@ public class FakeConnection extends Connection {
 
     @Override
     public void send(Packet<?> packet, ChannelFutureListener listener, boolean flush) {
-        if (this.listener instanceof net.minecraft.server.network.ServerGamePacketListenerImpl) verify(packet);
+        if (this.listener instanceof net.minecraft.server.network.ServerGamePacketListenerImpl game) {
+            if (verifyPackets) verify(packet);
+            if (game.player instanceof Bot bot) {
+                if (packet instanceof net.minecraft.network.protocol.game.ClientboundBundlePacket bundle) {
+                    for (Packet<?> inner : bundle.subPackets()) bot.onPacket(inner);
+                } else {
+                    bot.onPacket(packet);
+                }
+            }
+        }
         if (listener != null) {
             // Pretend the packet was sent so follow-up actions (eg. disconnecting after the kick packet) still happen
             try {

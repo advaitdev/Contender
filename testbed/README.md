@@ -30,7 +30,12 @@ tools/stress.sh                      # 6-player round robin with hacks, sabotage
 
 Useful commands:
 
-- `bots spawn|remove|fight on|tp|attack|use|slot|chat|cmd|info|list`
+- `bots spawn <names...>` or `bots spawn <count> [radius]`, `bots remove [all|name]`, `bots list`
+- Movement: `bots wander on|off [names]`, `bots fight on|off [names]`, `bots tphere`, `bots gather <radius> [x z]`, `bots walk|look|vel|tp`
+- Actions: `bots cmd|chat <name|all> ...`, `bots attack|use|swing|slot|info <name> ...`
+- Diagnostics: `bots chatlog off|chat|all` (what bots see, in `plugins/FakePlayers/chat.log`), `bots verify on|off` (encode every packet like a real connection), `bots sys`. Slow ticks go to `plugins/FakePlayers/slow-ticks.log`.
+
+The fake players plugin is UHCR's FakePlayers tool (`tools/fakeplayers` in the UHCR repos) without its MultiPaper parts. Bots confirm teleports and respawn like a vanilla client. `fakeplayers/build.sh` builds it against the test server, and the built jar is also kept in `dist/FakePlayers.jar`.
 - `probe game <type> <map|-> <kit|-> <k=v,...|-> <players...>` starts a minigame (`mace_race`, `combo`, `manhunt`, `last_stand`, `king_of_the_hill`, `winner_stays_on`, `juggernaut`)
 - `probe tournament <map> <kit> <bestOf> <players...>` and `probe trounds` show a round robin and its standings
 - `probe vote <seconds>`, `probe votefor <voter> <number>`

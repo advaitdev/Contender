@@ -1,12 +1,12 @@
 name: FakePlayers
-version: 1.0.0
+version: 2.0.0
 main: dev.fakeplayers.FakePlayersPlugin
 api-version: '26.2'
-description: Server-side fake players for testing
+description: Server-side fake players for testing (based on the UHCR FakePlayers tool)
 commands:
   bots:
-    description: Test bots
-    usage: /bots <spawn|remove|list|fight|cmd|chat|tp|attack|use|slot|look|walk|vel|info>
+    description: Spawn, move and control fake players
+    usage: /bots <spawn|remove|list|wander|fight|tphere|gather|cmd|chat|tp|attack|use|swing|slot|look|walk|vel|info|chatlog|verify|sys>
     permission: fakeplayers.admin
 permissions:
   fakeplayers.admin:

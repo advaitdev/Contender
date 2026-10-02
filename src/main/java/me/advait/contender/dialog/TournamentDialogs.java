@@ -458,7 +458,7 @@ public final class TournamentDialogs {
         }
         if (match.status() == TournamentMatch.Status.FINISHED && !tournament.isCancelled()) {
             buttons.add(menuAction(player, DialogIcon.SETTINGS, "Change Result", TEXT, "Fix the score if something went wrong.", p -> changeResult(p, id, match, page)));
-            if (!tournament.isComplete()) buttons.add(menuAction(player, DialogIcon.REFRESH, "Replay Match", DANGER,
+            buttons.add(menuAction(player, DialogIcon.REFRESH, "Replay Match", DANGER,
                     "Clear the result and play this match again.", p -> confirmReplay(p, id, match, page)));
         }
         var duel = plugin.getTournaments().playing().get(number);
@@ -534,8 +534,11 @@ public final class TournamentDialogs {
     private void confirmReplay(Player player, UUID id, TournamentMatch match, int page) {
         Tournament tournament = current(id);
         String first = tournament.entries().get(match.first()).name(), second = tournament.entries().get(match.second()).name();
+        String effect = tournament.isComplete()
+                ? "The result is cleared and the tournament reopens to play it now. When it's done, the winners are announced again."
+                : "The result is cleared and the match goes back in the queue.";
         menu(player, "Replay Match?", DialogText.paragraphs(text("#" + match.number() + "  " + first + " vs " + second, TEXT),
-                DialogText.muted("The result is cleared and the match goes back in the queue.")), List.of(
+                DialogText.muted(effect)), List.of(
                 menuAction(player, DialogIcon.REFRESH, "Replay Match", DANGER, "Clear the result and play it again.", p -> {
                     current(id); plugin.getTournaments().replay(match); matches(p, id, page);
                 })), p -> match(p, id, match.number(), page));

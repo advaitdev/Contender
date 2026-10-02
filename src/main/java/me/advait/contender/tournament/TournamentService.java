@@ -140,14 +140,31 @@ public final class TournamentService extends Module {
         plugin.getLogger().info("Match #" + match.number() + " result changed to " + firstScore + "-" + secondScore + ".");
     }
 
-    /** Clears a finished match's result so it is played again. */
+    /**
+     * Clears a finished match's result so it is played again. If the tournament had finished, it reopens for that
+     * match and starts it right away; once it's played the tournament finishes again with the new standings.
+     */
     public void replay(TournamentMatch match) {
         requireMatch(match);
-        if (tournament.isComplete()) throw new IllegalStateException("The tournament has finished. Change the result instead.");
+        boolean reopening = tournament.isComplete();
+        if (plugin.getStages().current() != stage) {
+            plugin.getStages().requireFree();
+            plugin.getStages().select(stage, KIND);
+        }
         match.reopen();
-        save();
+        TournamentEntry first = tournament.entries().get(match.first()), second = tournament.entries().get(match.second());
+        Msg.broadcast(Msg.text("Match #" + match.number() + " (" + first.name() + " vs " + second.name() + ") will be played again.", DialogPalette.ACCENT));
+        plugin.getLogger().info("Match #" + match.number() + " will be played again" + (reopening ? "; the tournament is open again." : "."));
+        if (reopening) {
+            tournament.resume();
+            waitingReason = "";
+            save();
+            plugin.getStages().started(stage);
+            tick();
+        } else {
+            save();
+        }
         plugin.getStages().refreshDisplays();
-        plugin.getLogger().info("Match #" + match.number() + " will be played again.");
     }
 
     /** A director's correction of a live match's round wins. */

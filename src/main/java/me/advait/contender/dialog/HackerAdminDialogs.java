@@ -19,6 +19,7 @@ import static me.advait.contender.dialog.DialogPalette.*;
 /** /hackers: the director's view of the secret hackers. */
 public final class HackerAdminDialogs {
     private static final int WIDE = 300, NAV = 150, HALF = 150;
+    private static final String OFFLINE = "Offline";
     private final Contender plugin;
     private final Dialogs dialogs;
 
@@ -41,7 +42,9 @@ public final class HackerAdminDialogs {
                 names = names.append(StringUtil.resolvedHead(entry.getKey(), entry.getValue().name(), offline.getPlayerProfile().getProperties()))
                         .append(text(" " + entry.getValue().name(), hackers.isHacker(entry.getKey()) ? TEXT : MUTED));
                 HackSettings settings = hackers.mode() == HackerService.Mode.SELF ? entry.getValue().own() : hackers.plan(entry.getKey());
-                names = names.append(text("  " + settings.summary(), MUTED));
+                String status = status(entry.getKey());
+                names = names.append(text("  " + (status == null ? settings.summary()
+                        : status.equals(OFFLINE) ? OFFLINE + " · " + settings.summary() : status), MUTED));
             }
         }
         body.add(DialogBody.plainMessage(names, 360));
@@ -51,7 +54,7 @@ public final class HackerAdminDialogs {
                         ? DialogText.detail("Hacks", hackers.planActive() ? "On now" : "Turn on when the next event starts", hackers.planActive() ? SUCCESS : MUTED)
                         : DialogText.muted("Hackers change their hacks with /hacks.")), 360));
         List<ActionButton> buttons = new ArrayList<>();
-        buttons.add(button(player, DialogIcon.PLAYERS, "Choose Hackers", ACCENT, "Pick who is secretly hacking.", p -> choose(p, new LinkedHashSet<>(hackers.hackers().keySet()), 0)));
+        buttons.add(button(player, DialogIcon.PLAYERS, "Choose Hackers", ACCENT, "Pick or remove the secret hackers.", p -> choose(p, new LinkedHashSet<>(hackers.hackers().keySet()), 0)));
         if (hackers.mode() == HackerService.Mode.DIRECTOR) {
             buttons.add(button(player, DialogIcon.SETTINGS, "Hacks for This Event", TEXT, "Choose the hacks every hacker gets.", this::sharedPlan));
             if (hackers.hackers().size() > 1) buttons.add(button(player, DialogIcon.NAME, "Different Hacks per Hacker", TEXT,
@@ -103,36 +106,71 @@ public final class HackerAdminDialogs {
                 p -> plugin.getHackers().plan(hacker), (p, settings) -> plugin.getHackers().setPlan(hacker, settings), this::perHacker, extras));
     }
 
-    /** Toggle contestants in or out of the selection, then save it. */
+    /** Someone the director can pick: every online contestant, plus everyone already picked wherever they are. */
+    private record Candidate(UUID id, String name, Component head, String status) { }
+
+    /** Why a picked hacker has no hacks right now, or null when they're in play. */
+    private String status(UUID id) {
+        PlayerRole role = plugin.getRoleManager().getRole(id);
+        if (role != PlayerRole.CONTESTANT) return role.label() + ", so no hacks";
+        return Bukkit.getPlayer(id) == null ? OFFLINE : null;
+    }
+
+    private List<Candidate> candidates() {
+        Map<UUID, Candidate> all = new HashMap<>();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (plugin.getRoleManager().getRole(online.getUniqueId()) == PlayerRole.CONTESTANT)
+                all.put(online.getUniqueId(), new Candidate(online.getUniqueId(), online.getName(), StringUtil.getPlayerHead(online), null));
+        }
+        plugin.getHackers().hackers().forEach((id, profile) -> {
+            Player online = Bukkit.getPlayer(id);
+            Component head = online != null ? StringUtil.getPlayerHead(online)
+                    : StringUtil.resolvedHead(id, profile.name(), Bukkit.getOfflinePlayer(id).getPlayerProfile().getProperties());
+            all.put(id, new Candidate(id, online != null ? online.getName() : profile.name(), head, status(id)));
+        });
+        return all.values().stream().sorted(Comparator.comparing(Candidate::name, String.CASE_INSENSITIVE_ORDER)).toList();
+    }
+
+    /** Toggle players in or out of the selection, then save it. */
     private void choose(Player player, Set<UUID> chosen, int requestedPage) {
-        List<Player> candidates = Bukkit.getOnlinePlayers().stream()
-                .filter(p -> plugin.getRoleManager().getRole(p.getUniqueId()) == PlayerRole.CONTESTANT)
-                .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).map(p -> (Player) p).toList();
+        List<Candidate> candidates = candidates();
         int perPage = 12, pages = Math.max(1, (candidates.size() + perPage - 1) / perPage), page = Math.clamp(requestedPage, 0, pages - 1);
         List<ActionButton> buttons = new ArrayList<>();
-        for (Player candidate : candidates.subList(page * perPage, Math.min(candidates.size(), (page + 1) * perPage))) {
-            UUID id = candidate.getUniqueId();
+        for (Candidate candidate : candidates.subList(page * perPage, Math.min(candidates.size(), (page + 1) * perPage))) {
+            UUID id = candidate.id();
             boolean selected = chosen.contains(id);
-            Component label = Component.textOfChildren(StringUtil.getPlayerHead(candidate), text(" " + candidate.getName(), selected ? ACCENT : TEXT));
+            Component label = Component.textOfChildren(candidate.head(), text(" " + candidate.name(), selected ? ACCENT : candidate.status() == null ? TEXT : MUTED));
             if (selected) label = label.append(Component.space()).append(DialogIcon.SAVE.sprite());
-            buttons.add(dialogs.button(player, label, DialogText.muted(selected ? "Click to remove." : "Click to add."), true, HALF, (p, view) -> {
+            String hint = selected ? "Click to remove." : "Click to add.";
+            if (candidate.status() != null) hint = candidate.status() + ". " + hint;
+            buttons.add(dialogs.button(player, label, DialogText.muted(hint), true, HALF, (p, view) -> {
                 if (!chosen.remove(id)) chosen.add(id);
                 choose(p, chosen, page);
             }));
         }
+        if (!chosen.isEmpty()) Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.REFRESH.label("Clear All", TEXT), DialogText.muted("Unpicks everyone. Save to confirm."), true, HALF,
+                        (p, view) -> choose(p, new LinkedHashSet<>(), page)), null, HALF);
         Dialogs.navigationRow(buttons,
                 page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, true, HALF, (p, view) -> choose(p, chosen, page - 1)) : null,
                 page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, true, HALF, (p, view) -> choose(p, chosen, page + 1)) : null, HALF);
         Dialogs.navigationRow(buttons,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, HALF, (p, view) -> open(p)),
                 dialogs.button(player, DialogIcon.SAVE.label("Save", ACCENT), DialogText.muted("Everyone online sees whether they were picked."), true, HALF, (p, view) -> {
-                    List<OfflinePlayer> picked = chosen.stream().map(Bukkit::getOfflinePlayer).toList();
-                    plugin.getHackers().pick(picked);
-                    Dialogs.tell(p, picked.isEmpty() ? "Hacker selection cleared." : "Hackers saved: " + String.join(", ", picked.stream().map(OfflinePlayer::getName).toList()) + ".");
+                    try {
+                        plugin.getHackers().pick(chosen.stream().map(Bukkit::getOfflinePlayer).toList());
+                    } catch (IllegalArgumentException failure) {
+                        Dialogs.error(p, failure.getMessage());
+                        choose(p, chosen, page);
+                        return;
+                    }
+                    List<String> names = plugin.getHackers().hackers().values().stream().map(HackerService.Profile::name).toList();
+                    Dialogs.tell(p, names.isEmpty() ? "Hacker selection cleared." : "Hackers saved: " + String.join(", ", names) + ".");
                     open(p);
                 }), HALF);
         List<DialogBody> body = new ArrayList<>();
-        body.add(DialogBody.plainMessage(DialogText.muted(candidates.isEmpty() ? "No contestants are online." : "Click players to pick them. Save tells everyone online whether they were picked."), 320));
+        body.add(DialogBody.plainMessage(DialogText.muted(candidates.isEmpty() ? "No contestants are online."
+                : "Click players to pick or remove them. Save tells everyone online whether they were picked."), 320));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
         dialogs.show(player, "Choose Hackers", body, List.of(), buttons, 2, NAV, null);
     }

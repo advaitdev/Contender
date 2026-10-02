@@ -93,15 +93,20 @@ public final class HackerService extends Module implements StageService.Listener
 
     // ---- Changes -------------------------------------------------------------------------------
 
-    /** Replaces the selection. Everyone online is told whether they are a hacker; offline hackers are told on join. */
+    /**
+     * Replaces the selection. Everyone online is told whether they are a hacker; offline hackers are told on join.
+     * Only new picks must be contestants: a hacker who was voted out or left can stay picked or be removed.
+     */
     public void pick(List<? extends OfflinePlayer> players) {
         Map<UUID, Profile> updated = new LinkedHashMap<>();
         for (OfflinePlayer player : players) {
             UUID id = player.getUniqueId();
-            if (plugin.getRoleManager().getRole(id) != PlayerRole.CONTESTANT) throw new IllegalArgumentException(player.getName() + " must be a contestant first.");
-            if (updated.containsKey(id)) throw new IllegalArgumentException("Enter each player once.");
             Profile old = hackers.get(id);
-            updated.put(id, new Profile(Objects.requireNonNull(player.getName()), old == null ? HackSettings.defaults() : old.own()));
+            String name = player.getName() != null ? player.getName() : old != null ? old.name() : null;
+            if (name == null) throw new IllegalArgumentException("Couldn't find one of those players. They need to join the server once first.");
+            if (old == null && plugin.getRoleManager().getRole(id) != PlayerRole.CONTESTANT) throw new IllegalArgumentException(name + " must be a contestant first.");
+            if (updated.containsKey(id)) throw new IllegalArgumentException("Enter each player once.");
+            updated.put(id, new Profile(name, old == null ? HackSettings.defaults() : old.own()));
         }
         hackers.clear();
         hackers.putAll(updated);

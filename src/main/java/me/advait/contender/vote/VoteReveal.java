@@ -36,7 +36,9 @@ import java.util.*;
  */
 final class VoteReveal implements Activity, Listener {
     /** Gap between neighbors in the line; squeezed down to the minimum when the stage is short. */
-    private static final double SPACING = 2.0, MIN_SPACING = 1.0;
+    private static final double SPACING = 2.0, MIN_SPACING = 0.8;
+    /** Gap between rows when everyone doesn't fit in one line. */
+    private static final double ROW_GAP = 1.4;
     /** How far along each direction the stage floor is checked. */
     private static final int MAX_REACH = 24;
     /** Players further away than this (or in another world) are teleported instead of walked into place. */
@@ -146,22 +148,46 @@ final class VoteReveal implements Activity, Listener {
         boolean onX = alongX != alongZ ? alongX > alongZ : Math.abs(preferred.getZ()) >= Math.abs(preferred.getX());
         Vector axis = onX ? new Vector(1, 0, 0) : new Vector(0, 0, 1);
         int plus = onX ? plusX : plusZ, minus = onX ? minusX : minusZ;
-        double spacing = count <= 1 ? 0 : Math.max(MIN_SPACING, Math.min(SPACING, (plus + minus) / (double) (count - 1)));
-        double total = spacing * (count - 1);
-        double start = -total / 2;
-        if (total <= plus + minus) start = Math.clamp(start, -minus, plus - total);
         Vector side = onX ? new Vector(0, 0, 1) : new Vector(1, 0, 0);
         if (side.dot(preferred) < 0) side.multiply(-1);
+        // Never run past the ends of the stage: if everyone doesn't fit in one line, add rows behind it.
+        int room = plus + minus;
+        int perRow = count <= 1 ? 1 : Math.clamp((int) Math.floor(room / MIN_SPACING) + 1, 1, count);
+        int rows = (count + perRow - 1) / perRow;
         List<Location> spots = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            Location spot = center.clone().add(axis.clone().multiply(start + i * spacing));
-            Location floor = VoteRooms.standable(spot);
-            if (floor != null) spot = floor;
-            spot.setDirection(side);
-            spot.setPitch(0);
-            spots.add(spot);
+        for (int row = 0; row < rows; row++) {
+            int inRow = Math.min(perRow, count - row * perRow);
+            double spacing = inRow <= 1 ? 0 : Math.min(SPACING, room / (double) (inRow - 1));
+            double total = spacing * (inRow - 1);
+            double start = Math.clamp(-total / 2, -minus, Math.max(-minus, plus - total));
+            Vector back = side.clone().multiply(-ROW_GAP * row);
+            for (int i = 0; i < inRow; i++) {
+                Location wanted = center.clone().add(axis.clone().multiply(start + i * spacing)).add(back);
+                Location spot = onStage(wanted, center, spots, axis, side);
+                spot.setDirection(side);
+                spot.setPitch(0);
+                spots.add(spot);
+            }
         }
         return new Layout(spots, side);
+    }
+
+    /**
+     * The nearest floor to {@code wanted} at the stage's own height that isn't on top of someone else's spot, so
+     * nobody ends up on a wall, a step or off the edge. Falls back to the stage center.
+     */
+    private static Location onStage(Location wanted, Location center, List<Location> taken, Vector axis, Vector side) {
+        for (int ring = 0; ring <= 6; ring++) {
+            for (int a = -ring; a <= ring; a++) for (int b = -ring; b <= ring; b++) {
+                if (Math.max(Math.abs(a), Math.abs(b)) != ring) continue;
+                Location probe = wanted.clone().add(axis.clone().multiply(a * 0.5)).add(side.clone().multiply(b * 0.5));
+                Location floor = VoteRooms.standable(probe);
+                if (floor == null || Math.abs(floor.getY() - center.getY()) > 0.6) continue;
+                if (taken.stream().anyMatch(other -> other.getWorld().equals(floor.getWorld()) && other.distanceSquared(floor) < 0.7 * 0.7)) continue;
+                return floor;
+            }
+        }
+        return center.clone();
     }
 
     /**
@@ -172,7 +198,7 @@ final class VoteReveal implements Activity, Listener {
         int reach = 0;
         for (int distance = 1; distance <= MAX_REACH; distance++) {
             Location floor = VoteRooms.standable(center.clone().add(step.clone().multiply(distance)));
-            if (floor == null || Math.abs(floor.getY() - center.getY()) > 0.5) break;
+            if (floor == null || Math.abs(floor.getY() - center.getY()) > 0.6) break;
             reach = distance;
         }
         return reach;
@@ -194,7 +220,15 @@ final class VoteReveal implements Activity, Listener {
                 to.setY(0);
                 double distance = to.length();
                 if (distance < 0.3 || walkTicks > WALK_TIMEOUT) {
-                    if (distance >= 0.3) { moving = true; try { player.teleport(target); } finally { moving = false; } }
+                    // Snap onto the spot, height included: they're held still from here, so someone caught mid-hop
+                    // would otherwise hang in the air.
+                    if (distance >= 0.3 || Math.abs(rise) > 0.1) {
+                        Location snap = target.clone();
+                        snap.setYaw(player.getLocation().getYaw());
+                        snap.setPitch(player.getLocation().getPitch());
+                        moving = true;
+                        try { player.teleport(snap); } finally { moving = false; }
+                    }
                     player.setVelocity(new Vector(0, Math.min(0, player.getVelocity().getY()), 0));
                     face(player, target);
                     placed.add(id);

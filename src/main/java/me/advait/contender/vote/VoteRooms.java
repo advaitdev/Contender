@@ -153,12 +153,23 @@ final class VoteRooms {
         for (int lift = 1; lift >= -2; lift--) {
             Location feet = spot.clone().add(0, lift, 0);
             Block block = feet.getBlock();
-            if (!block.isPassable() || block.isLiquid() || !block.getRelative(0, 1, 0).isPassable()) continue;
-            if (block.getRelative(0, -1, 0).getType().isSolid()) {
+            if (block.isLiquid() || !block.getRelative(0, 1, 0).isPassable()) continue;
+            // A carpet, slab or snow layer is stood on, at its top; anything taller is in the way.
+            double low = top(block);
+            if (low > 0.5) continue;
+            if (low > 0) { feet.setY(block.getY() + low); return feet; }
+            if (top(block.getRelative(0, -1, 0)) >= 1.0) {
                 feet.setY(block.getY());
                 return feet;
             }
         }
         return null;
+    }
+
+    /** How high a block's collision reaches inside its own space: 0 for air or grass, 1 for a full block. */
+    private static double top(Block block) {
+        double top = 0;
+        for (var box : block.getCollisionShape().getBoundingBoxes()) top = Math.max(top, box.getMaxY());
+        return top;
     }
 }

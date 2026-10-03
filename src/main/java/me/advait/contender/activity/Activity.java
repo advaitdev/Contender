@@ -17,6 +17,9 @@ public interface Activity {
     /** The player reconnected while still owned. */
     default void handleJoin(Player player) { }
 
+    /** A short label under a player's name while they play this, such as Manhunt's Runner, or null for none. */
+    default net.kyori.adventure.text.Component underName(Player player) { return null; }
+
     /** The kit its players use, or null when there isn't one. */
     default me.advait.contender.kit.Kit kit() { return null; }
 

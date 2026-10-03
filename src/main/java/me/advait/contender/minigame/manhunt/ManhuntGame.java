@@ -58,6 +58,14 @@ public final class ManhuntGame extends Minigame {
 
     public Team team(UUID player) { return teams.getOrDefault(player, Team.HUNTER); }
 
+    /** Everyone sees who's a Runner and who's a Hunter, under their name. */
+    @Override public Component underName(Player player) {
+        if (!involves(player.getUniqueId())) return null;
+        var theme = plugin.getThemes().current();
+        Team team = team(player.getUniqueId());
+        return Component.text(team.one, team == Team.RUNNER ? theme.primary() : theme.secondary());
+    }
+
     void restoreWinner(String saved) {
         try { winner = saved == null ? null : Team.valueOf(saved); } catch (IllegalArgumentException ignored) { }
     }

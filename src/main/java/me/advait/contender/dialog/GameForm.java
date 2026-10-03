@@ -4,6 +4,8 @@ import io.papermc.paper.dialog.DialogResponseView;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.BooleanDialogInput;
+import io.papermc.paper.registry.data.dialog.input.NumberRangeDialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import me.advait.contender.Contender;
@@ -76,7 +78,8 @@ public final class GameForm {
             for (Kit kit : kits) options.add(SingleOptionDialogInput.OptionEntry.create(kit.getId(), KitIcons.label(kit), kit.getId().equals(selected)));
             inputs.add(DialogInput.singleOption("kit", text("Kit", TEXT), options).width(INPUT).build());
         }
-        inputs.addAll(spec.extras());
+        // Coming back to the form (after an error) keeps what the director had set.
+        for (DialogInput extra : spec.extras()) inputs.add(withDraft(extra, values.get(extra.key())));
         String roster = values.getOrDefault("players", String.join(", ", Bukkit.getOnlinePlayers().stream()
                 .filter(p -> plugin.getRoleManager().isContestant(p.getUniqueId())).map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList()));
         // One line keeps Back / Create on screen at 1280x720; the field scrolls for long rosters.
@@ -101,16 +104,51 @@ public final class GameForm {
         if (spec.needsKit()) values.put("kit", Objects.requireNonNullElse(view.getText("kit"), ""));
         for (DialogInput input : spec.extras()) {
             String key = input.key();
-            String text = view.getText(key);
-            if (text == null) {
+            // Read by the input's type: asked for text, a slider answers "3.0", which isn't a whole number.
+            String text;
+            if (input instanceof NumberRangeDialogInput) {
                 Float number = view.getFloat(key);
-                if (number != null) text = Integer.toString(Math.round(number));
+                text = number == null ? null : Integer.toString(Math.round(number));
+            } else if (input instanceof BooleanDialogInput) {
                 Boolean bool = view.getBoolean(key);
-                if (bool != null) text = bool.toString();
+                text = bool == null ? null : bool.toString();
+            } else {
+                text = view.getText(key);
             }
             values.put(key, text == null ? "" : text);
         }
         return values;
+    }
+
+    /** The same input, starting at a value the director already chose. */
+    private static DialogInput withDraft(DialogInput input, String value) {
+        if (value == null || value.isEmpty() && !(input instanceof TextDialogInput)) return input;
+        try {
+            if (input instanceof NumberRangeDialogInput number) {
+                var builder = DialogInput.numberRange(number.key(), number.label(), number.start(), number.end()).width(number.width())
+                        .initial(Math.clamp(Float.parseFloat(value), number.start(), number.end()));
+                if (number.step() != null) builder.step(number.step());
+                if (number.labelFormat() != null) builder.labelFormat(number.labelFormat());
+                return builder.build();
+            }
+            if (input instanceof TextDialogInput text) {
+                var builder = DialogInput.text(text.key(), text.label()).width(text.width()).labelVisible(text.labelVisible())
+                        .initial(value).maxLength(text.maxLength());
+                if (text.multiline() != null) builder.multiline(text.multiline());
+                return builder.build();
+            }
+            if (input instanceof BooleanDialogInput bool) {
+                return DialogInput.bool(bool.key(), bool.label()).initial(Boolean.parseBoolean(value)).onTrue(bool.onTrue()).onFalse(bool.onFalse()).build();
+            }
+            if (input instanceof SingleOptionDialogInput single) {
+                List<SingleOptionDialogInput.OptionEntry> entries = single.entries().stream()
+                        .map(entry -> SingleOptionDialogInput.OptionEntry.create(entry.id(), entry.display(), entry.id().equals(value))).toList();
+                return DialogInput.singleOption(single.key(), single.label(), entries).width(single.width()).labelVisible(single.labelVisible()).build();
+            }
+        } catch (RuntimeException unreadable) {
+            return input;
+        }
+        return input;
     }
 
     private void submit(Player player, Spec spec, BiConsumer<Player, Result> create, Consumer<Player> back, Map<String, String> values) {

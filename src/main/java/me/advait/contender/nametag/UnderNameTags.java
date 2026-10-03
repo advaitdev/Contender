@@ -20,23 +20,25 @@ import org.bukkit.potion.PotionEffectType;
 import java.util.*;
 
 /**
- * "17 ❤" under the names of players whose kit turns on Health Under Name.
+ * A line under a player's name: what their game says about them (Manhunt's Runner or Hunter), and "17 ❤" when
+ * their kit turns on Health Under Name, for example "Runner · 17 ❤".
  *
  * Each line is a text display that follows its player, between their head and their name. The scoreboard's
  * below-name line would be simpler, but the game only draws it within 10 blocks. Players don't see their own.
  */
-public final class HealthTags extends Module {
+public final class UnderNameTags extends Module {
     private static final Component HEART = Component.text("❤", NamedTextColor.RED);
+    private static final Component DIVIDER = Component.text(" · ", NamedTextColor.GRAY);
     /** How far above the top of the head the line sits, so it ends just under the name tag. */
     private static final double ABOVE_HEAD = 0.09;
     /** A little smaller than a name tag, so it fits between the head and the name. */
     private static final float SCALE = 0.85f;
     private final Map<UUID, TextDisplay> displays = new HashMap<>();
-    /** What each line says now, so the text only changes when the health does. */
-    private final Map<UUID, String> shown = new HashMap<>();
+    /** What each line says now, so the text only changes when it has to. */
+    private final Map<UUID, Component> shown = new HashMap<>();
     private int ticks;
 
-    public HealthTags(Contender plugin) { super(plugin); }
+    public UnderNameTags(Contender plugin) { super(plugin); }
 
     @Override protected void onEnable() { tasks.repeat(1L, 1L, this::update); }
 
@@ -55,7 +57,8 @@ public final class HealthTags extends Module {
     private void update() {
         Set<UUID> active = new HashSet<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!shows(player)) continue;
+            Component text = line(player);
+            if (text == null) continue;
             UUID id = player.getUniqueId();
             active.add(id);
             Location at = player.getLocation().add(0, player.getHeight() + ABOVE_HEAD, 0);
@@ -68,11 +71,9 @@ public final class HealthTags extends Module {
             } else {
                 display.teleport(at);
             }
-            var max = player.getAttribute(Attribute.MAX_HEALTH);
-            String label = format(player.getHealth(), max == null ? 20 : max.getValue());
-            if (!label.equals(shown.get(id))) {
-                display.text(Component.text(label + " ", NamedTextColor.WHITE).append(HEART));
-                shown.put(id, label);
+            if (!text.equals(shown.get(id))) {
+                display.text(text);
+                shown.put(id, text);
             }
             // Like a name tag: seen through walls unless the player is sneaking.
             boolean sneaking = player.isSneaking();
@@ -117,14 +118,18 @@ public final class HealthTags extends Module {
         return display;
     }
 
-    /** Playing (not watching) in a game whose kit turns this on, and visible with a name tag. */
-    private boolean shows(Player player) {
+    /** The line for a player who's playing (not watching) and visible with a name tag, or null for none. */
+    private Component line(Player player) {
         ActivityRegistry.Claim claim = plugin.getRegistry().claim(player.getUniqueId());
-        if (claim == null || claim.involvement() != ActivityRegistry.Involvement.PLAYING) return false;
+        if (claim == null || claim.involvement() != ActivityRegistry.Involvement.PLAYING || claim.activity() == null) return null;
+        if (player.getGameMode() == GameMode.SPECTATOR || player.isDead() || player.isInvisible()
+                || player.hasPotionEffect(PotionEffectType.INVISIBILITY) || plugin.getNameTagManager().hidden()) return null;
         Activity activity = claim.activity();
-        Kit kit = activity == null ? null : activity.kit();
-        if (kit == null || !kit.isHealthUnderName()) return false;
-        return player.getGameMode() != GameMode.SPECTATOR && !player.isDead() && !player.isInvisible()
-                && !player.hasPotionEffect(PotionEffectType.INVISIBILITY) && !plugin.getNameTagManager().hidden();
+        Component label = activity.underName(player);
+        Kit kit = activity.kit();
+        if (kit == null || !kit.isHealthUnderName()) return label;
+        var max = player.getAttribute(Attribute.MAX_HEALTH);
+        Component health = Component.text(format(player.getHealth(), max == null ? 20 : max.getValue()) + " ", NamedTextColor.WHITE).append(HEART);
+        return label == null ? health : label.append(DIVIDER).append(health);
     }
 }

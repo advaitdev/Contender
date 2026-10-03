@@ -67,6 +67,9 @@ public class MapManager {
                 );
             }
 
+            ConfigurationSection hill = section.getConfigurationSection("hill");
+            if (hill != null) map.setHill(hill.getDouble("x"), hill.getDouble("y"), hill.getDouble("z"));
+
             ConfigurationSection rb = section.getConfigurationSection("rollback-region");
             if (rb != null) {
                 ConfigurationSection c1 = rb.getConfigurationSection("corner1");
@@ -122,6 +125,7 @@ public class MapManager {
             writeSpawn(config, path + ".team1-spawn", entry.getTeam1Point());
             writeSpawn(config, path + ".team2-spawn", entry.getTeam2Point());
             writeSpawn(config, path + ".spectator-spawn", entry.getSpectatorPoint());
+            writeSpawn(config, path + ".hill", entry.getHillPoint());
             BlockBounds b = entry.getBounds();
             if (b != null) {
                 config.set(path + ".rollback-region.corner1.x", b.minX());

@@ -440,8 +440,16 @@ public final class ArenaService extends Module {
             case "1" -> map.setTeam1Spawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "2" -> map.setTeam2Spawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "spectator" -> map.setSpectatorSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-            default -> throw new IllegalArgumentException("Choose team 1, team 2, or spectator.");
+            case "hill" -> map.setHill(location.getX(), location.getY(), location.getZ());
+            default -> throw new IllegalArgumentException("Choose team 1, team 2, spectator, or hill.");
         }
+        maps.save(map);
+        rebuildPool(map);
+    }
+
+    /** King of the Hill goes back to using the middle between the team spawns. */
+    public void clearHill(ArenaMap map) {
+        map.clearHill();
         maps.save(map);
         rebuildPool(map);
     }

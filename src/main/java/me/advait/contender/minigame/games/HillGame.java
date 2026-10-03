@@ -39,7 +39,7 @@ public final class HillGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("King of the Hill", "King of the Hill",
-                    "The hill is the middle of the map. Respawns are on.", true, true, false,
+                    "The hill is the map's hill spot, or its middle if it has none. Respawns are on.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 1, 15, 4, 1, "%s: %s min"),
                             GameForm.number("target", DialogIcon.STAR, "Points to Win", 20, 600, 90, 10, null),
                             GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks")), 2),
@@ -86,7 +86,8 @@ public final class HillGame extends ArenaGame {
     @Override protected int minimumPlayers() { return 2; }
 
     @Override protected void setup(List<Player> players) {
-        hill = middle();
+        // The map's hill spot, or the middle between the team spawns.
+        hill = arena.layout().getHill() != null ? arena.layout().getHill() : middle();
         List<Location> ring = spawnRing(players.size());
         for (int i = 0; i < players.size(); i++) deploy(players.get(i), ring.get(i));
         Theme theme = plugin.getThemes().current();

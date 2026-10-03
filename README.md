@@ -47,7 +47,7 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 | Combo | One turn each against a practice bot. Longest combo wins; knock the bot into the void for ∞. |
 | Manhunt | Runners try to kill the dragon in a fresh End while hunters hunt them. One life each. |
 | Last Man Standing | Free-for-all with a set number of lives. |
-| King of the Hill | Stand on the hill to score. First to the target, or the most when time runs out. |
+| King of the Hill | Stand on the hill to score. First to the target, or the most when time runs out. The hill is a circle (Hill Size sets its radius) around the map's hill spot: stand there in the map's page in **Maps** and choose **Set Hill Here**. Without one it's halfway between the team spawns. |
 | Winner Stays On | One fight at a time. The winner keeps fighting until someone beats them. |
 | Juggernaut | One player gets extra hearts and glows. Take them down to take their place; the longest time as Juggernaut wins. |
 

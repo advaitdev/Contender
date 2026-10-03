@@ -86,7 +86,8 @@ public final class ArenaDialogs {
                 DialogText.lines(
                         spawnLine("Team 1 spawn", map.getTeam1Point() != null),
                         spawnLine("Team 2 spawn", map.getTeam2Point() != null),
-                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS)),
+                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS),
+                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS)),
                 DialogText.detail("Copies", plugin.getArenas().readiness(id), plugin.getArenas().ready(id) > 0 ? SUCCESS : WARNING),
                 DialogText.muted("Stand on a spawn and face the right way, then click its button."));
         List<ActionButton> buttons = new ArrayList<>();
@@ -98,6 +99,17 @@ public final class ArenaDialogs {
                 edit(p, id);
             }));
         }
+        buttons.add(dialogs.button(player, DialogIcon.CROWN.label("Set Hill Here", TEXT),
+                DialogText.muted("King of the Hill's hill is a circle around where you stand. Without one, it's the middle of the map."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().setSpawn(map(id), "hill", p.getLocation());
+                    Dialogs.tell(p, "Hill saved. It's a circle around this spot.");
+                    edit(p, id);
+                }));
+        if (map.getHillPoint() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Middle for the Hill", TEXT), null, true, WIDE, (p, view) -> {
+            plugin.getArenas().clearHill(map(id));
+            Dialogs.tell(p, "The hill is back in the middle of the map.");
+            edit(p, id);
+        }));
         buttons.add(dialogs.button(player, DialogIcon.SAVE.label("Save Current Blocks", TEXT), DialogText.muted("Use after changing the original map. Copies update automatically."), true, WIDE, (p, view) -> {
             var result = plugin.getArenas().saveBlocks(map(id));
             p.closeDialog();

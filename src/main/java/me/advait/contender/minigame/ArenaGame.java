@@ -167,6 +167,30 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         if (!canHit(attacker, victim)) event.setCancelled(true);
     }
 
+    /** Who last hit each player, and when, so a fall long after a hit isn't credited to anyone. */
+    private final Map<UUID, Map.Entry<UUID, Long>> lastHits = new HashMap<>();
+    private static final long KNOCK_OFF_MILLIS = 10_000;
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onHitLanded(EntityDamageByEntityEvent event) {
+        Player attacker = attacker(event);
+        if (attacker == null || !(event.getEntity() instanceof Player victim) || attacker.equals(victim) || !ours(victim)) return;
+        lastHits.put(victim.getUniqueId(), Map.entry(attacker.getUniqueId(), System.currentTimeMillis()));
+    }
+
+    /** Whoever hit this player in the last few seconds, for a knock-off into the void. */
+    private Player knocker(Player victim) {
+        var hit = lastHits.get(victim.getUniqueId());
+        if (hit == null || System.currentTimeMillis() - hit.getValue() > KNOCK_OFF_MILLIS) return null;
+        return Bukkit.getPlayer(hit.getKey());
+    }
+
+    /** Below this height a player has fallen off the map. */
+    protected double voidLevel() { return arena.layout().getBounds().minY(); }
+
+    /** A player fell into the void; {@code knocker} hit them last, or is null. It counts as a death unless a game says otherwise. */
+    protected void fell(Player player, Player knocker) { killed(player, knocker); }
+
     /** Team rules. Everyone can hit everyone by default. */
     protected boolean canHit(Player attacker, Player victim) { return true; }
 
@@ -178,7 +202,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
             if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(watchSpot()));
             return;
         }
-        if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); killed(victim, lastAttacker(victim)); return; }
+        if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); fell(victim, knocker(victim)); return; }
         if (isProtected(victim)) { event.setCancelled(true); return; }
         boolean fromPlayer = attacker(event) != null;
         if (fromPlayer ? kit.isPvpHurt() : kit.isPveHurt()) { HurtRules.removeHealthDamage(event); return; }
@@ -237,7 +261,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
             if (!arena.contains(event.getTo())) event.setTo(watchSpot());
             return;
         }
-        if (fighting(player) && event.getTo().getY() < arena.layout().getBounds().minY()) { killed(player, lastAttacker(player)); return; }
+        if (fighting(player) && event.getTo().getY() < voidLevel()) { fell(player, knocker(player)); return; }
         if (!arena.contains(event.getTo())) event.setTo(arena.contains(event.getFrom()) ? event.getFrom() : watchSpot());
     }
 

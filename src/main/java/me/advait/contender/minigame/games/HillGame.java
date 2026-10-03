@@ -4,7 +4,9 @@ import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
 import me.advait.contender.dialog.DialogIcon;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.dialog.DialogPalette;
+import me.advait.contender.dialog.Dialogs;
 import me.advait.contender.dialog.GameForm;
 import me.advait.contender.display.Holograms;
 import me.advait.contender.display.Theme;
@@ -42,7 +44,11 @@ public final class HillGame extends ArenaGame {
                     "The hill is the map's hill spot, or its middle if it has none. Respawns are on.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 1, 15, 4, 1, "%s: %s min"),
                             GameForm.number("target", DialogIcon.STAR, "Points to Win", 20, 600, 90, 10, null),
-                            GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks")), 2),
+                            GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks"),
+                            DialogInput.singleOption("void", DialogIcon.STEP.label("Void Falls"), List.of(
+                                    Dialogs.option("spawn", "Back to a spawn, no death", true),
+                                    Dialogs.option("death", "Counts as a death", false))).width(300).build(),
+                            GameForm.number("void_depth", DialogIcon.BOOTS, "Void Level", 2, 40, 8, 1, "%s: %s blocks below the hill")), 2),
                     (p, result) -> {
                         Minigame game = create(result.name(), result.map(), result.kit(), result.roster(), result.values());
                         plugin.getMinigames().select(game);
@@ -53,7 +59,8 @@ public final class HillGame extends ArenaGame {
         @Override public Minigame create(String name, ArenaMap map, Kit kit, Map<UUID, String> roster, Map<String, String> options) {
             if (map == null || !map.isComplete()) throw new IllegalArgumentException("Choose a map with both spawns set.");
             if (kit == null) throw new IllegalArgumentException("Choose a kit.");
-            return new HillGame(plugin, this, UUID.randomUUID(), name, roster, map, kit, GameForm.intOption(options, "minutes", 1, 15, 4) * 60, GameForm.intOption(options, "target", 20, 600, 90), GameForm.intOption(options, "radius", 2, 8, 3));
+            return new HillGame(plugin, this, UUID.randomUUID(), name, roster, map, kit, GameForm.intOption(options, "minutes", 1, 15, 4) * 60, GameForm.intOption(options, "target", 20, 600, 90), GameForm.intOption(options, "radius", 2, 8, 3),
+                    !"death".equals(options.get("void")), GameForm.intOption(options, "void_depth", 2, 40, 8));
         }
 
         @Override public Minigame restore() {
@@ -63,24 +70,31 @@ public final class HillGame extends ArenaGame {
             ArenaMap map = extra == null ? null : plugin.getMapManager().getMap(extra.getString("map", ""));
             Kit kit = extra == null ? null : plugin.getKitManager().getKit(extra.getString("kit", ""));
             HillGame game = new HillGame(plugin, this, UUID.fromString(yaml.getString("id")), yaml.getString("name", name()), savedRoster(yaml), map, kit,
-                    extra == null ? 240 : extra.getInt("seconds", 240), extra == null ? 90 : extra.getInt("target", 90), extra == null ? 3 : extra.getInt("radius", 3));
+                    extra == null ? 240 : extra.getInt("seconds", 240), extra == null ? 90 : extra.getInt("target", 90), extra == null ? 3 : extra.getInt("radius", 3),
+                    extra == null || extra.getBoolean("void-respawn", true), extra == null ? 8 : extra.getInt("void-depth", 8));
             game.readSaved(yaml);
             return game;
         }
     }
 
     private final int seconds, target, radius;
+    /** Falling below the void level sends a player back to a spawn instead of killing them. */
+    private final boolean voidRespawn;
+    /** How far below the hill the void starts. */
+    private final int voidDepth;
     private final Map<UUID, Integer> kills = new HashMap<>();
     private Location hill;
     private TextDisplay label;
     private int elapsed;
 
     HillGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit,
-             int seconds, int target, int radius) {
+             int seconds, int target, int radius, boolean voidRespawn, int voidDepth) {
         super(plugin, type, id, name, players, map, kit);
         this.seconds = seconds;
         this.target = target;
         this.radius = radius;
+        this.voidRespawn = voidRespawn;
+        this.voidDepth = voidDepth;
     }
 
     @Override protected int minimumPlayers() { return 2; }
@@ -142,6 +156,31 @@ public final class HillGame extends ArenaGame {
         if (left == 0) finish();
     }
 
+    /** The void starts a set distance below the hill (or at the bottom of the map, if that's higher). */
+    @Override protected double voidLevel() {
+        double bottom = super.voidLevel();
+        return hill == null ? bottom : Math.max(bottom, hill.getY() - voidDepth);
+    }
+
+    /** With void respawns on, a fall isn't a death: straight back to a spawn, keeping health and items. */
+    @Override protected void fell(Player player, Player knocker) {
+        if (!voidRespawn) { killed(player, knocker); return; }
+        if (!isPlaying(player.getUniqueId())) return;
+        boolean knocked = knocker != null && !knocker.equals(player);
+        if (knocked) {
+            kills.merge(knocker.getUniqueId(), 1, Integer::sum);
+            broadcast(plugin.getNameTagManager().displayName(player).append(Msg.text(" was knocked off by ", DialogPalette.MUTED))
+                    .append(plugin.getNameTagManager().displayName(knocker)));
+        }
+        List<Location> ring = spawnRing(Math.max(4, roster().size()));
+        player.setVelocity(new org.bukkit.util.Vector());
+        player.setFallDistance(0);
+        player.setFireTicks(0);
+        player.teleport(ring.get(new Random().nextInt(ring.size())));
+        protect(player, 40);
+        Sounds.WHOOSH.play(player);
+    }
+
     @Override protected void killed(Player victim, Player killer) {
         if (!isPlaying(victim.getUniqueId())) return;
         if (killer != null && !killer.equals(victim)) kills.merge(killer.getUniqueId(), 1, Integer::sum);
@@ -190,6 +229,8 @@ public final class HillGame extends ArenaGame {
         section.set("seconds", seconds);
         section.set("target", target);
         section.set("radius", radius);
+        section.set("void-respawn", voidRespawn);
+        section.set("void-depth", voidDepth);
     }
 
     // ---- Director corrections ------------------------------------------------------------------

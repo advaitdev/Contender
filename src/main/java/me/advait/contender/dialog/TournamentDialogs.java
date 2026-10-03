@@ -109,15 +109,15 @@ public final class TournamentDialogs {
             buttons.add(menuAction(player, DialogIcon.DUEL, canCreate ? "Match Results" : "Matches", TEXT,
                     "Scores, match settings, and spectating.", p -> matches(p, tournament.id(), 0)));
             buttons.add(menuAction(player, DialogIcon.BOARD, "Bracket & Standings", TEXT,
-                    "Choose the round or standings shown in your tab list.", p -> new BracketDialogs(plugin).open(p)));
+                    "Choose the round or standings shown in your tab list.", p -> new BracketDialogs(plugin, this::open).open(p)));
             if (!canCreate) buttons.add(menuAction(player, DialogIcon.PREVIEW, "Spectate", TEXT,
-                    "Watch a match in progress.", p -> new SpectateDialogs(plugin).open(p)));
+                    "Watch a match in progress.", p -> new SpectateDialogs(plugin, this::open).open(p)));
         }
         addShowButtons(player, buttons);
         buttons.add(menuAction(player, DialogIcon.SETTINGS, "Setup Tools", TEXT,
                 "Maps, kits, minigames, displays and the lobby.", this::tools));
         buttons.add(menuAction(player, DialogIcon.SKULL, "Hacker Controls", TEXT,
-                "Pick the hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin).open(p)));
+                "Pick the hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin, this::open).open(p)));
         if (!canCreate) buttons.add(menuAction(player, DialogIcon.CLOSE, "Cancel Tournament", DANGER,
                 "Stop the tournament and end its active matches.", p -> confirmCancel(p, tournament.id())));
         menu(player, "Tournament", contents, buttons, null);
@@ -129,7 +129,7 @@ public final class TournamentDialogs {
                 menuAction(player, DialogIcon.MACE, "Minigames", TEXT, "Race courses, the Manhunt world, and other game setup.", this::minigameTools),
                 menuAction(player, DialogIcon.BOARD, "Board & Lobby", TEXT, "Place the board and set the lobby.", this::venue),
                 menuAction(player, DialogIcon.STAR, "Vote Setup", TEXT, "Voting and judge rooms, timers and the results stage.", this::voteSetup),
-                menuAction(player, DialogIcon.BELL, "Interview Room", TEXT, "Set where hackers are interviewed.", this::interview),
+                menuAction(player, DialogIcon.BELL, "Interview Room", TEXT, "Set where hackers are interviewed.", p -> interview(p, this::tools)),
                 menuAction(player, DialogIcon.GLOW, "Display Colors", TEXT, "Choose the color scheme for boards and effects.", p -> new SettingsDialogs(plugin).theme(p, this::tools)),
                 menuAction(player, DialogIcon.NAME, "Tab Title", TEXT, "Change the title above the tab list and the board.", p -> new SettingsDialogs(plugin).tab(p, this::tools)),
                 menuAction(player, DialogIcon.CLOSE, "Force Cancel All", DANGER, "Stop every event, match and vote.", this::confirmCancelAll)), this::open);
@@ -154,7 +154,7 @@ public final class TournamentDialogs {
         boolean voting = plugin.getVotes().isActive();
         buttons.add(menuAction(player, DialogIcon.STAR, voting ? "Vote in Progress" : "Start a Vote", TEXT,
                 voting ? "See the votes, remove players or end it." : "Everyone votes someone out.", p -> {
-                    if (plugin.getVotes().isActive()) new VoteDialogs(plugin).open(p); else new VoteDialogs(plugin).start(p);
+                    if (plugin.getVotes().isActive()) new VoteDialogs(plugin, this::open).open(p); else new VoteDialogs(plugin, this::open).start(p);
                 }));
         boolean interviewing = plugin.getInterviews().active();
         buttons.add(menuAction(player, DialogIcon.BELL, interviewing ? "End Interview" : "Interview a Player", TEXT,
@@ -167,7 +167,7 @@ public final class TournamentDialogs {
         var interviews = plugin.getInterviews();
         if (interviews.position("interviewee") == null || interviews.position("interviewer") == null) {
             menu(player, "Interview a Player", DialogText.muted("Set both spots in the interview room first."), List.of(
-                    menuAction(player, DialogIcon.BELL, "Interview Room", ACCENT, "Set where you and the player stand.", this::interview)), this::open);
+                    menuAction(player, DialogIcon.BELL, "Interview Room", ACCENT, "Set where you and the player stand.", p -> interview(p, this::interviewee))), this::open);
             return;
         }
         List<ActionButton> buttons = new ArrayList<>();
@@ -184,7 +184,7 @@ public final class TournamentDialogs {
         }
         menu(player, "Interview a Player", DialogText.muted(buttons.isEmpty() ? "Nobody else is online." : "Choose who to interview. You both go back afterwards with /uninterview."), buttons, this::open);
     }
-    private void interview(Player player) {
+    private void interview(Player player, Consumer<Player> back) {
         var interviews = plugin.getInterviews();
         Component status = DialogText.lines(
                 DialogText.detail("Interviewee's spot", interviews.position("interviewee") == null ? "Not set" : "Saved", interviews.position("interviewee") == null ? WARNING : SUCCESS),
@@ -192,11 +192,11 @@ public final class TournamentDialogs {
                 DialogText.muted("Then use /interview <player> and /uninterview."));
         menu(player, "Interview Room", status, List.of(
                 menuAction(player, DialogIcon.SPAWN, "Set Interviewee Spot Here", TEXT, "Stand on the spot, facing the way they should look.", p -> {
-                    plugin.getInterviews().setPosition("interviewee", p.getLocation()); Dialogs.tell(p, "Interviewee spot saved."); interview(p);
+                    plugin.getInterviews().setPosition("interviewee", p.getLocation()); Dialogs.tell(p, "Interviewee spot saved."); interview(p, back);
                 }),
                 menuAction(player, DialogIcon.SPAWN, "Set Your Spot Here", TEXT, "Stand on the spot, facing the way you'll look.", p -> {
-                    plugin.getInterviews().setPosition("interviewer", p.getLocation()); Dialogs.tell(p, "Your spot saved."); interview(p);
-                })), this::tools);
+                    plugin.getInterviews().setPosition("interviewer", p.getLocation()); Dialogs.tell(p, "Your spot saved."); interview(p, back);
+                })), back);
     }
     private void venue(Player player) {
         var board = plugin.getBoard();
@@ -271,8 +271,8 @@ public final class TournamentDialogs {
         if (!requirements.ready()) {
             menu(player, "Before You Begin", requirements.body(), List.of(
                     menuAction(player, DialogIcon.REFRESH, "Check Again", ACCENT, "Continue once a map and kit are ready.", p -> create(p, initial)),
-                    menuAction(player, DialogIcon.MAP, "Maps", TEXT, "Save a map and set both team spawns.", p -> new ArenaDialogs(plugin).open(p)),
-                    menuAction(player, DialogIcon.DUEL, "Edit Kits", TEXT, "Create and save a kit.", this::editKits)), this::open);
+                    menuAction(player, DialogIcon.MAP, "Maps", TEXT, "Save a map and set both team spawns.", p -> new ArenaDialogs(plugin, q -> create(q, initial)).open(p)),
+                    menuAction(player, DialogIcon.DUEL, "Edit Kits", TEXT, "Create and save a kit.", p -> new KitDialogs(plugin).open(p, q -> create(q, initial)))), this::formats);
             return;
         }
         Draft draft = initial == null ? new Draft("Round Robin", maps.getFirst().getId(), kits.getFirst().getId(), false, false, 3,
@@ -283,7 +283,7 @@ public final class TournamentDialogs {
                 DialogInput.singleOption("kit", text("Kit", TEXT), kits.stream().map(k ->
                         io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput.OptionEntry.create(k.getId(), KitIcons.label(k), k.getId().equals(draft.kit()))).toList()).width(INPUT_WIDTH).build());
         form(player, 1, List.of(body(DialogText.muted("Choose a name, map, and kit for this stage.\nYou will see the title preview before creating it."))), inputs,
-                nav(player, DialogIcon.BACK, "Back", MUTED, "Return to the tournament menu.", (p, view) -> open(p)),
+                nav(player, DialogIcon.BACK, "Back", MUTED, "Choose a different event.", (p, view) -> formats(p)),
                 nav(player, DialogIcon.NEXT, "Next: Players", ACCENT, "Choose who will play.", (p, view) -> roster(p, details(view, draft))));
     }
     private Draft details(DialogResponseView view, Draft previous) {

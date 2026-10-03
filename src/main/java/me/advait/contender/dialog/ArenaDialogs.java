@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import static me.advait.contender.dialog.DialogPalette.*;
 
@@ -18,10 +19,15 @@ public final class ArenaDialogs {
     private static final int WIDE = 300, NAV = 150, PER_PAGE = 8;
     private final Contender plugin;
     private final Dialogs dialogs;
+    /** Where the map list's Back goes. */
+    private final Consumer<Player> back;
 
-    public ArenaDialogs(Contender plugin) {
+    public ArenaDialogs(Contender plugin) { this(plugin, p -> new TournamentDialogs(plugin).tools(p)); }
+
+    public ArenaDialogs(Contender plugin, Consumer<Player> back) {
         this.plugin = plugin;
         this.dialogs = new Dialogs(plugin);
+        this.back = back;
     }
 
     public void open(Player player) { open(player, 0); }
@@ -47,7 +53,7 @@ public final class ArenaDialogs {
         body.add(DialogBody.plainMessage(intro, 320));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
         dialogs.show(player, "Maps", body, List.of(), buttons, 2, NAV,
-                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).tools(p)));
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)));
     }
 
     private ArenaMap map(String id) {

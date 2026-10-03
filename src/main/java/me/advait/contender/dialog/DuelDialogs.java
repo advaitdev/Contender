@@ -56,7 +56,7 @@ public final class DuelDialogs {
         if (!requirements.ready()) {
             dialogs.show(player, "Before You Begin", List.of(body(requirements.body())), List.of(), List.of(
                     action(player, DialogIcon.REFRESH, "Check Again", ACCENT, FORM_WIDTH, (p, view) -> details(p, setup)),
-                    action(player, DialogIcon.MAP, "Maps", TEXT, FORM_WIDTH, (p, view) -> new ArenaDialogs(plugin).open(p)),
+                    action(player, DialogIcon.MAP, "Maps", TEXT, FORM_WIDTH, (p, view) -> new ArenaDialogs(plugin, q -> details(q, setup)).open(p)),
                     action(player, DialogIcon.DUEL, "Edit Kits", TEXT, FORM_WIDTH, (p, view) -> editKits(p, setup))), 1, NAV_WIDTH, null);
             return;
         }
@@ -92,7 +92,7 @@ public final class DuelDialogs {
     }
     private void tools(Player player, DuelSetup setup) {
         dialogs.show(player, "Duel Setup Tools", List.of(body(DialogText.muted("Create maps and edit the kits used in duels."))), List.of(), List.of(
-                action(player, DialogIcon.MAP, "Maps", TEXT, FORM_WIDTH, (p, view) -> new ArenaDialogs(plugin).open(p)),
+                action(player, DialogIcon.MAP, "Maps", TEXT, FORM_WIDTH, (p, view) -> new ArenaDialogs(plugin, q -> tools(q, setup)).open(p)),
                 action(player, DialogIcon.DUEL, "Edit Kits", TEXT, FORM_WIDTH, (p, view) -> editKits(p, setup))), 1, NAV_WIDTH, back(player, NAV_WIDTH, p -> details(p, setup)));
     }
     private void editKits(Player player, DuelSetup setup) {

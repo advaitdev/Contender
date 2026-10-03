@@ -27,7 +27,7 @@ public final class SettingsDialogs {
             for (PlayerRole role : List.of(PlayerRole.DIRECTOR, PlayerRole.SPECTATOR)) {
                 buttons.add(option(player, DialogIcon.NAME, role.label() + " Nametags", true, p -> style(p, role)));
             }
-            buttons.add(option(player, DialogIcon.PLAYERS, "Player Roles", true, p -> new RoleDialogs(plugin).open(p)));
+            buttons.add(option(player, DialogIcon.PLAYERS, "Player Roles", true, p -> new RoleDialogs(plugin, this::open).open(p)));
         }
         if (player.hasPermission("contender.admin")) {
             buttons.add(option(player, DialogIcon.SPAWN, "Lobby Settings", false, p -> new GameSettingsDialogs(plugin).lobby(p)));

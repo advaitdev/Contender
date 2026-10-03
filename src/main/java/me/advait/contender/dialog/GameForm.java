@@ -56,7 +56,7 @@ public final class GameForm {
         List<Kit> kits = new ArrayList<>(plugin.getKitManager().getKits());
         if (spec.needsMap() && maps.isEmpty() || spec.needsKit() && !spec.kitOptional() && kits.isEmpty()) {
             dialogs.show(player, "Before You Begin", List.of(DialogBody.plainMessage(new SetupRequirements(maps.size(), kits.size()).body(), 320)), List.of(), List.of(
-                    dialogs.button(player, DialogIcon.MAP.label("Maps", TEXT), null, true, INPUT, (p, view) -> new ArenaDialogs(plugin).open(p)),
+                    dialogs.button(player, DialogIcon.MAP.label("Maps", TEXT), null, true, INPUT, (p, view) -> new ArenaDialogs(plugin, q -> open(q, spec, create, back)).open(p)),
                     dialogs.button(player, DialogIcon.DUEL.label("Kits", TEXT), null, true, INPUT, (p, view) -> new KitDialogs(plugin).open(p, q -> open(q, spec, create, back)))),
                     1, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)));
             return;

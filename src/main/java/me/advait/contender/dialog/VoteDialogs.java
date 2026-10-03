@@ -14,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static me.advait.contender.dialog.DialogPalette.*;
 
@@ -22,10 +23,15 @@ public final class VoteDialogs {
     private static final int CELL = 170, NAV = 150, PER_PAGE = 12;
     private final Contender plugin;
     private final Dialogs dialogs;
+    /** Where the director's Back goes when opened from a menu; null (from /vote) shows Close. */
+    private final Consumer<Player> back;
 
-    public VoteDialogs(Contender plugin) {
+    public VoteDialogs(Contender plugin) { this(plugin, null); }
+
+    public VoteDialogs(Contender plugin, Consumer<Player> back) {
         this.plugin = plugin;
         this.dialogs = new Dialogs(plugin);
+        this.back = back;
     }
 
     public void open(Player player) { open(player, 0, false); }
@@ -74,7 +80,7 @@ public final class VoteDialogs {
                 page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, false, CELL, (p, view) -> open(p, page + 1, manage)) : null, CELL);
         if (director) {
             Dialogs.navigationRow(buttons,
-                    manage ? dialogs.button(player, DialogIcon.BACK.label("Done", MUTED), null, true, CELL, (p, view) -> open(p, page, false))
+                    manage ? dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, CELL, (p, view) -> open(p, page, false))
                             : dialogs.button(player, DialogIcon.SETTINGS.label("Remove Players", TEXT), DialogText.muted("Take someone off the ballot."), true, CELL, (p, view) -> open(p, 0, true)),
                     dialogs.button(player, DialogIcon.STAR.label("End Vote Now", ACCENT), DialogText.muted("Close voting and show the results."), true, CELL, (p, view) -> {
                         require(session);
@@ -96,7 +102,8 @@ public final class VoteDialogs {
         Dialogs.navigationRow(buttons,
                 director && !manage ? dialogs.button(player, DialogIcon.SETTINGS.label("Edit Votes", TEXT), DialogText.muted("Change who voted for whom, for testing."), true, CELL, (p, view) -> editVotes(p, 0)) : null,
                 dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, CELL, (p, view) -> open(p, page, manage)), CELL);
-        dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV, null);
+        dialogs.show(player, manage ? "Remove Players" : "Vote", body, List.of(), buttons, 2, NAV, director && !manage && back != null
+                ? dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)) : null);
     }
 
     // ---- Director: change who voted for whom ----------------------------------------------------
@@ -203,7 +210,9 @@ public final class VoteDialogs {
                 dialogs.button(player, DialogIcon.PLAYERS.label("Choose Players", TEXT), DialogText.muted("Make players safe, or leave them out of the vote."), true, NAV,
                         (p, view) -> players(p, read(view, draft, rooms), 0)), null, NAV);
         Dialogs.navigationRow(buttons,
-                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> new TournamentDialogs(plugin).open(p)),
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> {
+                    if (back != null) back.accept(p); else new TournamentDialogs(plugin).open(p);
+                }),
                 dialogs.button(player, DialogIcon.NEXT.label("Start Vote", ACCENT), null, true, NAV, (p, view) -> {
                     StartDraft chosen = read(view, draft, rooms);
                     plugin.getVotes().start(new VoteService.Options(chosen.seconds(), chosen.live(), chosen.ceremony(), chosen.elimination(),

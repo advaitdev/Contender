@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import static me.advait.contender.dialog.DialogPalette.*;
 
@@ -25,7 +26,15 @@ import static me.advait.contender.dialog.DialogPalette.*;
 public final class BracketDialogs {
     private final Contender plugin;
     private final Dialogs dialogs;
-    public BracketDialogs(Contender plugin) { this.plugin = plugin; dialogs = new Dialogs(plugin); }
+    /** Where Back goes when opened from a menu; null (from /bracket) shows Close. */
+    private final Consumer<Player> back;
+    public BracketDialogs(Contender plugin) { this(plugin, null); }
+    public BracketDialogs(Contender plugin, Consumer<Player> back) { this.plugin = plugin; dialogs = new Dialogs(plugin); this.back = back; }
+
+    /** Back to the menu this was opened from, or null for a plain Close. */
+    private ActionButton footer(Player player) {
+        return back == null ? null : dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, false, 150, (p, response) -> back.accept(p));
+    }
 
     private ActionButton button(Player player, DialogIcon icon, String label, TextColor color,
                                 BiConsumer<Player, DialogResponseView> action) {
@@ -36,7 +45,7 @@ public final class BracketDialogs {
         var manager = plugin.getTabManager();
         Stage event = plugin.getStages().current();
         if (event == null || event.cancelled()) {
-            dialogs.show(player, "Leaderboard", DialogText.muted("No event is selected."), List.of(), List.of());
+            dialogs.show(player, "Leaderboard", List.of(DialogBody.plainMessage(DialogText.muted("No event is selected."), 440)), List.of(), List.of(), 2, 150, footer(player));
             return;
         }
         if (!event.hasRounds()) { preview(player, event.id(), 0); return; }
@@ -58,7 +67,7 @@ public final class BracketDialogs {
         }));
         buttons.add(button(player, DialogIcon.PREVIEW, "Show Preview", TEXT, (p, response) -> preview(p, event.id(), 0)));
         if (player.hasPermission("contender.master")) buttons.add(dialogs.button(player, DialogIcon.SETTINGS.label("Tab Settings", TEXT), null, true, 150,
-                (p, response) -> new SettingsDialogs(plugin).tab(p)));
+                (p, response) -> new SettingsDialogs(plugin).tab(p, this::open)));
         else buttons.add(button(player, DialogIcon.REFRESH, "Refresh", TEXT, (p, response) -> open(p)));
         if (layout.pages() > 1) {
             Dialogs.navigationRow(buttons, layout.page() > 0 ? button(player, DialogIcon.BACK, "Previous", TEXT, (p, response) -> {
@@ -73,7 +82,7 @@ public final class BracketDialogs {
                         DialogText.detail("Points", "1 per match won"), DialogText.muted("Ties are ordered by round difference.")));
         if (!manager.supportsBracket()) body = DialogText.paragraphs(body,
                 DialogText.muted("The tab bracket is unavailable on this server.\nYou can still open the preview."));
-        dialogs.show(player, "Tab Bracket", List.of(DialogBody.plainMessage(body, 320)), inputs, buttons, 2, 150, null);
+        dialogs.show(player, "Tab Bracket", List.of(DialogBody.plainMessage(body, 320)), inputs, buttons, 2, 150, footer(player));
     }
 
     private Stage sameEvent(UUID id) {
@@ -103,12 +112,13 @@ public final class BracketDialogs {
         } else if (columns == 1) {
             dialogs.show(player, "Leaderboard", List.of(DialogBody.plainMessage(body, 450)), List.of(),
                     List.of(dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, 300,
-                            (p, response) -> preview(p, eventId, selected))), 1, 150, null);
+                            (p, response) -> preview(p, eventId, selected))), 1, 150, footer(player));
             return;
         }
         if (columns > 1) Dialogs.navigationRow(buttons,
                 selected > 0 ? button(player, DialogIcon.BACK, "Previous", TEXT, (p, response) -> preview(p, eventId, selected - 1)) : null,
                 selected + 1 < columns ? button(player, DialogIcon.NEXT, "Next", TEXT, (p, response) -> preview(p, eventId, selected + 1)) : null, 150);
-        dialogs.show(player, event.hasRounds() ? "Bracket Preview" : "Leaderboard", List.of(DialogBody.plainMessage(body, 450)), List.of(), buttons, 2, 150, null);
+        dialogs.show(player, event.hasRounds() ? "Bracket Preview" : "Leaderboard", List.of(DialogBody.plainMessage(body, 450)), List.of(), buttons, 2, 150,
+                event.hasRounds() ? null : footer(player));
     }
 }

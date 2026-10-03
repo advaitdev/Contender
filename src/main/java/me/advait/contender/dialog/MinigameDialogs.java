@@ -54,11 +54,11 @@ public final class MinigameDialogs {
         }
         if (game.acceptsWatchers()) buttons.add(button(player, DialogIcon.PREVIEW, "Spectate", TEXT, "Watch the game.",
                 p -> { plugin.getSpectate().watch(p, require(game)); p.closeDialog(); }));
-        buttons.add(button(player, DialogIcon.BOARD, "Leaderboard", TEXT, "See the current standings.", p -> new BracketDialogs(plugin).open(p)));
+        buttons.add(button(player, DialogIcon.BOARD, "Leaderboard", TEXT, "See the current standings.", p -> new BracketDialogs(plugin, q -> control(q, game)).open(p)));
         if (!game.finished()) buttons.add(button(player, DialogIcon.PLAYERS, "Manage Players", TEXT, "Change scores or withdraw players.", p -> players(p, game)));
         new TournamentDialogs(plugin).addShowButtons(player, buttons);
         buttons.add(button(player, DialogIcon.SETTINGS, "Setup Tools", TEXT, "Maps, kits, courses and displays.", p -> new TournamentDialogs(plugin).tools(p)));
-        buttons.add(button(player, DialogIcon.SKULL, "Hacker Controls", TEXT, "Hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin).open(p)));
+        buttons.add(button(player, DialogIcon.SKULL, "Hacker Controls", TEXT, "Hackers, their hacks and sabotages.", p -> new HackerAdminDialogs(plugin, q -> control(q, game)).open(p)));
         if (!game.finished()) buttons.add(button(player, DialogIcon.CLOSE, "Cancel Game", DANGER, "Stop now. Everyone goes back to the lobby.", p -> confirmCancel(p, game)));
         dialogs.show(player, game.name(), body, List.of(), buttons, 1, NAV, null);
     }

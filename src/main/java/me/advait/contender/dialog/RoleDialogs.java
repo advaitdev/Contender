@@ -12,7 +12,10 @@ import java.util.*;
 public final class RoleDialogs {
     private final Contender plugin;
     private final Dialogs dialogs;
-    public RoleDialogs(Contender plugin) { this.plugin = plugin; dialogs = new Dialogs(plugin); }
+    /** Where the role list's Back goes when opened from a menu; null (from /role) shows Close. */
+    private final java.util.function.Consumer<Player> back;
+    public RoleDialogs(Contender plugin) { this(plugin, null); }
+    public RoleDialogs(Contender plugin, java.util.function.Consumer<Player> back) { this.plugin = plugin; dialogs = new Dialogs(plugin); this.back = back; }
     public void open(Player player) { open(player, 0); }
     private void open(Player player, int page) {
         var players = Bukkit.getOnlinePlayers().stream().sorted(Comparator.comparing(Player::getName)).toList();
@@ -27,9 +30,10 @@ public final class RoleDialogs {
         Dialogs.navigationRow(buttons,
                 page > 0 ? dialogs.button(player, DialogIcon.BACK, "Previous Page", (p, view) -> open(p, page - 1)) : null,
                 (page + 1) * 8 < players.size() ? dialogs.button(player, DialogIcon.NEXT, "Next Page", (p, view) -> open(p, page + 1)) : null);
-        dialogs.show(player, "Player Roles", DialogText.paragraphs(
+        dialogs.show(player, "Player Roles", List.of(io.papermc.paper.registry.data.dialog.body.DialogBody.plainMessage(DialogText.paragraphs(
                 DialogText.muted("Only contestants can enter duels and tournaments."),
-                DialogText.page(page + 1, Math.max(1, (players.size() + 7) / 8))), List.of(), buttons);
+                DialogText.page(page + 1, Math.max(1, (players.size() + 7) / 8))), 440)), List.of(), buttons, 2, 220, back == null ? null
+                : dialogs.button(player, DialogIcon.BACK.label("Back", DialogPalette.MUTED), null, true, 220, (p, view) -> back.accept(p)));
     }
     public void edit(Player player, UUID target, String name) {
         PlayerRole current = plugin.getRoleManager().getRole(target);

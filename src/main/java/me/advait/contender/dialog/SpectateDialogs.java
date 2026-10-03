@@ -23,10 +23,15 @@ public final class SpectateDialogs {
     private static final int WIDTH = 150, NAV = 150, PER_PAGE = 8;
     private final Contender plugin;
     private final Dialogs dialogs;
+    /** Where Back goes when opened from a menu; null (from /spectate) shows Close. */
+    private final java.util.function.Consumer<Player> back;
 
-    public SpectateDialogs(Contender plugin) {
+    public SpectateDialogs(Contender plugin) { this(plugin, null); }
+
+    public SpectateDialogs(Contender plugin, java.util.function.Consumer<Player> back) {
         this.plugin = plugin;
         this.dialogs = new Dialogs(plugin);
+        this.back = back;
     }
 
     public void open(Player player) { open(player, 0); }
@@ -61,7 +66,8 @@ public final class SpectateDialogs {
                     me.advait.contender.command.Commands.lobby(plugin, p);
                 }),
                 dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, NAV, (p, view) -> open(p, page)), NAV);
-        dialogs.show(player, "Spectate", body, List.of(), buttons, 2, NAV, null);
+        dialogs.show(player, "Spectate", body, List.of(), buttons, 2, NAV, back == null ? null
+                : dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, false, NAV, (p, view) -> back.accept(p)));
     }
 
     private Component duelLabel(Duel duel) {

@@ -22,10 +22,15 @@ public final class HackerAdminDialogs {
     private static final String OFFLINE = "Offline";
     private final Contender plugin;
     private final Dialogs dialogs;
+    /** Where Hacker Controls' Back goes when opened from a menu; null (from /hackers) shows Close. */
+    private final java.util.function.Consumer<Player> back;
 
-    public HackerAdminDialogs(Contender plugin) {
+    public HackerAdminDialogs(Contender plugin) { this(plugin, null); }
+
+    public HackerAdminDialogs(Contender plugin, java.util.function.Consumer<Player> back) {
         this.plugin = plugin;
         this.dialogs = new Dialogs(plugin);
+        this.back = back;
     }
 
     public void open(Player player) {
@@ -70,7 +75,8 @@ public final class HackerAdminDialogs {
                 }));
         buttons.add(button(player, DialogIcon.SKULL, "Sabotage Settings", TEXT, "Turn sabotages on and choose which ones hackers can use.",
                 p -> new SabotageDialogs(plugin).settings(p, this::open)));
-        dialogs.show(player, "Hacker Controls", body, List.of(), buttons, 1, NAV, null);
+        dialogs.show(player, "Hacker Controls", body, List.of(), buttons, 1, NAV, back == null ? null
+                : dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)));
     }
 
     private ActionButton button(Player player, DialogIcon icon, String label, net.kyori.adventure.text.format.TextColor color, String hint,

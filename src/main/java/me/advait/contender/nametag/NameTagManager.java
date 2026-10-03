@@ -27,6 +27,9 @@ public final class NameTagManager extends Module {
     private long nextTeam;
     private boolean hidden;
 
+    /** Whether every nametag is hidden right now. */
+    public boolean hidden() { return hidden; }
+
     /** Hides every nametag (used by the Nameless sabotage). */
     public void setHidden(boolean hide) {
         hidden = hide;

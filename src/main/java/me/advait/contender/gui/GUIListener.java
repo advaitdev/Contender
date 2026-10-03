@@ -86,6 +86,12 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }
+            case KitEditorGUI.HEALTH_SLOT -> {
+                saveKitFromInventory(event.getInventory(), kit);
+                kit.setHealthUnderName(!kit.isHealthUnderName());
+                MessageUtil.playClick(player);
+                KitEditorGUI.open(player, kit, isNew);
+            }
             case KitEditorGUI.BLOCK_PLACE_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kit.setAllowBlockPlace(!kit.isAllowBlockPlace());

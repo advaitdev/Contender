@@ -39,16 +39,16 @@ final class VoteReceipts {
     void show(VoteSession session) {
         clear();
         Theme theme = plugin.getThemes().current();
-        for (VoteSession.Candidate voter : session.candidates()) {
-            Player player = Bukkit.getPlayer(voter.id());
+        for (UUID voter : session.voters().keySet()) {
+            Player player = Bukkit.getPlayer(voter);
             if (player == null || player.isDead()) continue;
-            UUID choice = session.voteOf(voter.id());
+            UUID choice = session.voteOf(voter);
             VoteSession.Candidate target = choice == null ? null : session.candidate(choice);
             Component text = target == null ? Component.text("Didn't vote", theme.muted())
                     : Component.text("Voted for", theme.muted()).appendNewline()
                             .append(StringUtil.getPlayerHead(target.id())).append(Component.text(" " + target.name(), theme.primary()));
             TextDisplay display = Holograms.text(above(player), text, 0.01f, Display.Billboard.CENTER, theme.background(plugin.getThemes().opacity()), "vote_receipt");
-            displays.put(voter.id(), display);
+            displays.put(voter, display);
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> Holograms.animate(display, Holograms.scaled(1f), 6), 2L);
         }
         until = System.currentTimeMillis() + SHOW_MILLIS;

@@ -65,6 +65,7 @@ public class KitManager {
             kit.setNaturalRegen(section.getBoolean("natural-regen", true));
             kit.setNoClear(section.getBoolean("no-clear", false));
             kit.setPvpHurt(section.getBoolean("pvp-hurt", false));
+            kit.setHealthUnderName(section.getBoolean("health-under-name", false));
             kit.setPveHurt(section.getBoolean("pve-hurt", false));
 
             if (section.contains("contents")) {
@@ -116,6 +117,7 @@ public class KitManager {
             config.set(path + ".natural-regen", kit.isNaturalRegen());
             config.set(path + ".no-clear", kit.isNoClear());
             config.set(path + ".pvp-hurt", kit.isPvpHurt());
+            config.set(path + ".health-under-name", kit.isHealthUnderName());
             config.set(path + ".pve-hurt", kit.isPveHurt());
             config.set(path + ".contents", Arrays.asList(kit.getContents()));
             config.set(path + ".armor", Arrays.asList(kit.getArmor()));

@@ -18,6 +18,7 @@ public class Kit {
     private boolean noClear;
     private boolean pvpHurt;
     private boolean pveHurt;
+    private boolean healthUnderName;
 
     public Kit(String id) {
         this.id = id;
@@ -73,6 +74,7 @@ public class Kit {
         noClear = other.noClear;
         pvpHurt = other.pvpHurt;
         pveHurt = other.pveHurt;
+        healthUnderName = other.healthUnderName;
     }
 
     private ItemStack[] cloneArray(ItemStack[] original) {
@@ -165,6 +167,9 @@ public class Kit {
     }
 
     public boolean isPvpHurt() { return pvpHurt; }
+    /** Shows "17 ❤" under the names of players using this kit. */
+    public boolean isHealthUnderName() { return healthUnderName; }
+    public void setHealthUnderName(boolean value) { healthUnderName = value; }
     public void setPvpHurt(boolean value) { pvpHurt = value; }
     public boolean isPveHurt() { return pveHurt; }
     public void setPveHurt(boolean value) { pveHurt = value; }

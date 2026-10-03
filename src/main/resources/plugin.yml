@@ -46,7 +46,7 @@ commands:
   startvote:
     description: "Start a community vote"
     permission: contender.master
-    usage: "/startvote [seconds] [live] [quick] [spectate|keep] [stay|nomove] [public]"
+    usage: "/startvote [seconds] [live] [quick] [spectate|keep] [stay|nomove] [anonymous] [safe:names] [sitout:names]"
   endvote:
     description: "Close the vote and show the results"
     permission: contender.master

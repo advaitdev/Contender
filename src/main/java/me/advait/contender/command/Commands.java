@@ -223,17 +223,29 @@ public final class Commands {
 
     private void startVote(CommandSender sender, String[] args) {
         if (args.length == 0 && sender instanceof Player player) { new VoteDialogs(plugin).start(player); return; }
-        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove] [public]."); return; }
+        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove] [anonymous] [safe:names] [sitout:names]."); return; }
         int seconds;
         try { seconds = Integer.parseInt(args[0]); }
         catch (NumberFormatException invalid) { Msg.error(sender, "Use /startvote <seconds>."); return; }
         Set<String> flags = new HashSet<>();
-        for (int i = 1; i < args.length; i++) flags.add(args[i].toLowerCase(Locale.ROOT));
+        Set<UUID> safe = new HashSet<>(), sittingOut = new HashSet<>();
+        for (int i = 1; i < args.length; i++) {
+            String flag = args[i].toLowerCase(Locale.ROOT);
+            // safe:Alice,Bob can't be voted for; sitout:Carol doesn't vote at all.
+            Set<UUID> group = flag.startsWith("safe:") ? safe : flag.startsWith("sitout:") ? sittingOut : null;
+            if (group == null) { flags.add(flag); continue; }
+            for (String name : args[i].substring(args[i].indexOf(':') + 1).split(",")) {
+                if (name.isBlank()) continue;
+                Player named = plugin.getServer().getPlayerExact(name);
+                if (named == null) { Msg.error(sender, name + " isn't online."); return; }
+                group.add(named.getUniqueId());
+            }
+        }
         VoteService.RoomMode rooms = flags.contains("nomove") ? VoteService.RoomMode.OFF : flags.contains("stay") ? VoteService.RoomMode.STAY : VoteService.RoomMode.RETURN;
         // The voted-out player dies and spectates unless told otherwise.
         VoteService.Elimination elimination = flags.contains("keep") ? VoteService.Elimination.KEEP
                 : flags.contains("spectate") || flags.contains("eliminate") ? VoteService.Elimination.SPECTATE : VoteService.Elimination.KILL;
-        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms, !flags.contains("public")));
+        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms, flags.contains("anonymous"), safe, sittingOut));
         Msg.success(sender, "Vote started for " + seconds + " seconds.");
     }
 }

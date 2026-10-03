@@ -17,6 +17,9 @@ public interface Activity {
     /** The player reconnected while still owned. */
     default void handleJoin(Player player) { }
 
+    /** The kit its players use, or null when there isn't one. */
+    default me.advait.contender.kit.Kit kit() { return null; }
+
     /** Stop immediately, return everyone to the lobby and release every claim. Must not throw. */
     void forceStop(String reason);
 }

@@ -220,14 +220,31 @@ public final class GauntletGame extends ArenaGame {
     }
 
     @Override protected List<StandingsLayout.Row> standings() {
-        List<Participant> order = new ArrayList<>(roster().stream().filter(p -> p.status != Status.WITHDRAWN).toList());
-        order.sort(Comparator.comparingDouble((Participant p) -> p.score).reversed()
-                .thenComparing(Comparator.comparingInt((Participant p) -> best.getOrDefault(p.id, 0)).reversed()));
+        List<Participant> shown = roster().stream().filter(p -> p.status != Status.WITHDRAWN).toList();
+        List<Participant> order = new ArrayList<>();
+        if (finished()) {
+            // A ranking: most wins, then the longest run of wins in a row.
+            order.addAll(shown);
+            order.sort(Comparator.comparingDouble((Participant p) -> p.score).reversed()
+                    .thenComparing(Comparator.comparingInt((Participant p) -> best.getOrDefault(p.id, 0)).reversed()));
+        } else {
+            // The queue: who's fighting, then who's next in line, then anyone who left.
+            List<UUID> line = new ArrayList<>();
+            if (champion != null) line.add(champion);
+            if (challenger != null) line.add(challenger);
+            line.addAll(queue);
+            for (UUID id : line) shown.stream().filter(p -> p.id.equals(id)).findFirst().ifPresent(p -> { if (!order.contains(p)) order.add(p); });
+            for (Participant p : shown) if (!order.contains(p)) order.add(p);
+        }
         List<StandingsLayout.Row> rows = new ArrayList<>();
         for (Participant p : order) {
-            int wins = (int) p.score, streakBest = best.getOrDefault(p.id, 0);
-            String value = wins + (wins == 1 ? " win" : " wins") + (streakBest > 1 ? "  best " + streakBest : "");
-            rows.add(new StandingsLayout.Row(p.id, p.name, value, p.id.equals(champion) && started(), p.status == Status.OUT));
+            int wins = (int) p.score;
+            String value = wins + (wins == 1 ? " win" : " wins");
+            // At the end, a tie on wins goes to the longer run, so show the runs only then.
+            int run = best.getOrDefault(p.id, 0);
+            if (finished() && wins > 0 && shown.stream().anyMatch(other -> other != p && (int) other.score == wins)) value += ", " + run + " in a row";
+            boolean fighting = live && (p.id.equals(champion) || p.id.equals(challenger));
+            rows.add(new StandingsLayout.Row(p.id, p.name, value, fighting, p.status == Status.OUT));
         }
         return rows;
     }

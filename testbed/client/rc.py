@@ -12,6 +12,7 @@
   rc.py wait <title> [seconds]    wait until a screen with this title (substring) is open
   rc.py waitclosed [seconds]      wait until no screen is open
   rc.py use <slot>                select a hotbar slot (0-8) and right-click with it
+  rc.py slot <n> [right]          click slot n of the open inventory (a chest GUI's own slots come first)
   rc.py attack                    left-click whatever the crosshair is on
   rc.py swing                     swing the arm (a left click at nothing, used by in-world boards)
   rc.py hud on|off                show or hide the HUD (like F1)
@@ -115,6 +116,9 @@ def main(argv):
         s = screen()
         widget = find_widget(s, " ".join(argv[1:]))
         print(json.dumps(call("POST", "/v1/actors/Render_1/click", {"widgetId": widget})))
+    elif op == "slot":
+        body = {"slotId": int(argv[1]), "button": 1 if len(argv) > 2 and argv[2] == "right" else 0}
+        print(json.dumps(call("POST", "/v1/actors/Render_1/click", body)))
     elif op == "slide":
         # slide <id|label> <position 0-1>: click a slider at that point along its track
         print(json.dumps(call("POST", "/v1/actors/Render_1/click", {"widgetId": find_widget(screen(), argv[1]), "position": float(argv[2])})))

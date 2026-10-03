@@ -49,9 +49,19 @@ public final class VoteService extends Module {
 
     /**
      * @param liveCounts show how many votes each player has in /vote while voting
-     * @param anonymous  false shows, above each voter, who they voted for once voting closes
+     * @param anonymous  false shows, above each voter, who they voted for once the results are out
+     * @param safe       contestants who vote but can't be voted for
+     * @param sittingOut contestants left out of the vote completely
      */
-    public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous) {
+    public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
+                          Set<UUID> safe, Set<UUID> sittingOut) {
+        public Options {
+            safe = Set.copyOf(safe);
+            sittingOut = Set.copyOf(sittingOut);
+        }
+        public Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous) {
+            this(seconds, liveCounts, ceremony, elimination, rooms, anonymous, Set.of(), Set.of());
+        }
         public Options(int seconds, boolean liveCounts, boolean ceremony, boolean eliminate) {
             this(seconds, liveCounts, ceremony, eliminate ? Elimination.KILL : Elimination.KEEP, RoomMode.RETURN, true);
         }
@@ -98,22 +108,27 @@ public final class VoteService extends Module {
         if (reveal != null || receipts.showing()) throw new IllegalStateException("Wait for the results to finish.");
         if (chosen.seconds() < 10 || chosen.seconds() > 3600) throw new IllegalArgumentException("Choose a length from 10 seconds to 60 minutes.");
         List<Map.Entry<UUID, String>> players = new ArrayList<>();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (plugin.getRoleManager().getRole(player.getUniqueId()) == PlayerRole.CONTESTANT) {
-                players.add(Map.entry(player.getUniqueId(), player.getName()));
-            }
+        Map<UUID, String> voters = new LinkedHashMap<>();
+        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+        online.sort(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
+        for (Player player : online) {
+            UUID id = player.getUniqueId();
+            if (plugin.getRoleManager().getRole(id) != PlayerRole.CONTESTANT || chosen.sittingOut().contains(id)) continue;
+            voters.put(id, player.getName());
+            if (!chosen.safe().contains(id)) players.add(Map.entry(id, player.getName()));
         }
-        players.sort(Map.Entry.comparingByValue(String.CASE_INSENSITIVE_ORDER));
-        if (players.size() < 2) throw new IllegalStateException("At least two contestants must be online to vote.");
+        if (players.size() < 2) throw new IllegalStateException(chosen.safe().isEmpty() && chosen.sittingOut().isEmpty()
+                ? "At least two contestants must be online to vote." : "At least two online contestants must be on the ballot.");
         generation++;
         timer.hide();
         options = chosen;
-        session = new VoteSession(VoteSession.number(players), chosen.liveCounts(), System.currentTimeMillis() + chosen.seconds() * 1000L);
+        session = new VoteSession(VoteSession.number(players), voters, chosen.sittingOut(), chosen.liveCounts(), System.currentTimeMillis() + chosen.seconds() * 1000L);
         if (plugin.getTournaments().current() != null && plugin.getTournaments().current().isRunning()) plugin.getTournaments().pause();
         rooms.gather(chosen.rooms());
         var theme = plugin.getThemes().current();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Msg.title(player, Component.text("Vote", theme.primary()), Msg.text("Use /vote to choose a player", DialogPalette.MUTED), 8, 50, 12);
+            Msg.title(player, Component.text("Vote", theme.primary()), Msg.text(session.sittingOut(player.getUniqueId())
+                    ? "You're sitting out this one" : "Use /vote to choose a player", DialogPalette.MUTED), 8, 50, 12);
             Sounds.ANNOUNCE.play(player);
         }
         Msg.broadcast(Msg.text("A vote has started. ", DialogPalette.ACCENT).append(Msg.text("Use /vote to choose a player.", DialogPalette.TEXT)));
@@ -138,6 +153,7 @@ public final class VoteService extends Module {
         VoteSession current = require();
         if (plugin.getRoleManager().getRole(voter.getUniqueId()) != PlayerRole.CONTESTANT) throw new IllegalStateException("Only contestants can vote.");
         current.vote(voter.getUniqueId(), target);
+        current.addVoter(voter.getUniqueId(), voter.getName());
         Sounds.CLICK.play(voter);
     }
 
@@ -161,13 +177,14 @@ public final class VoteService extends Module {
         // With a ceremony the timers stay at 00:00 until the spotlight is done (VoteReveal shows the results).
         if (!options.ceremony()) tasks.later(RESULTS_DELAY_TICKS, () -> { if (generation == current) timer.showResults(closing.results()); });
         for (Player player : Bukkit.getOnlinePlayers()) if (!plugin.getRegistry().isPlaying(player.getUniqueId())) player.sendActionBar(Component.empty());
-        // Who voted for whom, when votes aren't anonymous. The vote isn't over until these are gone.
-        if (!options.anonymous()) receipts.show(closing);
-        long overAt = receipts.showing() ? receipts.until() : 0;
+        // Who voted for whom, when votes aren't anonymous. With a ceremony they wait for the spotlight, so they don't
+        // give the result away. The vote isn't over until they're gone.
         if (options.ceremony()) {
-            reveal = new VoteReveal(plugin, this, closing, options.elimination(), overAt);
+            reveal = new VoteReveal(plugin, this, closing, options.elimination(), !options.anonymous());
             reveal.play();
         } else {
+            if (!options.anonymous()) receipts.show(closing);
+            long overAt = receipts.showing() ? receipts.until() : 0;
             announce(closing);
             List<VoteSession.Candidate> leaders = closing.leaders();
             if (leaders.size() == 1) voteOut(leaders.getFirst().id(), options.elimination());
@@ -249,13 +266,20 @@ public final class VoteService extends Module {
     /** Turns the timers into the results. */
     void showResults(VoteSession closed) { timer.showResults(closed.results()); }
 
+    /** Shows who voted for whom; returns when the displays go away (epoch millis). */
+    long showReceipts(VoteSession closed) {
+        receipts.show(closed);
+        return receipts.until();
+    }
+
     /**
      * A director's override of one player's vote, for testing: {@code target} null takes the vote away. Works for
      * any contestant in the vote, online or not.
      */
     public void setVote(UUID voter, UUID target) {
         VoteSession current = require();
-        if (current.candidate(voter) == null) throw new IllegalArgumentException("That player isn't in this vote.");
+        String voterName = current.voters().get(voter);
+        if (voterName == null) throw new IllegalArgumentException("That player isn't voting in this one.");
         if (target == null) {
             current.unvote(voter);
         } else {
@@ -263,7 +287,7 @@ public final class VoteService extends Module {
             if (chosen == null) throw new IllegalArgumentException("That player isn't in this vote.");
             current.vote(voter, chosen);
         }
-        plugin.getLogger().info("A director set " + current.candidate(voter).name() + "'s vote to "
+        plugin.getLogger().info("A director set " + voterName + "'s vote to "
                 + (target == null ? "nobody" : current.candidate(target).name()) + ".");
     }
 

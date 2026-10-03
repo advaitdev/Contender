@@ -34,6 +34,8 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
     private final Map<UUID, Long> spawnProtection = new HashMap<>();
     private final Set<Long> placedBlocks = new HashSet<>();
 
+    @Override public Kit kit() { return kit; }
+
     protected ArenaGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit) {
         super(plugin, type, id, name, players);
         this.map = map;

@@ -80,8 +80,11 @@ final class VoteRooms {
         if (center != null) move(player, spots(center, 1).getFirst(), mode);
     }
 
+    /** Voters go to the voting room; everyone else, including contestants sitting the vote out, goes to the judge room. */
     private VoteService.Room roomFor(Player player) {
-        return plugin.getRoleManager().getRole(player.getUniqueId()) == PlayerRole.CONTESTANT ? VoteService.Room.VOTING : VoteService.Room.JUDGE;
+        VoteSession session = plugin.getVotes().session();
+        boolean sittingOut = session != null && session.sittingOut(player.getUniqueId());
+        return plugin.getRoleManager().getRole(player.getUniqueId()) == PlayerRole.CONTESTANT && !sittingOut ? VoteService.Room.VOTING : VoteService.Room.JUDGE;
     }
 
     private void move(Player player, Location spot, VoteService.RoomMode mode) {

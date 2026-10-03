@@ -46,6 +46,8 @@ public final class ManhuntGame extends Minigame {
     private Team winner;
     private int missingDragonTicks;
 
+    @Override public Kit kit() { return kit; }
+
     ManhuntGame(Contender plugin, ManhuntType type, UUID id, String name, Map<UUID, String> players, Kit kit, Map<UUID, Team> teams, String worldName) {
         super(plugin, type, id, name, players);
         this.manhunt = type;

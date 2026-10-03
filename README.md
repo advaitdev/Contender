@@ -22,7 +22,7 @@ Drop the jar from `dist/` into `plugins/` and start the server. Operators have b
 1. **Lobby.** Stand where players should arrive and run `/setlobby`.
 2. **Roles.** Everyone starts as a contestant. Use `/role <player> director` for the crew and `/role <player> spectator` for people who only watch.
 3. **Maps.** Build an arena, select it with the WorldEdit wand, then `/arena` → **New Map from Selection**. Set both spawns from the map's page. Contender pastes copies of it into its own world so many matches can run at once.
-4. **Kits.** `/tournament` → **Setup Tools** → **Kits** → **Create New Kit**. Name it, then lay out the items and armor.
+4. **Kits.** `/tournament` → **Setup Tools** → **Kits** → **Create New Kit**. Name it, then lay out the items and armor. **Health Under Name** (off by default) shows each player's health as `17 ❤` under their name, out of 20, with one decimal place below 3. Extra hearts (a Juggernaut, or a hacker's) still read out of 20. Everyone playing or watching a game with that kit sees it.
 
 Outside a game, players can't break or place blocks anywhere unless **Lobby Settings** (`/options`) allows it. Operators can still build with the admin build bypass. In a match or minigame the kit's **Break Blocks** and **Place Blocks** settings apply instead, and only blocks placed during that match can be broken.
 
@@ -51,7 +51,7 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 | Winner Stays On | One fight at a time. The winner keeps fighting until someone beats them. |
 | Juggernaut | One player gets extra hearts and glows. Take them down to take their place; the longest time as Juggernaut wins. |
 
-Players go in the order you type them in the Players box. That sets the Combo turn order, the Winner Stays On queue (the first two fight first) and the first Juggernaut.
+Players go in the order you type them in the Players box. That sets the Combo turn order, the Winner Stays On queue (the first two fight first) and the first Juggernaut. While Winner Stays On runs, the tab list follows the queue: the two fighters, then who's next in line.
 
 Minigames that need building have their own page in **Setup Tools** → **Minigames**:
 
@@ -83,9 +83,10 @@ Form options:
   - Becomes a spectator, without dying.
   - Stays a contestant.
 - **Rooms**: see below.
-- **Anonymous Votes** (Yes by default). Set it to No and, once voting closes, a small display over each voter shows who they voted for (or that they didn't vote), so everyone is held to their vote. These stay for 10 seconds and follow the players, and the vote isn't over until they're gone.
+- **Choose Players**: click a contestant to make them **Safe** (they vote but can't be voted for), click again for **Sitting Out** (they don't vote at all and wait in the judge room), and again to put them back in. **Everyone In** clears it.
+- **Anonymous Votes** (No by default). While it's No, once voting closes, a small display over each voter shows who they voted for (or that they didn't vote), so everyone is held to their vote. With the ceremony they appear once the spotlight lands, so they don't give the result away. They stay for 10 seconds and follow the players, and the vote isn't over until they're gone.
 
-With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), and `public` (not anonymous).
+With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), `anonymous` (hide who voted for whom), `safe:Alice,Bob` and `sitout:Carol`.
 
 **Edit Votes.** While a vote runs, directors have an **Edit Votes** button in `/vote`. It lists who voted for whom with the totals. Click a voter to change their vote or take it away. Players aren't told. It's meant for testing.
 

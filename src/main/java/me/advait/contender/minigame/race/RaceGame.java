@@ -46,6 +46,8 @@ public final class RaceGame extends Minigame {
     private long startedAt;
     private double lowest;
 
+    @Override public Kit kit() { return kit; }
+
     RaceGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, RaceCourse course, Kit kit, int timeLimitSeconds) {
         super(plugin, type, id, name, players);
         this.course = course;

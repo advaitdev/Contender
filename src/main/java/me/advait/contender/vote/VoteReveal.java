@@ -59,14 +59,14 @@ final class VoteReveal implements Activity, Listener {
     private boolean moving;
     private UUID votedOut;
     private boolean finished;
-    /** The ceremony doesn't end before this (epoch millis), so who-voted-for-whom displays get their full time. */
-    private final long notBefore;
+    /** Whether to show who voted for whom once the spotlight lands. The ceremony waits for those displays to go. */
+    private final boolean receipts;
 
     record Layout(List<Location> spots, Vector facing) { }
 
-    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteService.Elimination elimination, long notBefore) {
+    VoteReveal(Contender plugin, VoteService service, VoteSession session, VoteService.Elimination elimination, boolean receipts) {
         this.plugin = plugin;
-        this.notBefore = notBefore;
+        this.receipts = receipts;
         this.service = service;
         this.session = session;
         this.elimination = elimination;
@@ -305,8 +305,9 @@ final class VoteReveal implements Activity, Listener {
 
     private void conclude(List<VoteSession.Candidate> leaders, int votes) {
         if (finished) return;
-        // The timers turn into the results now that the spotlight is done.
+        // The timers turn into the results now that the spotlight is done, and votes are shown if they aren't anonymous.
         service.showResults(session);
+        long notBefore = receipts ? service.showReceipts(session) : 0;
         if (leaders.isEmpty()) {
             Msg.broadcast(Msg.text("The vote ended with no votes cast.", DialogPalette.MUTED));
         } else if (leaders.size() > 1) {

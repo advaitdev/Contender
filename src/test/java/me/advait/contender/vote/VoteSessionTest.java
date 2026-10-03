@@ -61,4 +61,18 @@ class VoteSessionTest {
         session.close();
         assertThrows(IllegalStateException.class, () -> session.vote(dana, session.byNumber(1)));
     }
+
+    @Test void safePlayersVoteButArentOnTheBallot() {
+        // Dana is safe: she votes but isn't a candidate. Carl sits out.
+        Map<UUID, String> voters = new java.util.LinkedHashMap<>(Map.of(alice, "Alice", bob, "Bob", dana, "Dana", carl, "Carl"));
+        VoteSession session = new VoteSession(VoteSession.number(List.of(Map.entry(alice, "Alice"), Map.entry(bob, "Bob"))), voters, java.util.Set.of(carl), false, 0);
+        assertNull(session.candidate(dana));
+        assertFalse(session.voters().containsKey(carl));
+        assertTrue(session.voters().containsKey(dana));
+        session.vote(dana, session.candidate(alice));
+        assertEquals(1, session.votesFor(alice));
+        assertThrows(IllegalArgumentException.class, () -> session.vote(carl, session.candidate(alice)));
+        session.addVoter(carl, "Carl");
+        assertFalse(session.voters().containsKey(carl));
+    }
 }

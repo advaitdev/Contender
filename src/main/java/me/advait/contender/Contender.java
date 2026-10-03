@@ -100,6 +100,7 @@ public final class Contender extends JavaPlugin {
         arenas = add(new ArenaService(this, maps));
         duels = add(new DuelService(this));
         spectate = add(new SpectateService(this));
+        add(new me.advait.contender.nametag.HealthTags(this));
         hackers = add(new HackerService(this));
         sabotage = add(new SabotageService(this));
         tournaments = add(new TournamentService(this));

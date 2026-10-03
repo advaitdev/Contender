@@ -11,15 +11,29 @@ public final class VoteSession {
     private final Map<Integer, Candidate> byNumber = new HashMap<>();
     private final Set<UUID> removed = new HashSet<>();
     private final Map<UUID, UUID> votes = new HashMap<>();
+    /** Who can vote, by name: the contestants who aren't sitting out, plus anyone who joins and votes. */
+    private final Map<UUID, String> voters = new LinkedHashMap<>();
+    private final Set<UUID> sittingOut;
     private final boolean liveCounts;
     private final long endsAt;
     private boolean closed;
 
     public VoteSession(List<Candidate> roster, boolean liveCounts, long endsAt) {
+        this(roster, roster.stream().collect(LinkedHashMap::new, (map, c) -> map.put(c.id(), c.name()), Map::putAll), Set.of(), liveCounts, endsAt);
+    }
+
+    /**
+     * @param voters     everyone who can vote; safe players vote without being on the ballot
+     * @param sittingOut players who can't vote (and aren't on the ballot)
+     */
+    public VoteSession(List<Candidate> roster, Map<UUID, String> voters, Set<UUID> sittingOut, boolean liveCounts, long endsAt) {
         for (Candidate candidate : roster) {
             candidates.put(candidate.id(), candidate);
             byNumber.put(candidate.number(), candidate);
         }
+        this.voters.putAll(voters);
+        this.sittingOut = Set.copyOf(sittingOut);
+        this.voters.keySet().removeAll(this.sittingOut);
         this.liveCounts = liveCounts;
         this.endsAt = endsAt;
     }
@@ -40,6 +54,12 @@ public final class VoteSession {
         return candidates.values().stream().filter(c -> !removed.contains(c.id())).toList();
     }
 
+    /** Everyone who can vote, by name, in the order they were added. */
+    public Map<UUID, String> voters() { return Collections.unmodifiableMap(voters); }
+    public boolean sittingOut(UUID player) { return sittingOut.contains(player); }
+    /** A contestant who joined after the vote started. */
+    public void addVoter(UUID player, String name) { if (!sittingOut.contains(player)) voters.putIfAbsent(player, name); }
+
     public Candidate candidate(UUID id) { return removed.contains(id) ? null : candidates.get(id); }
     public Candidate byNumber(int number) {
         Candidate candidate = byNumber.get(number);
@@ -48,6 +68,7 @@ public final class VoteSession {
 
     public void vote(UUID voter, Candidate target) {
         if (closed) throw new IllegalStateException("Voting has closed.");
+        if (sittingOut.contains(voter)) throw new IllegalArgumentException("You're sitting out this vote.");
         if (target == null || removed.contains(target.id())) throw new IllegalArgumentException("That player is no longer a candidate.");
         if (target.id().equals(voter)) throw new IllegalArgumentException("You can't vote for yourself.");
         votes.put(voter, target.id());

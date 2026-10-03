@@ -258,6 +258,15 @@ public class Bot extends ServerPlayer {
         this.connection.handleUseItem(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 0, this.getYRot(), this.getXRot()));
     }
 
+    /** Right-clicks a block, the way a client does when it looks at one. */
+    void useOn(int x, int y, int z) {
+        var pos = new net.minecraft.core.BlockPos(x, y, z);
+        var hit = new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, pos, false);
+        // The same path a client's right-click takes once its packet passes the network checks; it fires
+        // PlayerInteractEvent like a real click.
+        this.gameMode.useItemOn(this, this.level(), this.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
+    }
+
     void swing() {
         this.connection.handleAnimate(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }

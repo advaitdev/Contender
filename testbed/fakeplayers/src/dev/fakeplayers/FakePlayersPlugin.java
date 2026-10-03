@@ -202,6 +202,11 @@ public class FakePlayersPlugin extends JavaPlugin implements Listener {
                     sender.sendMessage(args[1] + " attacked " + target.getName());
                 }
                 case "use" -> { Bot bot = bot(sender, args[1]); if (bot != null) bot.useItem(); }
+                case "useon" -> {
+                    // useon <name> <x> <y> <z>: right-click that block
+                    Bot bot = bot(sender, args[1]);
+                    if (bot != null) { bot.useOn(Integer.parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4])); sender.sendMessage(args[1] + " used the block"); }
+                }
                 case "swing" -> { Bot bot = bot(sender, args[1]); if (bot != null) bot.swing(); }
                 case "slot" -> { Bot bot = bot(sender, args[1]); if (bot != null) bot.getBukkitEntity().getInventory().setHeldItemSlot(Integer.parseInt(args[2])); }
                 case "look" -> {

@@ -101,24 +101,62 @@ public final class LobbyListener implements Listener {
         if (!mayBreak(event.getPlayer())) event.setCancelled(true);
     }
 
+    /**
+     * Without build rights, players can't change anything by clicking or stepping on it: no trapdoors, doors,
+     * gates, buttons, levers, pressure plates, beds, note blocks, chests or decorations, and no tools that
+     * reshape blocks. Signs still work for clicking (editing them is blocked separately).
+     */
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getAction() == Action.PHYSICAL && event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.FARMLAND) {
-            // Trampling farmland breaks it.
-            if (!mayBreak(event.getPlayer())) event.setCancelled(true);
+        Player player = event.getPlayer();
+        var block = event.getClickedBlock();
+        if (block == null) return;
+        Material type = block.getType();
+        if (event.getAction() == Action.PHYSICAL) {
+            // Trampling farmland breaks it; plates, tripwires and eggs set things off.
+            if (type == Material.FARMLAND) { if (!mayBreak(player)) event.setCancelled(true); return; }
+            if (!mayChange(player) && (org.bukkit.Tag.PRESSURE_PLATES.isTagged(type) || type == Material.TRIPWIRE
+                    || type == Material.TURTLE_EGG || type == Material.SNIFFER_EGG || type == Material.BIG_DRIPLEAF)) event.setCancelled(true);
             return;
         }
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
-        if (lobby.canBreak(event.getPlayer()) && lobby.canPlace(event.getPlayer())) return;
-        if (exempt(event.getPlayer())) return;
-        Material type = event.getClickedBlock().getType();
-        var state = event.getClickedBlock().getState(false);
-        // Decorations and storage: pots, cakes, chests and barrels, lecterns, jukeboxes and shelves.
-        if (type == Material.FLOWER_POT || type.name().startsWith("POTTED_") || type == Material.CAKE || type.name().endsWith("CANDLE_CAKE")
-                || state instanceof org.bukkit.block.Container || state instanceof org.bukkit.block.Lectern || state instanceof org.bukkit.block.Jukebox
-                || state instanceof org.bukkit.block.ChiseledBookshelf || state instanceof org.bukkit.block.DecoratedPot) {
-            event.setCancelled(true);
+        if (mayChange(player)) return;
+        if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+            // Hitting a note block plays it, and hitting the dragon egg sends it flying.
+            if (type == Material.NOTE_BLOCK || type == Material.DRAGON_EGG) event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            return;
         }
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        var state = block.getState(false);
+        boolean sign = org.bukkit.Tag.ALL_SIGNS.isTagged(type);
+        if (!sign && (type.isInteractable() || type == Material.FLOWER_POT || type.name().startsWith("POTTED_")
+                || state instanceof org.bukkit.block.Container || state instanceof org.bukkit.block.DecoratedPot)) {
+            event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+        }
+        if (reshapes(event.getItem())) event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+    }
+
+    /** May click, step on and reshape blocks: playing a game, or allowed to build here. */
+    private boolean mayChange(Player player) { return exempt(player) || lobby.canBreak(player) && lobby.canPlace(player); }
+
+    /** Items that change the block they're used on: stripping, tilling, paths, waxing, brushing, mud, carving, or a spawn egg. */
+    private static boolean reshapes(org.bukkit.inventory.ItemStack item) {
+        if (item == null) return false;
+        Material type = item.getType();
+        return org.bukkit.Tag.ITEMS_AXES.isTagged(type) || org.bukkit.Tag.ITEMS_HOES.isTagged(type) || org.bukkit.Tag.ITEMS_SHOVELS.isTagged(type)
+                || type == Material.HONEYCOMB || type == Material.BRUSH || type == Material.SHEARS || type == Material.POTION
+                || type == Material.GLASS_BOTTLE || type == Material.BONE_MEAL || type.name().endsWith("_SPAWN_EGG");
+    }
+
+    /** Boats, minecarts, armor stands and end crystals can't be put down without build rights either. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onEntityPlace(EntityPlaceEvent event) {
+        if (event.getPlayer() != null && !mayPlace(event.getPlayer())) event.setCancelled(true);
+    }
+
+    /** Mobs and arrows don't set off plates and tripwires in the lobby. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onEntityInteract(EntityInteractEvent event) {
+        if (lobby.isLobbyWorld(event.getBlock().getWorld()) && !(event.getEntity() instanceof Player) && !Tags.isManaged(event.getEntity())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)

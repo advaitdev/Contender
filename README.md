@@ -24,7 +24,7 @@ Drop the jar from `dist/` into `plugins/` and start the server. Operators have b
 3. **Maps.** Build an arena, select it with the WorldEdit wand, then `/arena` → **New Map from Selection**. Set both spawns from the map's page. Contender pastes copies of it into its own world so many matches can run at once.
 4. **Kits.** `/tournament` → **Setup Tools** → **Kits** → **Create New Kit**. Name it, then lay out the items and armor. **Health Under Name** (off by default) shows each player's health as `17 ❤` under their name, out of 20, with one decimal place below 3. Extra hearts (a Juggernaut, or a hacker's) still read out of 20. It shows as far away as name tags do, and players don't see their own.
 
-Outside a game, players can't break or place blocks anywhere unless **Lobby Settings** (`/options`) allows it. Operators can still build with the admin build bypass. In a match or minigame the kit's **Break Blocks** and **Place Blocks** settings apply instead, and only blocks placed during that match can be broken.
+Outside a game, players can't break or place blocks anywhere unless **Lobby Settings** (`/options`) allows both. They can't flip trapdoors, doors, gates, levers or buttons, set off pressure plates, open chests, or reshape blocks with tools either. Operators can still build with the admin build bypass. In a match or minigame the kit's **Break Blocks** and **Place Blocks** settings apply instead, and only blocks placed during that match can be broken.
 
 `/tournament` is the main menu. Everything below starts from there unless a command is given.
 

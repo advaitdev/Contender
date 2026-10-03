@@ -77,4 +77,22 @@ class TournamentStandingsTest {
         assertThrows(IllegalArgumentException.class, () -> new Tournament(UUID.randomUUID(), "Test", "map", "kit",
                 List.of(new TournamentEntry("A", List.of(same)), new TournamentEntry("B", List.of(same))), false, false, 1, 10, 4));
     }
+
+    @Test void eachRoundHasItsOwnStatus() {
+        Tournament tournament = tournament(4);
+        tournament.resume();
+        assertEquals("Not started", tournament.roundStatus(1));
+        List<TournamentMatch> first = tournament.matches().stream().filter(m -> m.round() == 1).toList();
+        first.getFirst().start();
+        assertEquals("Playing", tournament.roundStatus(1));
+        for (TournamentMatch match : first) {
+            if (match.status() != TournamentMatch.Status.PLAYING) match.start();
+            match.finish(new me.advait.contender.duel.DuelResult(me.advait.contender.duel.DuelResult.Reason.FINISHED, 2, 0, 1));
+        }
+        assertTrue(tournament.roundFinished(1));
+        assertEquals("Finished", tournament.roundStatus(1));
+        assertEquals("Not started", tournament.roundStatus(2));
+        tournament.pause();
+        assertEquals("Paused", tournament.roundStatus(2));
+    }
 }

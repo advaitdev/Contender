@@ -30,7 +30,7 @@ Outside a game, players can't break or place blocks anywhere unless **Lobby Sett
 
 ## Events
 
-**Round Robin.** Everyone plays everyone. Round 1 follows the roster order: 1st vs 2nd, 3rd vs 4th, and so on. Matches run in parallel as players and arena copies free up. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu. If something goes wrong, open the match from **Matches**:
+**Round Robin.** Everyone plays everyone. Round 1 follows the roster order: 1st vs 2nd, 3rd vs 4th, and so on. Matches in a round run in parallel as arena copies free up, and by default the next bracket round starts once every match in the current one is finished (chat says when a round is done). Set **Schedule** to **As arenas become free** to let later-round matches start as soon as both players are free. The board's bottom line shows the viewed round's state: Playing, Finished or Not started. Each match won is worth 1 point; round difference breaks ties. You can pause, resume, end a match early or cancel one from the event menu. If something goes wrong, open the match from **Matches**:
 
 - **Change Result** fixes a finished match's score. The standings update right away.
 - **Replay Match** clears a finished match so it's played again.
@@ -72,7 +72,7 @@ The **Board** shows the bracket or leaderboard. Look at a wall and run `/setboar
 
 ## Votes
 
-**Start a Vote** in `/tournament` (or `/startvote`) opens the vote form. Players vote with `/vote <name>` or by clicking a player in `/vote`. Nobody can vote for themselves.
+**Start a Vote** in `/tournament` (or `/startvote`) opens the vote form. Players vote with `/vote <name>` or by clicking a player in `/vote`. Nobody can vote for themselves. They can also vote **Skip** (`/vote skip`).
 
 Form options:
 
@@ -82,11 +82,12 @@ Form options:
   - Dies, then spectates (the default). Lightning strikes, they die where they stand (keeping their items), respawn on the same spot and become a spectator.
   - Becomes a spectator, without dying.
   - Stays a contestant.
+- **Skip Votes**: **Most skips: nobody goes** (the default) means that if Skip gets at least as many votes as anyone, nobody is voted out. The ceremony still plays and pulls away at the end, like a tie. **Skips don't count** keeps the Skip button but the top player still goes. **No Skip choice** hides it.
 - **Rooms**: see below.
 - **Choose Players**: click a contestant to make them **Safe** (they vote but can't be voted for), click again for **Sitting Out** (they don't vote at all and wait in the judge room), and again to put them back in. **Everyone In** clears it.
 - **Anonymous Votes** (No by default). While it's No, once voting closes, a small display over each voter shows who they voted for (or that they didn't vote), so everyone is held to their vote. With the ceremony they appear once the spotlight lands, so they don't give the result away. They stay for 10 seconds and follow the players, and the vote isn't over until they're gone.
 
-With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), `anonymous` (hide who voted for whom), `safe:Alice,Bob` and `sitout:Carol`.
+With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), `anonymous` (hide who voted for whom), `noskip` or `skipsdontcount`, `safe:Alice,Bob` and `sitout:Carol`.
 
 **Edit Votes.** While a vote runs, directors have an **Edit Votes** button in `/vote`. It lists who voted for whom with the totals. Click a voter to change their vote or take it away. Players aren't told. It's meant for testing.
 

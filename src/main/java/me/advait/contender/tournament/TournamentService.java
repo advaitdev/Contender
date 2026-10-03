@@ -260,8 +260,15 @@ public final class TournamentService extends Module {
             plugin.getStages().refreshDisplays();
             return;
         }
+        boolean roundWasOpen = !tournament.roundFinished(match.round());
         match.finish(result);
         save();
+        // Say when a bracket round is done, unless the whole tournament just ended.
+        if (roundWasOpen && tournament.roundFinished(match.round()) && !tournament.isComplete()) {
+            Msg.broadcast(Msg.text("Round " + match.round() + " is finished.", DialogPalette.ACCENT)
+                    .append(Msg.text(tournament.waitForRound() && tournament.isRunning() ? " Round " + (match.round() + 1) + " starts now." : "", DialogPalette.MUTED)));
+            Sounds.ANNOUNCE.playAll();
+        }
         afterResult();
     }
 
@@ -336,5 +343,9 @@ public final class TournamentService extends Module {
             return BracketLayout.render(tournament, scores, presence, List.copyOf(roster), view, plugin.getThemes().current());
         }
         @Override public String caption(BracketLayout.Layout layout) { return layout == null ? "Bracket" : layout.heading(); }
+        @Override public String statusText(BracketLayout.Layout layout) {
+            if (tournament == null || layout == null || layout.standings()) return statusText();
+            return tournament.roundStatus(layout.round());
+        }
     }
 }

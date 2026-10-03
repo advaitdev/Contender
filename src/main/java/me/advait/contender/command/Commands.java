@@ -213,6 +213,11 @@ public final class Commands {
         if (args.length == 0) { new VoteDialogs(plugin).open(player); return; }
         VoteSession session = plugin.getVotes().session();
         if (session == null) { Msg.error(player, "No vote is running."); return; }
+        if (args[0].equalsIgnoreCase("skip") && session.candidates().stream().noneMatch(c -> c.name().equalsIgnoreCase("skip"))) {
+            plugin.getVotes().skip(player);
+            Msg.success(player, "You voted to skip.");
+            return;
+        }
         // By name; a number still works for anyone using the old numbering.
         VoteSession.Candidate candidate = session.candidates().stream().filter(c -> c.name().equalsIgnoreCase(args[0])).findFirst().orElse(null);
         if (candidate == null && args[0].matches("\\d+")) candidate = session.byNumber(Integer.parseInt(args[0]));
@@ -223,7 +228,7 @@ public final class Commands {
 
     private void startVote(CommandSender sender, String[] args) {
         if (args.length == 0 && sender instanceof Player player) { new VoteDialogs(plugin).start(player); return; }
-        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove] [anonymous] [safe:names] [sitout:names]."); return; }
+        if (args.length == 0) { Msg.error(sender, "Use /startvote <seconds> [live] [quick] [spectate|keep] [stay|nomove] [anonymous] [noskip|skipsdontcount] [safe:names] [sitout:names]."); return; }
         int seconds;
         try { seconds = Integer.parseInt(args[0]); }
         catch (NumberFormatException invalid) { Msg.error(sender, "Use /startvote <seconds>."); return; }
@@ -245,7 +250,8 @@ public final class Commands {
         // The voted-out player dies and spectates unless told otherwise.
         VoteService.Elimination elimination = flags.contains("keep") ? VoteService.Elimination.KEEP
                 : flags.contains("spectate") || flags.contains("eliminate") ? VoteService.Elimination.SPECTATE : VoteService.Elimination.KILL;
-        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms, flags.contains("anonymous"), safe, sittingOut));
+        plugin.getVotes().start(new VoteService.Options(seconds, flags.contains("live"), !flags.contains("quick"), elimination, rooms, flags.contains("anonymous"), safe, sittingOut,
+                flags.contains("noskip") ? VoteSession.Skipping.OFF : flags.contains("skipsdontcount") ? VoteSession.Skipping.IGNORED : VoteSession.Skipping.SAVES));
         Msg.success(sender, "Vote started for " + seconds + " seconds.");
     }
 }

@@ -275,7 +275,7 @@ public final class TournamentDialogs {
                     menuAction(player, DialogIcon.DUEL, "Edit Kits", TEXT, "Create and save a kit.", p -> new KitDialogs(plugin).open(p, q -> create(q, initial)))), this::formats);
             return;
         }
-        Draft draft = initial == null ? new Draft("Round Robin", maps.getFirst().getId(), kits.getFirst().getId(), false, false, 3,
+        Draft draft = initial == null ? new Draft("Round Robin", maps.getFirst().getId(), kits.getFirst().getId(), false, true, 3,
                 String.join(", ", Bukkit.getOnlinePlayers().stream().filter(p -> plugin.getRoleManager().isContestant(p.getUniqueId())).map(Player::getName).toList()), 10, 20, 0) : initial;
         List<DialogInput> inputs = List.of(
                 DialogInput.text("name", DialogIcon.NAME.label("Tournament Name")).initial(draft.name()).maxLength(64).width(INPUT_WIDTH).build(),
@@ -333,8 +333,8 @@ public final class TournamentDialogs {
                 DialogInput.numberRange("delay", DialogIcon.REFRESH.label("Time to Arrange Items"), 5, 60).initial((float) draft.delay()).step(1f).width(INPUT_WIDTH).labelFormat("%s: %ss").build(),
                 DialogInput.numberRange("parallel", DialogIcon.TOURNAMENT.label("Matches at Once"), 1, 100).initial((float) draft.parallel()).step(1f).width(INPUT_WIDTH).build(),
                 DialogInput.singleOption("schedule", DialogIcon.BOARD.label("Schedule"), List.of(
-                        Dialogs.option("free", "As arenas become free", !draft.waitForRound()),
-                        Dialogs.option("rounds", "Finish each bracket round", draft.waitForRound()))).width(INPUT_WIDTH).build()));
+                        Dialogs.option("rounds", "Finish each bracket round", draft.waitForRound()),
+                        Dialogs.option("free", "As arenas become free", !draft.waitForRound()))).width(INPUT_WIDTH).build()));
         Component schedule = DialogText.detail("Full schedule", full + (full == 1 ? " bracket round" : " bracket rounds")
                 + " · " + count * (count - 1) / 2 + (count * (count - 1) / 2 == 1 ? " match" : " matches"));
         schedule = DialogText.paragraphs(schedule, DialogText.muted("Each bracket round schedules at most one match per entry.\nRound Wins Needed sets the length of each match."));

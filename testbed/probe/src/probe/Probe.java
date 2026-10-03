@@ -74,7 +74,7 @@ public class Probe extends JavaPlugin implements Listener {
                 case "tournament" -> {
                     List<TournamentEntry> entries = new ArrayList<>();
                     for (int i = 4; i < a.length; i++) { Player p = p(a[i]); entries.add(new TournamentEntry(p.getName(), List.of(p.getUniqueId()))); }
-                    var t = new Tournament(UUID.randomUUID(), "Probe Cup", a[1], a[2], entries, false, false, Integer.parseInt(a[3]), 5, 20);
+                    var t = new Tournament(UUID.randomUUID(), "Probe Cup", a[1], a[2], entries, false, true, Integer.parseInt(a[3]), 5, 20);
                     c().getTournaments().create(t);
                     c().getTournaments().resume();
                     s.sendMessage("tournament started with " + t.matches().size() + " matches");

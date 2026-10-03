@@ -87,6 +87,20 @@ public final class Tournament {
     public void cancel() { cancelled = true; running = false; }
     public String statusText() { return cancelled ? "Cancelled" : isComplete() ? "Finished" : running ? "Playing" : "Paused"; }
 
+    /** One bracket round's state: Finished, Playing or Not started (or the event's, when it's paused or cancelled). */
+    public String roundStatus(int round) {
+        List<TournamentMatch> inRound = matches.stream().filter(m -> m.round() == round).toList();
+        if (cancelled) return "Cancelled";
+        if (inRound.stream().allMatch(m -> m.status() == TournamentMatch.Status.FINISHED)) return "Finished";
+        if (!running) return statusText();
+        return inRound.stream().anyMatch(m -> m.status() == TournamentMatch.Status.PLAYING) ? "Playing" : "Not started";
+    }
+
+    /** Every match in this bracket round has a result. */
+    public boolean roundFinished(int round) {
+        return matches.stream().filter(m -> m.round() == round).allMatch(m -> m.status() == TournamentMatch.Status.FINISHED);
+    }
+
     /** The caller starts each returned match before asking for the next candidate. */
     public TournamentMatch nextMatch(Predicate<UUID> available) {
         if (!isRunning()) return null;

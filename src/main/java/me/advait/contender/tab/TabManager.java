@@ -105,7 +105,7 @@ public final class TabManager extends Module {
                     state.rows = layout.rows();
                     bridge.show(player, layout.rows());
                 }
-                Component footer = Component.text(stage.caption(layout) + " | " + stage.statusText(), plugin.getThemes().current().muted());
+                Component footer = Component.text(stage.caption(layout) + " | " + stage.statusText(layout), plugin.getThemes().current().muted());
                 if (!Objects.equals(player.playerListFooter(), footer)) player.sendPlayerListFooter(footer);
             }
         } catch (RuntimeException failure) {

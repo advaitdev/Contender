@@ -223,14 +223,14 @@ final class VoteReveal implements Activity, Listener {
     // ---- The spotlight -------------------------------------------------------------------------
 
     /**
-     * A beam sweeps back and forth along the line, slowing down, and stops on the voted-out player. On a tie it
-     * slows down over one of the tied players as if it's about to land, hangs there, then pulls back into the sky
-     * without picking anyone.
+     * A beam sweeps back and forth along the line, slowing down, and stops on the voted-out player. On a tie, or
+     * when Skip won, it slows down over one of the top players as if it's about to land, hangs there, then pulls
+     * back into the sky without picking anyone.
      */
     private void spotlight(List<VoteSession.Candidate> leaders, int top) {
         List<UUID> standing = new ArrayList<>();
         for (UUID id : line) if (Bukkit.getPlayer(id) != null) standing.add(id);
-        boolean tie = leaders.size() > 1;
+        boolean tie = leaders.size() > 1 || session.skipped();
         UUID stop = !tie && standing.contains(leaders.getFirst().id()) ? leaders.getFirst().id() : null;
         if (tie) {
             List<UUID> tied = leaders.stream().map(VoteSession.Candidate::id).filter(standing::contains).toList();
@@ -263,7 +263,7 @@ final class VoteReveal implements Activity, Listener {
         }
     }
 
-    /** The tie fake-out: the beam shoots back up into the sky and thins out, then the tie is announced. */
+    /** The fake-out: the beam shoots back up into the sky and thins out, then the tie or the skip is announced. */
     private void pullAway(BlockDisplay beam, List<VoteSession.Candidate> leaders, int top) {
         Sounds.WHOOSH.playAll();
         Sounds.FIZZLE.playAll();
@@ -308,8 +308,12 @@ final class VoteReveal implements Activity, Listener {
         // The timers turn into the results now that the spotlight is done, and votes are shown if they aren't anonymous.
         service.showResults(session);
         long notBefore = receipts ? service.showReceipts(session) : 0;
-        if (leaders.isEmpty()) {
-            Msg.broadcast(Msg.text("The vote ended with no votes cast.", DialogPalette.MUTED));
+        if (session.skipped()) {
+            int skips = session.skips();
+            Msg.broadcast(Msg.text("Skip got the most votes (" + skips + "), so nobody was voted out.", DialogPalette.ACCENT));
+            Sounds.ANNOUNCE.playAll();
+        } else if (leaders.isEmpty()) {
+            Msg.broadcast(Msg.text(session.skips() > 0 ? "Only skips were cast, so nobody was voted out." : "The vote ended with no votes cast.", DialogPalette.MUTED));
         } else if (leaders.size() > 1) {
             String names = String.join(" & ", leaders.stream().map(VoteSession.Candidate::name).toList());
             Msg.broadcast(Msg.text("The vote is tied between " + names + " with " + votes + (votes == 1 ? " vote" : " votes") + " each.", DialogPalette.ACCENT));
@@ -333,7 +337,7 @@ final class VoteReveal implements Activity, Listener {
             }
         }
         plugin.getLogger().info("Vote results: " + String.join(", ", session.results().stream()
-                .map(tally -> tally.candidate().name() + " " + tally.votes()).toList()));
+                .map(tally -> tally.candidate().name() + " " + tally.votes()).toList()) + ", Skip " + session.skips());
         tasks.later(Math.max(140, (notBefore - System.currentTimeMillis()) / 50 + 5), this::finish);
     }
 

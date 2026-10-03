@@ -129,14 +129,18 @@ final class VoteTimerDisplay {
      * Replaces each timer with the results: a head and a vote count for each player who got votes, most first.
      * More names mean smaller text, so the list keeps roughly the timer's footprint.
      */
-    void showResults(List<VoteSession.Tally> results) {
+    void showResults(List<VoteSession.Tally> results, int skips) {
         Theme theme = plugin.getThemes().current();
         List<Component> lines = new ArrayList<>();
+        boolean skipShown = skips <= 0;
         for (VoteSession.Tally tally : results) {
             if (tally.votes() <= 0) continue;
+            // Skip goes above anyone it ties with, since a tie with Skip saves everyone.
+            if (!skipShown && skips >= tally.votes()) { lines.add(skipLine(theme, skips)); skipShown = true; }
             lines.add(Component.textOfChildren(StringUtil.getPlayerHead(tally.candidate().id()),
                     Component.text(" – " + tally.votes(), theme.primary())));
         }
+        if (!skipShown) lines.add(skipLine(theme, skips));
         if (lines.isEmpty()) lines.add(Component.text("No votes have been cast", theme.muted()));
         Component text = Component.join(JoinConfiguration.newlines(), lines);
         float shrink = lines.size() <= 3 ? 0.7f : lines.size() <= 6 ? 0.55f : 0.42f;
@@ -148,6 +152,10 @@ final class VoteTimerDisplay {
             display.teleport(origin(shown.get(i), lines.size(), scale));
             Holograms.animate(display, Holograms.scaled(scale), 8);
         }
+    }
+
+    private static Component skipLine(Theme theme, int skips) {
+        return Component.text("Skip", theme.muted()).append(Component.text(" – " + skips, theme.primary()));
     }
 
     /** Where a display of this many lines goes so it stays centered on the spot. */

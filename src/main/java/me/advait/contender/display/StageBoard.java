@@ -288,7 +288,7 @@ public final class StageBoard extends Module {
             }
             int offset = columns * rowsPerColumn;
             set(cells.get(offset++), Component.text(TabStyle.read(plugin.getConfig()).heading(stage == null ? null : stage.name()), theme.primary()), null);
-            Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(), theme.secondary());
+            Component caption = stage == null ? Component.empty() : Component.text(stage.caption(layout) + "  |  " + stage.statusText(layout), theme.secondary());
             set(cells.get(offset++), caption, null);
             if (!bracket || layout == null) {
                 while (offset < cells.size()) set(cells.get(offset++), Component.empty(), null);

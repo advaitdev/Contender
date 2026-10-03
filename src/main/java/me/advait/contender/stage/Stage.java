@@ -38,6 +38,9 @@ public interface Stage {
      */
     BracketLayout.Layout layout(BracketLayout.View view, Function<UUID, BracketLayout.Presence> presence, List<UUID> others);
 
+    /** The status next to a caption: for a bracket round, that round's own state. */
+    default String statusText(BracketLayout.Layout layout) { return statusText(); }
+
     /** Short footer, such as "Round 2" or "Finish Times". */
     String caption(BracketLayout.Layout layout);
 

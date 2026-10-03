@@ -75,4 +75,40 @@ class VoteSessionTest {
         session.addVoter(carl, "Carl");
         assertFalse(session.voters().containsKey(carl));
     }
+
+    private VoteSession skipping(VoteSession.Skipping rule) {
+        Map<UUID, String> voters = new java.util.LinkedHashMap<>(Map.of(alice, "Alice", bob, "Bob", carl, "Carl", dana, "Dana"));
+        return new VoteSession(VoteSession.number(List.of(Map.entry(alice, "Alice"), Map.entry(bob, "Bob"), Map.entry(carl, "Carl"))),
+                voters, java.util.Set.of(), rule, false, 0);
+    }
+
+    @Test void mostSkipsSavesEveryone() {
+        VoteSession session = skipping(VoteSession.Skipping.SAVES);
+        session.vote(alice, session.candidate(bob));
+        session.skip(carl);
+        session.skip(dana);
+        assertEquals(2, session.skips());
+        assertTrue(session.skipped());
+        // Skips aren't a candidate's votes.
+        assertEquals(List.of(session.candidate(bob)), session.leaders());
+    }
+
+    @Test void aTieWithSkipSavesEveryone() {
+        VoteSession session = skipping(VoteSession.Skipping.SAVES);
+        session.vote(alice, session.candidate(bob));
+        session.skip(carl);
+        assertTrue(session.skipped());
+        session.vote(dana, session.candidate(bob));
+        assertFalse(session.skipped());
+    }
+
+    @Test void skipsCanBeIgnoredOrTurnedOff() {
+        VoteSession ignored = skipping(VoteSession.Skipping.IGNORED);
+        ignored.skip(carl);
+        ignored.skip(dana);
+        ignored.vote(alice, ignored.candidate(bob));
+        assertFalse(ignored.skipped());
+        VoteSession off = skipping(VoteSession.Skipping.OFF);
+        assertThrows(IllegalArgumentException.class, () -> off.skip(carl));
+    }
 }

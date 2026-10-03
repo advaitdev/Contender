@@ -7,6 +7,16 @@ public final class VoteSession {
     public record Candidate(UUID id, String name, int number) { }
     public record Tally(Candidate candidate, int votes) { }
 
+    /** What a Skip vote does. */
+    public enum Skipping {
+        SAVES("Most skips: nobody goes"), IGNORED("Skips don't count"), OFF("No Skip choice");
+        public final String label;
+        Skipping(String label) { this.label = label; }
+    }
+
+    /** Stored as the target of a Skip vote. */
+    public static final UUID SKIP = new UUID(0L, 0L);
+
     private final Map<UUID, Candidate> candidates = new LinkedHashMap<>();
     private final Map<Integer, Candidate> byNumber = new HashMap<>();
     private final Set<UUID> removed = new HashSet<>();
@@ -14,6 +24,7 @@ public final class VoteSession {
     /** Who can vote, by name: the contestants who aren't sitting out, plus anyone who joins and votes. */
     private final Map<UUID, String> voters = new LinkedHashMap<>();
     private final Set<UUID> sittingOut;
+    private final Skipping skipping;
     private final boolean liveCounts;
     private final long endsAt;
     private boolean closed;
@@ -27,6 +38,11 @@ public final class VoteSession {
      * @param sittingOut players who can't vote (and aren't on the ballot)
      */
     public VoteSession(List<Candidate> roster, Map<UUID, String> voters, Set<UUID> sittingOut, boolean liveCounts, long endsAt) {
+        this(roster, voters, sittingOut, Skipping.SAVES, liveCounts, endsAt);
+    }
+
+    public VoteSession(List<Candidate> roster, Map<UUID, String> voters, Set<UUID> sittingOut, Skipping skipping, boolean liveCounts, long endsAt) {
+        this.skipping = skipping;
         for (Candidate candidate : roster) {
             candidates.put(candidate.id(), candidate);
             byNumber.put(candidate.number(), candidate);
@@ -46,6 +62,7 @@ public final class VoteSession {
     }
 
     public boolean liveCounts() { return liveCounts; }
+    public Skipping skipping() { return skipping; }
     public long endsAt() { return endsAt; }
     public boolean closed() { return closed; }
     void close() { closed = true; }
@@ -72,6 +89,25 @@ public final class VoteSession {
         if (target == null || removed.contains(target.id())) throw new IllegalArgumentException("That player is no longer a candidate.");
         if (target.id().equals(voter)) throw new IllegalArgumentException("You can't vote for yourself.");
         votes.put(voter, target.id());
+    }
+
+    public void skip(UUID voter) {
+        if (closed) throw new IllegalStateException("Voting has closed.");
+        if (skipping == Skipping.OFF) throw new IllegalArgumentException("Skipping isn't allowed in this vote.");
+        if (sittingOut.contains(voter)) throw new IllegalArgumentException("You're sitting out this vote.");
+        votes.put(voter, SKIP);
+    }
+
+    public int skips() { return votesFor(SKIP); }
+
+    /**
+     * Skip won, so nobody is voted out: Skip has at least as many votes as anyone (a tie with Skip saves everyone
+     * too), when skips count.
+     */
+    public boolean skipped() {
+        if (skipping != Skipping.SAVES || skips() == 0) return false;
+        List<Tally> results = results();
+        return results.isEmpty() || skips() >= results.getFirst().votes();
     }
 
     public void unvote(UUID voter) { if (!closed) votes.remove(voter); }

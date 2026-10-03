@@ -52,12 +52,18 @@ public final class VoteService extends Module {
      * @param anonymous  false shows, above each voter, who they voted for once the results are out
      * @param safe       contestants who vote but can't be voted for
      * @param sittingOut contestants left out of the vote completely
+     * @param skipping   whether players can vote Skip, and whether most skips saves everyone
      */
     public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
-                          Set<UUID> safe, Set<UUID> sittingOut) {
+                          Set<UUID> safe, Set<UUID> sittingOut, VoteSession.Skipping skipping) {
         public Options {
             safe = Set.copyOf(safe);
             sittingOut = Set.copyOf(sittingOut);
+            java.util.Objects.requireNonNull(skipping);
+        }
+        public Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
+                       Set<UUID> safe, Set<UUID> sittingOut) {
+            this(seconds, liveCounts, ceremony, elimination, rooms, anonymous, safe, sittingOut, VoteSession.Skipping.SAVES);
         }
         public Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous) {
             this(seconds, liveCounts, ceremony, elimination, rooms, anonymous, Set.of(), Set.of());
@@ -122,7 +128,7 @@ public final class VoteService extends Module {
         generation++;
         timer.hide();
         options = chosen;
-        session = new VoteSession(VoteSession.number(players), voters, chosen.sittingOut(), chosen.liveCounts(), System.currentTimeMillis() + chosen.seconds() * 1000L);
+        session = new VoteSession(VoteSession.number(players), voters, chosen.sittingOut(), chosen.skipping(), chosen.liveCounts(), System.currentTimeMillis() + chosen.seconds() * 1000L);
         if (plugin.getTournaments().current() != null && plugin.getTournaments().current().isRunning()) plugin.getTournaments().pause();
         rooms.gather(chosen.rooms());
         var theme = plugin.getThemes().current();
@@ -157,6 +163,14 @@ public final class VoteService extends Module {
         Sounds.CLICK.play(voter);
     }
 
+    public void skip(Player voter) {
+        VoteSession current = require();
+        if (plugin.getRoleManager().getRole(voter.getUniqueId()) != PlayerRole.CONTESTANT) throw new IllegalStateException("Only contestants can vote.");
+        current.skip(voter.getUniqueId());
+        current.addVoter(voter.getUniqueId(), voter.getName());
+        Sounds.CLICK.play(voter);
+    }
+
     public void unvote(Player voter) { require().unvote(voter.getUniqueId()); }
 
     public void removeCandidate(UUID candidate) { require().remove(candidate); }
@@ -175,7 +189,7 @@ public final class VoteService extends Module {
         int current = generation;
         timer.update(0);
         // With a ceremony the timers stay at 00:00 until the spotlight is done (VoteReveal shows the results).
-        if (!options.ceremony()) tasks.later(RESULTS_DELAY_TICKS, () -> { if (generation == current) timer.showResults(closing.results()); });
+        if (!options.ceremony()) tasks.later(RESULTS_DELAY_TICKS, () -> { if (generation == current) timer.showResults(closing.results(), closing.skips()); });
         for (Player player : Bukkit.getOnlinePlayers()) if (!plugin.getRegistry().isPlaying(player.getUniqueId())) player.sendActionBar(Component.empty());
         // Who voted for whom, when votes aren't anonymous. With a ceremony they wait for the spotlight, so they don't
         // give the result away. The vote isn't over until they're gone.
@@ -187,7 +201,7 @@ public final class VoteService extends Module {
             long overAt = receipts.showing() ? receipts.until() : 0;
             announce(closing);
             List<VoteSession.Candidate> leaders = closing.leaders();
-            if (leaders.size() == 1) voteOut(leaders.getFirst().id(), options.elimination());
+            if (leaders.size() == 1 && !closing.skipped()) voteOut(leaders.getFirst().id(), options.elimination());
             long wait = Math.max(100, (overAt - System.currentTimeMillis()) / 50 + 5);
             tasks.later(wait, () -> { if (session == null && reveal == null) rooms.sendBack(stageLocation()); });
             tasks.later(Math.max(QUICK_RESULTS_TICKS, wait), () -> { if (generation == current && reveal == null) timer.hide(); });
@@ -196,7 +210,13 @@ public final class VoteService extends Module {
 
     private void announce(VoteSession closed) {
         List<VoteSession.Candidate> leaders = closed.leaders();
-        if (leaders.isEmpty()) { Msg.broadcast(Msg.text("The vote ended with no votes cast.", DialogPalette.MUTED)); return; }
+        if (closed.skipped()) {
+            Msg.broadcast(Msg.text("Most votes: ", DialogPalette.MUTED).append(Msg.text("Skip", DialogPalette.ACCENT))
+                    .append(Msg.text(" (" + closed.skips() + "). Nobody was voted out.", DialogPalette.MUTED)));
+            Sounds.ANNOUNCE.playAll();
+            return;
+        }
+        if (leaders.isEmpty()) { Msg.broadcast(Msg.text(closed.skips() > 0 ? "Only skips were cast, so nobody was voted out." : "The vote ended with no votes cast.", DialogPalette.MUTED)); return; }
         int votes = closed.votesFor(leaders.getFirst().id());
         String names = String.join(" & ", leaders.stream().map(VoteSession.Candidate::name).toList());
         Msg.broadcast(Msg.text(leaders.size() > 1 ? "Tied: " : "Most votes: ", DialogPalette.MUTED)
@@ -264,7 +284,7 @@ public final class VoteService extends Module {
     }
 
     /** Turns the timers into the results. */
-    void showResults(VoteSession closed) { timer.showResults(closed.results()); }
+    void showResults(VoteSession closed) { timer.showResults(closed.results(), closed.skips()); }
 
     /** Shows who voted for whom; returns when the displays go away (epoch millis). */
     long showReceipts(VoteSession closed) {
@@ -282,13 +302,15 @@ public final class VoteService extends Module {
         if (voterName == null) throw new IllegalArgumentException("That player isn't voting in this one.");
         if (target == null) {
             current.unvote(voter);
+        } else if (target.equals(VoteSession.SKIP)) {
+            current.skip(voter);
         } else {
             VoteSession.Candidate chosen = current.candidate(target);
             if (chosen == null) throw new IllegalArgumentException("That player isn't in this vote.");
             current.vote(voter, chosen);
         }
         plugin.getLogger().info("A director set " + voterName + "'s vote to "
-                + (target == null ? "nobody" : current.candidate(target).name()) + ".");
+                + (target == null ? "nobody" : target.equals(VoteSession.SKIP) ? "Skip" : current.candidate(target).name()) + ".");
     }
 
     // ---- Placement -----------------------------------------------------------------------------

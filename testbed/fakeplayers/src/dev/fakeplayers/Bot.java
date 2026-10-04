@@ -95,6 +95,7 @@ public class Bot extends ServerPlayer {
                 rehome(this.getBukkitEntity().getLocation());
                 remember(this.getBukkitEntity().getLocation()); // a teleport, not a move
             });
+            case net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket particles -> logParticles(particles);
             case net.minecraft.network.protocol.game.ClientboundSoundPacket sound -> logSound(sound.getSound().value().location().toString(), sound.getVolume(), sound.getPitch());
             case net.minecraft.network.protocol.game.ClientboundSoundEntityPacket sound -> logSound(sound.getSound().value().location().toString(), sound.getVolume(), sound.getPitch());
             case ClientboundSystemChatPacket chat -> ChatCapture.record(this, chat.overlay() ? "actionbar" : "system", chat.content());
@@ -265,6 +266,15 @@ public class Bot extends ServerPlayer {
         // The same path a client's right-click takes once its packet passes the network checks; it fires
         // PlayerInteractEvent like a real click.
         this.gameMode.useItemOn(this, this.level(), this.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
+    }
+
+    /** With sound logging on, damage hearts are logged too, so tests can count them. */
+    private void logParticles(net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket packet) {
+        if (!logSounds) return;
+        var type = net.minecraft.core.registries.BuiltInRegistries.PARTICLE_TYPE.getKey(packet.getParticle().getType());
+        if (type != null && type.getPath().equals("damage_indicator")) {
+            org.bukkit.Bukkit.getLogger().info("[FakePlayers] " + this.getGameProfile().name() + " saw damage_indicator x" + packet.getCount());
+        }
     }
 
     void swing() {

@@ -23,16 +23,16 @@ import java.util.*;
  * A line under a player's name: what their game says about them (Manhunt's Runner or Hunter), and "17 ❤" when
  * their kit turns on Health Under Name, for example "Runner · 17 ❤".
  *
- * Each line is a text display riding its player, between their head and their name, so it moves exactly with
+ * Each line is a text display riding its player, just above their name, so it moves exactly with
  * them. The scoreboard's below-name line would be simpler, but the game only draws it within 10 blocks. Players
  * don't see their own.
  */
 public final class UnderNameTags extends Module {
     private static final Component HEART = Component.text("❤", NamedTextColor.RED);
     private static final Component DIVIDER = Component.text(" · ", NamedTextColor.GRAY);
-    /** How far above the passenger seat (the top of the head) the line sits, so it ends just under the name tag. */
-    private static final double ABOVE_HEAD = 0.09;
-    /** A little smaller than a name tag, so it fits between the head and the name. */
+    /** How far above the passenger seat (the top of the head) the line sits: just above the name tag, clear of it. */
+    static final double ABOVE_HEAD = 0.62;
+    /** A little smaller than a name tag. */
     private static final float SCALE = 0.85f;
     private final Map<UUID, TextDisplay> displays = new HashMap<>();
     /** What each line says now, so the text only changes when it has to. */

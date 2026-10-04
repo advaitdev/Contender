@@ -35,9 +35,9 @@ public class Kit {
 
     public void apply(Player player) {
         player.getInventory().clear();
-        player.getInventory().setContents(cloneArray(contents));
+        player.getInventory().setContents(handOut(contents));
         player.getInventory().setArmorContents(cloneArray(armor));
-        player.getInventory().setItemInOffHand(offhand == null ? null : offhand.clone());
+        player.getInventory().setItemInOffHand(offhand == null ? null : GoldenHead.refresh(offhand.clone()));
         applyEffectsOnly(player);
     }
 
@@ -75,6 +75,13 @@ public class Kit {
         pvpHurt = other.pvpHurt;
         pveHurt = other.pveHurt;
         healthUnderName = other.healthUnderName;
+    }
+
+    /** Copies for a player, with golden heads made fresh so they work however the kit was saved. */
+    private ItemStack[] handOut(ItemStack[] original) {
+        ItemStack[] items = cloneArray(original);
+        for (int i = 0; i < items.length; i++) items[i] = items[i] == null ? null : GoldenHead.refresh(items[i]);
+        return items;
     }
 
     private ItemStack[] cloneArray(ItemStack[] original) {

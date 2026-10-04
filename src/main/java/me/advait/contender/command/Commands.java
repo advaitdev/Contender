@@ -44,6 +44,8 @@ public final class Commands {
         set(commands, "pickhacker", pick, pick);
 
         set(commands, "vote", (sender, command, label, args) -> { vote(sender, args); return true; }, null);
+        set(commands, "goldenhead", (sender, command, label, args) -> { goldenHead(sender, args); return true; }, (sender, command, label, args) ->
+                args.length == 1 ? java.util.List.of("1", "8", "16", "64") : args.length == 2 ? null : java.util.List.of());
         set(commands, "startvote", (sender, command, label, args) -> { startVote(sender, args); return true; }, null);
         set(commands, "endvote", (sender, command, label, args) -> {
             if (!plugin.getVotes().isActive()) Msg.error(sender, "No vote is running.");
@@ -224,6 +226,20 @@ public final class Commands {
         if (candidate == null) { Msg.error(player, args[0] + " isn't in this vote. Use /vote to see who is."); return; }
         plugin.getVotes().vote(player, candidate);
         Msg.success(player, "You voted for " + candidate.name() + ".");
+    }
+
+    /** /goldenhead [amount] [player]: UHCR's golden head, to hand out or put in a kit. */
+    private void goldenHead(CommandSender sender, String[] args) {
+        int amount = 1;
+        if (args.length > 0) {
+            try { amount = Math.clamp(Integer.parseInt(args[0]), 1, 64); }
+            catch (NumberFormatException invalid) { Msg.error(sender, "Use /goldenhead [amount] [player]."); return; }
+        }
+        Player target = args.length > 1 ? plugin.getServer().getPlayerExact(args[1]) : sender instanceof Player self ? self : null;
+        if (target == null) { Msg.error(sender, args.length > 1 ? args[1] + " isn't online." : "Use /goldenhead <amount> <player> from the console."); return; }
+        var left = target.getInventory().addItem(me.advait.contender.kit.GoldenHead.create(amount));
+        left.values().forEach(item -> target.getWorld().dropItem(target.getLocation(), item));
+        Msg.success(sender, "Gave " + target.getName() + " " + amount + (amount == 1 ? " golden head." : " golden heads."));
     }
 
     private void startVote(CommandSender sender, String[] args) {

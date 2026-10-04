@@ -337,6 +337,54 @@ public final class HackerService extends Module implements StageService.Listener
         if (resistance > 0) HackerResistance.apply(event, player, resistance);
     }
 
+    // ---- The damage hack ------------------------------------------------------------------------
+
+    /**
+     * The damage hack doesn't make the hit itself stronger: the game shows more damage hearts the more health a hit
+     * takes, which would give the hacker away. The hit lands as normal, and the extra is taken off a tick later
+     * without a second flash, sound or knockback. A hit that would kill with the extra gets it straight away, so
+     * the kill counts normally.
+     */
+    private org.bukkit.event.entity.EntityDamageByEntityEvent boostedKill;
+
+    private double damageBoost(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        if (event.getCause() != EntityDamageEvent.DamageCause.ENTITY_ATTACK && event.getCause() != EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK) return 1;
+        if (!(event.getDamager() instanceof Player attacker) || !(event.getEntity() instanceof org.bukkit.entity.LivingEntity)) return 1;
+        HackSettings settings = effective(attacker.getUniqueId());
+        return settings == null ? 1 : Math.max(1, settings.get(HackSetting.ATTACK_DAMAGE));
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHackedHit(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        double boost = damageBoost(event);
+        if (boost <= 1 || !(event.getEntity() instanceof org.bukkit.entity.LivingEntity victim)) return;
+        double left = victim.getHealth() + victim.getAbsorptionAmount();
+        if (left - event.getFinalDamage() * boost > 0) return;
+        event.setDamage(event.getDamage() * boost);
+        boostedKill = event;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void afterHackedHit(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        if (event == boostedKill) { boostedKill = null; return; }
+        double boost = damageBoost(event);
+        if (boost <= 1 || !(event.getEntity() instanceof org.bukkit.entity.LivingEntity victim)) return;
+        double extra = event.getFinalDamage() * (boost - 1);
+        if (extra <= 0) return;
+        tasks.later(1, () -> {
+            if (!victim.isValid() || victim.isDead()) return;
+            double remaining = extra;
+            double absorption = victim.getAbsorptionAmount();
+            if (absorption > 0) {
+                double taken = Math.min(absorption, remaining);
+                victim.setAbsorptionAmount(absorption - taken);
+                remaining -= taken;
+            }
+            // Never kill here: a death needs to go through the game's own handling.
+            if (remaining > 0) victim.setHealth(Math.max(0.5, victim.getHealth() - remaining));
+        });
+    }
+
     @EventHandler public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         tasks.later(20, () -> {

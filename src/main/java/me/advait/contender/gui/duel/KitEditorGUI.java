@@ -126,11 +126,11 @@ public final class KitEditorGUI {
         inv.setItem(PVE_HURT_SLOT, hurtControl(Material.FEATHER, "PvE Hurt", kit.isPveHurt(), "Other damage is ignored, except the void."));
         boolean health = kit.isHealthUnderName();
         inv.setItem(HEALTH_SLOT, controlItem(Material.GLISTERING_MELON_SLICE,
-                "<color:" + MessageUtil.PRIMARY + ">Health Under Name",
+                "<color:" + MessageUtil.PRIMARY + ">Health Above Name",
                 "<color:" + MessageUtil.MUTED + ">Currently: " + (health
                         ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
-                "<color:" + MessageUtil.MUTED + ">Shows health out of 20, like 17 ❤, under each name</color>",
+                "<color:" + MessageUtil.MUTED + ">Shows health out of 20, like 17 ❤, above each name</color>",
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 

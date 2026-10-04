@@ -138,12 +138,12 @@ public final class JuggernautGame extends ArenaGame {
         // Rides the Juggernaut (Riders), floating above their name.
         crown = Holograms.text(player.getLocation(), Component.text("Juggernaut", theme.primary()), 0.01f,
                 Display.Billboard.CENTER, theme.background(0), "juggernaut");
-        crown.setTransformation(Holograms.transform(0, CROWN_HEIGHT, 0, 0.01f, 0));
+        crown.setTransformation(Holograms.transform(0, crownHeight(), 0, 0.01f, 0));
         crown.setTeleportDuration(0);
         player.hideEntity(plugin, crown);
         me.advait.contender.display.Riders.keep(player, crown);
         TextDisplay created = crown;
-        tasks.later(2, () -> Holograms.animate(created, Holograms.transform(0, CROWN_HEIGHT, 0, 1.4f, 0), 6));
+        tasks.later(2, () -> Holograms.animate(created, Holograms.transform(0, crownHeight(), 0, 1.4f, 0), 6));
         Component name = plugin.getNameTagManager().displayName(player);
         broadcast(from == null ? name.append(Msg.text(" is the first Juggernaut.", DialogPalette.TEXT))
                 : name.append(Msg.text(" took down ", DialogPalette.TEXT)).append(plugin.getNameTagManager().displayName(from))
@@ -168,6 +168,9 @@ public final class JuggernautGame extends ArenaGame {
 
     /** How far above the top of the Juggernaut's head the crown floats, above their name. */
     private static final float CROWN_HEIGHT = 0.6f;
+
+    /** Above the health line too, when the kit shows one over names. */
+    private float crownHeight() { return CROWN_HEIGHT + (kit != null && kit.isHealthUnderName() ? 0.32f : 0); }
 
     private void follow() {
         Player player = juggernaut == null ? null : Bukkit.getPlayer(juggernaut);

@@ -43,6 +43,10 @@ commands:
   vote:
     description: "Vote, or see the vote"
     usage: "/vote [player|skip]"
+  goldenhead:
+    description: "Get golden heads (for you or a kit)"
+    permission: contender.master
+    usage: "/goldenhead [amount] [player]"
   startvote:
     description: "Start a community vote"
     permission: contender.master

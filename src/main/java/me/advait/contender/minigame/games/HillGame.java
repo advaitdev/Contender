@@ -19,6 +19,7 @@ import me.advait.contender.minigame.Minigame;
 import me.advait.contender.minigame.MinigameType;
 import me.advait.contender.tab.StandingsLayout;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -92,7 +93,6 @@ public final class HillGame extends ArenaGame {
     private final boolean knockbackOnly;
     private final Map<UUID, Integer> kills = new HashMap<>();
     private Location hill;
-    private TextDisplay label;
     private int elapsed;
 
     HillGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit,
@@ -115,9 +115,6 @@ public final class HillGame extends ArenaGame {
         hill = arena.layout().getHill() != null ? arena.layout().getHill() : middle();
         List<Location> ring = spawnRing(players.size());
         for (int i = 0; i < players.size(); i++) deploy(players.get(i), ring.get(i));
-        Theme theme = plugin.getThemes().current();
-        label = Holograms.text(hill.clone().add(0, 3.2, 0), Component.text("King of the Hill", theme.primary()), 1.6f,
-                Display.Billboard.CENTER, theme.background(30), "hill");
         broadcast(Msg.text("Stand on the hill alone to score. First to " + target + " points, or the most after " + (seconds / 60) + (seconds / 60 == 1 ? " minute." : " minutes."), DialogPalette.MUTED));
     }
 
@@ -133,38 +130,50 @@ public final class HillGame extends ArenaGame {
             double dx = at.getX() - hill.getX(), dz = at.getZ() - hill.getZ();
             if (dx * dx + dz * dz <= radius * radius && Math.abs(at.getY() - hill.getY()) <= 3) on.add(player);
         }
-        Component status;
+        // The ring shows the hill's state: held, contested, or empty.
         Color ring;
         Player king = on.size() == 1 ? on.getFirst() : null;
         if (king != null) {
             Participant participant = participant(king.getUniqueId());
             participant.score++;
             participant.value = (int) participant.score + " pts";
-            status = Component.text(king.getName(), theme.primary()).append(Component.text(" holds the hill", theme.secondary()));
             ring = theme.primaryColor();
             Sounds.TICK.play(king, 1.4f);
             if (participant.score >= target) { finish(); return; }
         } else if (on.size() > 1) {
-            status = Component.text("Contested", DialogPalette.WARNING);
             ring = Color.fromRGB(DialogPalette.WARNING.value());
         } else {
-            status = Component.text("Nobody on the hill", theme.muted());
             ring = theme.accentColor();
         }
         int left = Math.max(0, seconds - elapsed);
-        if (label != null && label.isValid()) label.text(Component.text("King of the Hill", theme.primary()).appendNewline().append(status)
-                .appendNewline().append(Component.text(String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60), theme.muted())));
         for (int i = 0; i < 48; i++) {
             double angle = Math.PI * 2 * i / 48;
             hill.getWorld().spawnParticle(Particle.DUST, hill.clone().add(Math.cos(angle) * radius, 0.15, Math.sin(angle) * radius), 1, 0, 0, 0, 0,
                     new Particle.DustOptions(ring, 1.3f));
         }
-        String clock = String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60);
-        Msg.actionBar(audience(), status.append(Msg.text("  ·  " + clock, DialogPalette.MUTED)));
-        // The player on the hill sees their own progress instead (sent last, so it replaces the shared line).
-        if (king != null) Msg.status(king, Component.text("You hold the hill", theme.primary()).append(Msg.text("  ·  "
-                + (int) participant(king.getUniqueId()).score + " of " + target + " pts  ·  " + clock, DialogPalette.MUTED)));
+        Component clock = Msg.text("  ·  " + String.format(Locale.ROOT, "%d:%02d", left / 60, left % 60), DialogPalette.MUTED);
+        // Everyone sees the leader's points first, then their own; watchers see just the leader.
+        Participant leader = roster().stream().filter(p -> p.status != Status.WITHDRAWN)
+                .max(Comparator.comparingDouble((Participant p) -> p.score)).orElse(null);
+        Component top = leader == null || leader.score <= 0 ? Msg.text("No points yet", DialogPalette.MUTED) : points(leader, theme.primary());
+        for (UUID id : audience()) {
+            Player viewer = Bukkit.getPlayer(id);
+            if (viewer == null) continue;
+            Participant own = participant(id);
+            Component line = top;
+            if (own != null && own.status != Status.WITHDRAWN && own != leader) {
+                line = line.append(Msg.text("  ·  ", DialogPalette.MUTED)).append(points(own, theme.secondary()));
+            }
+            Msg.status(viewer, line.append(clock));
+        }
         if (left == 0) finish();
+    }
+
+    /** A player's head and their points, like "[head] 42 pts". */
+    private static Component points(Participant participant, net.kyori.adventure.text.format.TextColor color) {
+        int score = (int) participant.score;
+        return Component.textOfChildren(me.advait.contender.util.StringUtil.getPlayerHead(participant.id),
+                Component.text(" " + score + (score == 1 ? " pt" : " pts"), color));
     }
 
     /** The void starts a set distance below the hill (or at the bottom of the map, if that's higher). */
@@ -219,8 +228,7 @@ public final class HillGame extends ArenaGame {
     }
 
     @Override protected void cleanup() {
-        Holograms.remove(label);
-        label = null;
+
         super.cleanup();
     }
 

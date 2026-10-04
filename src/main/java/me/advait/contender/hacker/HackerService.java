@@ -42,6 +42,8 @@ public final class HackerService extends Module implements StageService.Listener
     private final File file;
     private final Map<UUID, Profile> hackers = new LinkedHashMap<>();
     private final Map<UUID, HackSettings> plans = new HashMap<>();
+    /** Directors' and operators' own hacks, to try them out. They apply whatever the player's role. */
+    private final Map<UUID, HackSettings> staff = new HashMap<>();
     private final Set<UUID> unannounced = new HashSet<>();
     private HackSettings sharedPlan = HackSettings.defaults();
     private Mode mode = Mode.SELF;
@@ -85,9 +87,28 @@ public final class HackerService extends Module implements StageService.Listener
         return hackers.containsKey(id) && plugin.getRoleManager().getRole(id) == PlayerRole.CONTESTANT;
     }
 
+    /** Directors and operators can open /hacks for themselves. */
+    public static boolean isStaff(Player player) { return player.isOp() || player.hasPermission("contender.master"); }
+
+    /** A director's or operator's own hacks (all off until they set some). */
+    public HackSettings staffHacks(UUID id) { return staff.getOrDefault(id, HackSettings.defaults()); }
+
+    public void setStaffHacks(Player player, HackSettings settings) {
+        if (!isStaff(player)) throw new IllegalStateException("Only directors and operators can do this.");
+        staff.put(player.getUniqueId(), settings);
+        save();
+        refresh();
+    }
+
     /** What is actually applied to this player right now, or null for nothing. */
     public HackSettings effective(UUID id) {
-        if (!isEnabled() || !isHacker(id)) return null;
+        if (!isEnabled()) return null;
+        if (!isHacker(id)) {
+            // Not a picked hacker: a director or operator trying hacks on themselves.
+            HackSettings own = staff.get(id);
+            Player player = plugin.getServer().getPlayer(id);
+            return own != null && player != null && isStaff(player) ? own : null;
+        }
         if (mode == Mode.SELF) return hackers.get(id).own();
         if (planActive) return plan(id);
         return ownBetweenEvents ? hackers.get(id).own() : null;
@@ -243,6 +264,11 @@ public final class HackerService extends Module implements StageService.Listener
             try { plans.put(UUID.fromString(key), read(perPlayer.getConfigurationSection(key))); }
             catch (IllegalArgumentException ignored) { }
         }
+        ConfigurationSection staffSection = yaml.getConfigurationSection("staff");
+        if (staffSection != null) for (String key : staffSection.getKeys(false)) {
+            try { staff.put(UUID.fromString(key), read(staffSection.getConfigurationSection(key))); }
+            catch (IllegalArgumentException ignored) { }
+        }
         ConfigurationSection players = yaml.getConfigurationSection("players");
         if (players != null) for (String key : players.getKeys(false)) {
             try {
@@ -274,6 +300,7 @@ public final class HackerService extends Module implements StageService.Listener
         yaml.set("own-between-events", ownBetweenEvents);
         write(yaml, "plan.shared", sharedPlan);
         plans.forEach((id, settings) -> write(yaml, "plan.players." + id, settings));
+        staff.forEach((id, settings) -> write(yaml, "staff." + id, settings));
         hackers.forEach((id, profile) -> {
             yaml.set("players." + id + ".name", profile.name());
             yaml.set("players." + id + ".announce", unannounced.contains(id));

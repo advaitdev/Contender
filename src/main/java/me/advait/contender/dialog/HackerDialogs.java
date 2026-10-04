@@ -26,6 +26,8 @@ public final class HackerDialogs {
     public void open(Player player) {
         HackerService hackers = plugin.getHackers();
         if (!hackers.isHacker(player.getUniqueId())) {
+            // Directors and operators can try hacks on themselves.
+            if (HackerService.isStaff(player)) { staff(player); return; }
             player.closeDialog();
             Dialogs.error(player, "Only the hackers can open this menu.");
             return;
@@ -43,6 +45,14 @@ public final class HackerDialogs {
             return;
         }
         directed(player);
+    }
+
+    /** A director's or operator's own hacks. They apply to them wherever they are, and nobody else sees them. */
+    private void staff(Player player) {
+        List<Component> header = List.of(DialogText.muted("Your own hacks, to try them out. Hackers' hacks are in /hackers."));
+        new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", header,
+                p -> plugin.getHackers().staffHacks(p.getUniqueId()),
+                (p, settings) -> plugin.getHackers().setStaffHacks(p, settings), null));
     }
 
     /** When the director picks the hacks, the hacker only sees them. */

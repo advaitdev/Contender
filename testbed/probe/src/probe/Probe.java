@@ -84,6 +84,20 @@ public class Probe extends JavaPlugin implements Listener {
                     for (var m : t.matches()) s.sendMessage("#" + m.number() + " r" + m.round() + " " + t.entries().get(m.first()).name() + " vs " + t.entries().get(m.second()).name() + " " + m.status() + (m.result() == null ? "" : " " + m.result()));
                     for (var st : t.standings()) s.sendMessage("  " + st.entry().name() + " pts=" + st.points() + " w=" + st.wins() + " l=" + st.losses());
                 }
+                case "rrcheck" -> {
+                    // rrcheck: one line on round order, short enough for RCON:
+                    // open=<lowest round with an unfinished match> early=<later-round matches already started> finished=<n>/<total> playing=<n>
+                    var t = c().getTournaments().current();
+                    if (t == null) { s.sendMessage("none"); return true; }
+                    int open = t.matches().stream().filter(m -> m.status() != me.advait.contender.tournament.TournamentMatch.Status.FINISHED)
+                            .mapToInt(m -> m.round()).min().orElse(0);
+                    long early = open == 0 ? 0 : t.matches().stream().filter(m -> m.round() > open
+                            && m.status() != me.advait.contender.tournament.TournamentMatch.Status.WAITING).count();
+                    long finished = t.matches().stream().filter(m -> m.status() == me.advait.contender.tournament.TournamentMatch.Status.FINISHED).count();
+                    long playing = t.matches().stream().filter(m -> m.status() == me.advait.contender.tournament.TournamentMatch.Status.PLAYING).count();
+                    s.sendMessage("open=" + open + " early=" + early + " finished=" + finished + "/" + t.matches().size() + " playing=" + playing
+                            + " running=" + t.isRunning() + " complete=" + t.isComplete());
+                }
                 case "savemap" -> c().getArenas().saveBlocks(c().getMapManager().getMap(a[1])).whenComplete((ok, fail) -> getLogger().info("savemap " + (fail == null ? "ok" : fail.toString())));
                 case "endduel" -> c().getDuels().duels().forEach(d -> d.endNow());
                 case "createmap" -> {

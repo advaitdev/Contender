@@ -119,6 +119,8 @@ There are two modes:
 
 Switch between these in `/hackers` → **Who Picks the Hacks**.
 
+Directors and operators can open `/hacks` too, to try hacks on themselves. Theirs apply wherever they are, are saved separately, and don't make them a hacker.
+
 ### Sabotage
 
 Set it up in `/hackers` → **Sabotage Settings**. **Hackers Can Sabotage** decides whether hackers can start them themselves; set it to **No, only directors** and only you can, with **Start One Now**. Hackers open `/sabotage` during an event and set off something that hits everyone in it, themselves included unless you change that. In a one-off duel (not part of an event), a hacker who's fighting can sabotage too: it only hits that duel's players, the uses count per duel, and it ends with the duel. You choose how long sabotages last (or the whole event), how many each hacker gets, the cooldown, how many can run at once, which ones are allowed and whether the hacker's name is revealed.

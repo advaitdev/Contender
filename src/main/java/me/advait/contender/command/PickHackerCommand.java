@@ -21,11 +21,14 @@ public final class PickHackerCommand implements CommandExecutor, TabCompleter {
             if (!clear) for (String name : args) {
                 OfflinePlayer target = plugin.getServer().getPlayerExact(name);
                 if (target == null) target = plugin.getServer().getOfflinePlayerIfCached(name);
+                if (target == null) target = plugin.getHackers().hackers().entrySet().stream().filter(entry -> entry.getValue().name().equalsIgnoreCase(name))
+                        .findFirst().map(entry -> plugin.getServer().getOfflinePlayer(entry.getKey())).orElse(null);
                 if (target == null) throw new IllegalArgumentException("Couldn't find " + name + ". They need to join the server once first.");
                 players.add(target);
             }
-            plugin.getHackerManager().pick(players);
-            sender.sendMessage(Component.text(clear ? "Hacker selection cleared." : "Hackers selected: " + String.join(", ", players.stream().map(OfflinePlayer::getName).toList()) + ".", NamedTextColor.GREEN));
+            plugin.getHackers().pick(players);
+            sender.sendMessage(Component.text(clear ? "Hacker selection cleared." : "Hackers selected: "
+                    + String.join(", ", plugin.getHackers().hackers().values().stream().map(profile -> profile.name()).toList()) + ".", NamedTextColor.GREEN));
         } catch (RuntimeException failure) { sender.sendMessage(Component.text(Dialogs.message(failure), NamedTextColor.RED)); }
         return true;
     }
@@ -36,6 +39,8 @@ public final class PickHackerCommand implements CommandExecutor, TabCompleter {
         var names = new ArrayList<String>();
         if (args.length <= 1) names.add("--clear");
         for (Player player : plugin.getServer().getOnlinePlayers()) if (plugin.getRoleManager().isContestant(player.getUniqueId()) && !used.contains(player.getName())) names.add(player.getName());
+        // Hackers who left or were voted out can still be kept.
+        for (var profile : plugin.getHackers().hackers().values()) if (!used.contains(profile.name()) && !names.contains(profile.name())) names.add(profile.name());
         return names.stream().filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();
     }
 }

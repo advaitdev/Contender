@@ -15,10 +15,10 @@ public class Kit {
     private boolean allowBlockPlace;
     private boolean allowBlockBreak;
     private boolean naturalRegen;
-    private boolean spectatorInvisible;
     private boolean noClear;
     private boolean pvpHurt;
     private boolean pveHurt;
+    private boolean healthUnderName;
 
     public Kit(String id) {
         this.id = id;
@@ -30,15 +30,14 @@ public class Kit {
         this.allowBlockPlace = false;
         this.allowBlockBreak = false;
         this.naturalRegen = true;
-        this.spectatorInvisible = false;
         this.noClear = false;
     }
 
     public void apply(Player player) {
         player.getInventory().clear();
-        player.getInventory().setContents(cloneArray(contents));
+        player.getInventory().setContents(handOut(contents));
         player.getInventory().setArmorContents(cloneArray(armor));
-        player.getInventory().setItemInOffHand(offhand == null ? null : offhand.clone());
+        player.getInventory().setItemInOffHand(offhand == null ? null : GoldenHead.refresh(offhand.clone()));
         applyEffectsOnly(player);
     }
 
@@ -53,6 +52,36 @@ public class Kit {
         player.setExp(0);
         player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
         player.updateInventory();
+    }
+
+    /** An independent copy for editing, so running matches keep the saved kit until the copy is saved. */
+    public Kit copy() {
+        Kit copy = new Kit(id);
+        copy.copyFrom(this);
+        return copy;
+    }
+
+    /** Takes on another kit's items and rules, so games already holding this kit get the change. */
+    public void copyFrom(Kit other) {
+        displayName = other.displayName;
+        contents = cloneArray(other.contents);
+        armor = cloneArray(other.armor);
+        offhand = other.offhand == null ? null : other.offhand.clone();
+        icon = other.icon;
+        allowBlockPlace = other.allowBlockPlace;
+        allowBlockBreak = other.allowBlockBreak;
+        naturalRegen = other.naturalRegen;
+        noClear = other.noClear;
+        pvpHurt = other.pvpHurt;
+        pveHurt = other.pveHurt;
+        healthUnderName = other.healthUnderName;
+    }
+
+    /** Copies for a player, with golden heads made fresh so they work however the kit was saved. */
+    private ItemStack[] handOut(ItemStack[] original) {
+        ItemStack[] items = cloneArray(original);
+        for (int i = 0; i < items.length; i++) items[i] = items[i] == null ? null : GoldenHead.refresh(items[i]);
+        return items;
     }
 
     private ItemStack[] cloneArray(ItemStack[] original) {
@@ -134,13 +163,7 @@ public class Kit {
         this.naturalRegen = naturalRegen;
     }
 
-    public boolean isSpectatorInvisible() {
-        return spectatorInvisible;
-    }
 
-    public void setSpectatorInvisible(boolean spectatorInvisible) {
-        this.spectatorInvisible = spectatorInvisible;
-    }
 
     public boolean isNoClear() {
         return noClear;
@@ -151,6 +174,9 @@ public class Kit {
     }
 
     public boolean isPvpHurt() { return pvpHurt; }
+    /** Shows "17 ❤" under the names of players using this kit. */
+    public boolean isHealthUnderName() { return healthUnderName; }
+    public void setHealthUnderName(boolean value) { healthUnderName = value; }
     public void setPvpHurt(boolean value) { pvpHurt = value; }
     public boolean isPveHurt() { return pveHurt; }
     public void setPveHurt(boolean value) { pveHurt = value; }

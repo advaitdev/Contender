@@ -16,14 +16,18 @@ public final class HackerAttributes {
         return List.of(
                 new Boost(Attribute.ENTITY_INTERACTION_RANGE, HackSetting.REACH, 1, -3, ADD_NUMBER),
                 new Boost(Attribute.ATTACK_SPEED, HackSetting.ATTACK_SPEED, 1, -1, MULTIPLY_SCALAR_1),
-                new Boost(Attribute.ATTACK_DAMAGE, HackSetting.ATTACK_DAMAGE, 1, -1, MULTIPLY_SCALAR_1),
                 new Boost(Attribute.KNOCKBACK_RESISTANCE, HackSetting.ANTI_KNOCKBACK, 0.01, 0, ADD_NUMBER),
                 new Boost(Attribute.EXPLOSION_KNOCKBACK_RESISTANCE, HackSetting.ANTI_KNOCKBACK, 0.01, 0, ADD_NUMBER),
                 new Boost(Attribute.MOVEMENT_SPEED, HackSetting.MOVEMENT_SPEED, 1, -1, MULTIPLY_SCALAR_1),
                 new Boost(Attribute.JUMP_STRENGTH, HackSetting.JUMP_STRENGTH, 1, -1, MULTIPLY_SCALAR_1),
                 new Boost(Attribute.STEP_HEIGHT, HackSetting.STEP_HEIGHT, 1, -0.6, ADD_NUMBER));
     }
+    /** The damage hack used to be an attribute; HackerService adds the damage now, so take any old one off. */
+    private static final NamespacedKey OLD_DAMAGE = new NamespacedKey("contender", "hack_attack_damage");
+
     public static void apply(Player player, HackSettings settings) {
+        var damage = player.getAttribute(Attribute.ATTACK_DAMAGE);
+        if (damage != null && damage.getModifier(OLD_DAMAGE) != null) damage.removeModifier(OLD_DAMAGE);
         for (var boost : boosts()) {
             var attribute = player.getAttribute(boost.attribute());
             if (attribute == null) continue;

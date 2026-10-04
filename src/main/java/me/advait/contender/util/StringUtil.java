@@ -17,8 +17,23 @@ public final class StringUtil {
 
     /** Dynamic fallback when only a UUID is known. */
     public static Component getPlayerHead(UUID uuid) {
+        // An online player's skin is already known; a bare UUID would show a blank head in dialogs.
+        Player online = org.bukkit.Bukkit.getPlayer(uuid);
+        if (online != null) return getPlayerHead(online);
         return Component.object(ObjectContents.playerHead(uuid))
                 .color(NamedTextColor.WHITE).shadowColor(ShadowColor.none());
+    }
+
+    /** A name with the players' heads in front of it, for winner titles. Shows at most three heads. */
+    public static Component headed(java.util.Collection<UUID> players, Component name) {
+        Component heads = Component.empty();
+        int shown = 0;
+        for (UUID id : players) {
+            if (shown == 3) break;
+            heads = heads.append(getPlayerHead(id));
+            shown++;
+        }
+        return shown == 0 ? name : Component.textOfChildren(heads, Component.space(), name);
     }
 
     public static Component getPlayerHead(Player player) {

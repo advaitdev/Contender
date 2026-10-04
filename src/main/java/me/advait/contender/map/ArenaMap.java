@@ -12,6 +12,12 @@ public class ArenaMap {
     private SpawnPoint team1Spawn;
     private SpawnPoint team2Spawn;
     private SpawnPoint spectatorSpawn;
+    /** King of the Hill's hill, or null for the middle between the team spawns. */
+    private SpawnPoint hill;
+    /** Free-for-all spawns; games pick from these at random. Empty means a ring through the team spawns. */
+    private final java.util.List<SpawnPoint> ffaSpawns = new java.util.ArrayList<>();
+    /** Below this height a player has fallen off the map, or null for the bottom of the saved region. */
+    private Double voidY;
     private BlockBounds bounds;
     private String schematic;
     private int copies = 20;
@@ -29,6 +35,8 @@ public class ArenaMap {
     public SpawnPoint getTeam1Point() { return team1Spawn; }
     public SpawnPoint getTeam2Point() { return team2Spawn; }
     public SpawnPoint getSpectatorPoint() { return spectatorSpawn; }
+    public SpawnPoint getHillPoint() { return hill; }
+    public java.util.List<SpawnPoint> getFfaPoints() { return java.util.List.copyOf(ffaSpawns); }
     public BlockBounds getBounds() { return bounds; }
     public String getSchematic() { return schematic; }
     public void setSchematic(String schematic) { this.schematic = schematic; }
@@ -48,6 +56,18 @@ public class ArenaMap {
     public Location getTeam1Spawn() { return location(team1Spawn); }
     public Location getTeam2Spawn() { return location(team2Spawn); }
     public Location getSpectatorSpawn() { return location(spectatorSpawn == null ? team1Spawn : spectatorSpawn); }
+    /** The hill's center, at floor level, or null when the map doesn't set one. */
+    public Location getHill() { return location(hill); }
+    public void setHill(double x, double y, double z) { hill = new SpawnPoint(x, y, z, 0, 0); }
+    public void clearHill() { hill = null; }
+    public java.util.List<Location> getFfaSpawns() {
+        World world = Bukkit.getWorld(worldName);
+        return world == null ? java.util.List.of() : ffaSpawns.stream().map(point -> point.in(world)).toList();
+    }
+    public void addFfaSpawn(double x, double y, double z, float yaw, float pitch) { ffaSpawns.add(new SpawnPoint(x, y, z, yaw, pitch)); }
+    public void clearFfaSpawns() { ffaSpawns.clear(); }
+    public Double getVoidY() { return voidY; }
+    public void setVoidY(Double y) { voidY = y; }
     public void setTeam1Spawn(double x, double y, double z, float yaw, float pitch) {
         team1Spawn = new SpawnPoint(x, y, z, yaw, pitch);
     }
@@ -82,6 +102,9 @@ public class ArenaMap {
         copy.team1Spawn = team1Spawn.move(dx, dy, dz);
         copy.team2Spawn = team2Spawn.move(dx, dy, dz);
         copy.spectatorSpawn = (spectatorSpawn == null ? team1Spawn : spectatorSpawn).move(dx, dy, dz);
+        copy.hill = hill == null ? null : hill.move(dx, dy, dz);
+        for (SpawnPoint point : ffaSpawns) copy.ffaSpawns.add(point.move(dx, dy, dz));
+        copy.voidY = voidY == null ? null : voidY + dy;
         return copy;
     }
 }

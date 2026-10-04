@@ -48,7 +48,9 @@ public final class PaperCommands {
         public void setExecutor(CommandExecutor executor) { this.executor = executor; }
         public void setTabCompleter(TabCompleter completer) { this.completer = completer; }
         private boolean allowed(CommandSender sender) {
-            if (getName().equals("hacks")) return sender instanceof Player player && plugin.getHackerManager().isHacker(player.getUniqueId());
+            if (getName().equals("hacks")) return sender instanceof Player player
+                    && (plugin.getHackers().isHacker(player.getUniqueId()) || me.advait.contender.hacker.HackerService.isStaff(player));
+            if (getName().equals("sabotage")) return sender instanceof Player player && plugin.getHackers().isHacker(player.getUniqueId());
             return getPermission() == null || sender.hasPermission(getPermission());
         }
         @Override public boolean execute(CommandSender sender, String label, String[] args) {

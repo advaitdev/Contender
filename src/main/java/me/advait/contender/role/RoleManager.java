@@ -47,6 +47,11 @@ public final class RoleManager {
         YamlStorage.save(saved, file);
     }
 
+    /**
+     * Changes a role. A contestant who stops being one leaves whatever they are playing: a running match is
+     * cancelled (a tournament match goes back into the queue), a minigame withdraws them, and they stop being
+     * a vote candidate.
+     */
     public void setRole(UUID id, PlayerRole role) {
         java.util.Objects.requireNonNull(role);
         PlayerRole previous = getRole(id);
@@ -56,34 +61,29 @@ public final class RoleManager {
             save(updated);
             roles.put(id, role);
         }
-        var duels = plugin.getDuelManager();
-        var tournaments = plugin.getTournamentManager();
-        var duel = duels.getDuel(id);
         if (role != PlayerRole.CONTESTANT) {
-            if (plugin.getMinigameManager() != null) plugin.getMinigameManager().withdraw(id);
-            else if (plugin.getRaceManager() != null) plugin.getRaceManager().withdraw(id);
-            // Preserve the roster and results for the director to review or reroll.
-            if (tournaments.isReserved(id)) tournaments.pause();
-            if (duel != null && duel.isInDuel(id)) tournaments.cancelDuel(duel);
-            var votes = plugin.getVoteManager();
-            if (votes != null && votes.getActiveSession() != null) {
-                votes.getActiveSession().removeVote(id);
-                votes.getActiveSession().removeCandidate(id);
+            var duel = plugin.getDuels().duelOf(id);
+            if (duel != null && !plugin.getTournaments().cancelMatch(duel)) duel.forceStop("A player's role changed.");
+            var game = plugin.getMinigames().current();
+            if (game != null && game.involves(id)) game.withdraw(id);
+            var tournament = plugin.getTournaments().current();
+            if (tournament != null && tournament.isRunning() && tournament.isReserved(id)) plugin.getTournaments().pause();
+            if (plugin.getVotes().isActive()) {
+                plugin.getVotes().session().unvote(id);
+                if (plugin.getVotes().session().candidate(id) != null) plugin.getVotes().removeCandidate(id);
             }
         }
         Player player = plugin.getServer().getPlayer(id);
         if (player != null) {
             player.updateCommands();
-            if (duel != null && !duel.isInDuel(id) && (role == PlayerRole.SPECTATOR || previous == PlayerRole.SPECTATOR)) {
-                duels.leaveSpectating(player);
+            if (plugin.getRegistry().isFree(id)) {
+                if (role == PlayerRole.SPECTATOR) player.setGameMode(GameMode.SPECTATOR);
+                else if (previous == PlayerRole.SPECTATOR && player.getGameMode() == GameMode.SPECTATOR) player.setGameMode(GameMode.SURVIVAL);
             }
-            if (role == PlayerRole.SPECTATOR) player.setGameMode(GameMode.SPECTATOR);
-            else if (previous == PlayerRole.SPECTATOR) player.setGameMode(GameMode.SURVIVAL);
         }
         plugin.getNameTagManager().refresh();
-        plugin.refreshVoiceRouting();
-        plugin.refreshHackerAttributes();
-        if (plugin.getTabManager() != null) plugin.getTabManager().refresh();
+        plugin.getHackers().refresh();
+        plugin.getStages().refreshDisplays();
     }
 
     public void applySpectatorRole(Player player) {

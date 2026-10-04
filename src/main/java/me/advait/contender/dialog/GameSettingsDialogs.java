@@ -16,7 +16,7 @@ import static me.advait.contender.dialog.DialogPalette.*;
 
 /** Server-wide lobby, chat, voice, and PvP controls. Changes are committed only by Save. */
 public final class GameSettingsDialogs {
-    private static final String VOICE_NOTICE = "Contender's voice controls are disabled. Simple Voice Chat handles audio normally.";
+    private static final String VOICE_NOTICE = "Simple Voice Chat handles audio. Contender only adds the director broadcast below.";
     private final Contender plugin;
     private final Dialogs dialogs;
     public GameSettingsDialogs(Contender plugin) { this.plugin = plugin; dialogs = new Dialogs(plugin); }
@@ -40,13 +40,14 @@ public final class GameSettingsDialogs {
     }
     public void lobby(Player player) {
         requireAdmin(player);
-        var lobby = plugin.getLobbyManager();
+        var lobby = plugin.getLobby();
         form(player, "Lobby Settings", "Use /setlobby to save your position and facing.\n\n"
-                + "Admin bypass lets players with contender.admin build here.\nSpectator mode still prevents building.", List.of(
-                toggle("join_lobby", DialogIcon.SPAWN, "Join at Lobby", lobby.isTeleportOnJoin(), "Enabled", "Disabled"),
-                toggle("break_blocks", DialogIcon.AXE, "Break Blocks", lobby.isAllowBlockBreak(), "Allowed", "Blocked"),
-                toggle("place_blocks", DialogIcon.MAP, "Place Blocks", lobby.isAllowBlockPlace(), "Allowed", "Blocked"),
-                toggle("build_bypass", DialogIcon.SETTINGS, "Admin Build Bypass", lobby.isAdminBuildBypass(), "Enabled", "Disabled")),
+                + "Break Blocks and Place Blocks apply everywhere outside a game. Games follow their kit.\n"
+                + "Admin Build Bypass lets players with contender.admin build anyway.", List.of(
+                toggle("join_lobby", DialogIcon.SPAWN, "Join at Lobby", lobby.teleportOnJoin(), "Enabled", "Disabled"),
+                toggle("break_blocks", DialogIcon.AXE, "Break Blocks", lobby.allowBlockBreak(), "Allowed", "Blocked"),
+                toggle("place_blocks", DialogIcon.MAP, "Place Blocks", lobby.allowBlockPlace(), "Allowed", "Blocked"),
+                toggle("build_bypass", DialogIcon.SETTINGS, "Admin Build Bypass", lobby.adminBuildBypass(), "Enabled", "Disabled")),
                 p -> new SettingsDialogs(plugin).open(p), (p, view) -> {
                     boolean join = value(view, "join_lobby"), breaking = value(view, "break_blocks"),
                             placing = value(view, "place_blocks"), bypass = value(view, "build_bypass");
@@ -64,36 +65,35 @@ public final class GameSettingsDialogs {
                     (p, view) -> chatGroup(p, group)));
         }
         buttons.add(button(player, DialogIcon.SETTINGS, "Admin Bypass", false, 300, (p, view) -> chatBypass(p)));
+        boolean broadcast = plugin.getVoice().directorBroadcast();
+        buttons.add(button(player, DialogIcon.VOICE, broadcast ? "Directors Heard Everywhere: On" : "Directors Heard Everywhere: Off", false, 300, (p, view) -> {
+            plugin.getVoice().setDirectorBroadcast(!plugin.getVoice().directorBroadcast());
+            chat(p);
+        }));
         dialogs.show(player, "Chat & Voice", List.of(DialogBody.plainMessage(DialogText.muted(
-                "Choose whose game chat permissions to edit.\n\n" + VOICE_NOTICE), 320)), List.of(), buttons, 1, 150,
+                "Choose whose game chat to edit.\n\n" + VOICE_NOTICE), 320)), List.of(), buttons, 1, 150,
                 button(player, DialogIcon.BACK, "Back", false, 150, (p, view) -> new SettingsDialogs(plugin).open(p)));
     }
     private void chatGroup(Player player, String group) {
         var settings = plugin.getChatSettings();
         boolean lobby = group.equals("Lobby"), spectator = group.equals("Spectators");
         boolean allowChat = lobby ? settings.isAllowLobbyGameChat() : spectator ? settings.isAllowSpectatorGameChat() : settings.isAllowContestantGameChat();
-        boolean mute = lobby ? settings.isMuteLobbyVoiceChat() : spectator ? settings.isMuteSpectatorVoiceChat() : settings.isMuteContestantVoiceChat();
-        boolean deafen = spectator ? settings.isDeafenSpectatorVoiceChat() : settings.isDeafenContestantVoiceChat();
         List<DialogInput> inputs = new ArrayList<>();
         inputs.add(toggle("game_chat", DialogIcon.CHAT, "Game Chat", allowChat, "Allowed", "Blocked"));
-        inputs.add(toggle("mute_voice", DialogIcon.VOICE, "Speaking in Voice Chat", mute, "Muted", "Allowed"));
-        if (!lobby) inputs.add(toggle("deafen_voice", DialogIcon.VOICE, "Hearing Voice Chat", deafen, "Deafened", "Allowed"));
-        if (spectator) inputs.add(toggle("hear_match", DialogIcon.DUEL, "Hear the Match", settings.isSpectatorsHearMatch(), "Allowed", "Blocked"));
         String description = lobby ? "Applies to contestants outside a match."
                 : spectator ? "Applies to directors and spectators."
                 : "Applies to contestants playing a match.";
-        form(player, group + " Chat", description + "\n\n" + VOICE_NOTICE + "\nSaved voice options have no effect.", inputs, this::chat, (p, view) -> {
-            boolean game = value(view, "game_chat"), muted = value(view, "mute_voice"), deafened = !lobby && value(view, "deafen_voice");
-            boolean hearMatch = spectator && value(view, "hear_match");
-            if (lobby) { settings.setAllowLobbyGameChat(game); settings.setMuteLobbyVoiceChat(muted); }
-            else if (spectator) { settings.setAllowSpectatorGameChat(game); settings.setMuteSpectatorVoiceChat(muted); settings.setDeafenSpectatorVoiceChat(deafened); settings.setSpectatorsHearMatch(hearMatch); }
-            else { settings.setAllowContestantGameChat(game); settings.setMuteContestantVoiceChat(muted); settings.setDeafenContestantVoiceChat(deafened); }
+        form(player, group + " Chat", description, inputs, this::chat, (p, view) -> {
+            boolean game = value(view, "game_chat");
+            if (lobby) settings.setAllowLobbyGameChat(game);
+            else if (spectator) settings.setAllowSpectatorGameChat(game);
+            else settings.setAllowContestantGameChat(game);
             settings.save(); chat(p);
         });
     }
     private void chatBypass(Player player) {
         var settings = plugin.getChatSettings();
-        form(player, "Chat Admin Bypass", "Players with contender.admin can bypass game chat restrictions.\n\n" + VOICE_NOTICE,
+        form(player, "Chat Admin Bypass", "Players with contender.admin can always chat.",
                 List.of(toggle("override", DialogIcon.SETTINGS, "Admin Bypass", settings.isAdminsOverrideAll(), "Enabled", "Disabled")), this::chat, (p, view) -> {
                     settings.setAdminsOverrideAll(value(view, "override")); settings.save(); chat(p);
                 });

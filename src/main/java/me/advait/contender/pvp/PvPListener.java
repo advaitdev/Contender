@@ -1,8 +1,7 @@
 package me.advait.contender.pvp;
 
-import me.advait.contender.duel.Duel;
-import me.advait.contender.duel.DuelManager;
-import me.advait.contender.role.RoleManager;
+import me.advait.contender.Contender;
+import me.advait.contender.activity.Activity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -10,96 +9,31 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 
-import java.util.UUID;
+/**
+ * PvP between players who are not in a game. Players in a game follow that game's rules, and
+ * never hurt or get hurt by anyone outside it.
+ */
+public final class PvPListener implements Listener {
+    private final Contender plugin;
 
-public class PvPListener implements Listener {
+    public PvPListener(Contender plugin) { this.plugin = plugin; }
 
-    private final PvPSettings pvpSettings;
-    private final DuelManager duelManager;
-    private final RoleManager roleManager;
-    private final me.advait.contender.minigame.MinigameManager minigames;
-
-    public PvPListener(PvPSettings pvpSettings, DuelManager duelManager, RoleManager roleManager) {
-        this(pvpSettings, duelManager, roleManager, null);
-    }
-
-    public PvPListener(PvPSettings pvpSettings, DuelManager duelManager, RoleManager roleManager,
-                       me.advait.contender.minigame.MinigameManager minigames) {
-        this.minigames = minigames;
-        this.pvpSettings = pvpSettings;
-        this.duelManager = duelManager;
-        this.roleManager = roleManager;
-    }
-
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
-
-        // Resolve the attacking player (direct hit or projectile)
-        Player attacker = null;
-        if (event.getDamager() instanceof Player p) {
-            attacker = p;
-        } else if (event.getDamager() instanceof Projectile proj
-                && proj.getShooter() instanceof Player p) {
-            attacker = p;
-        }
-        if (attacker == null) return;
-
-        UUID attackerUuid = attacker.getUniqueId();
-        UUID victimUuid = victim.getUniqueId();
-
-        Duel attackerDuel = duelManager.getDuel(attackerUuid);
-        Duel victimDuel = duelManager.getDuel(victimUuid);
-        if (attackerDuel != victimDuel && (attackerDuel != null || victimDuel != null)) {
-            event.setCancelled(true);
+        Player attacker = event.getDamager() instanceof Player player ? player
+                : event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player player ? player : null;
+        if (attacker == null || attacker.equals(victim)) return;
+        Activity attackerGame = plugin.getRegistry().owner(attacker.getUniqueId());
+        Activity victimGame = plugin.getRegistry().owner(victim.getUniqueId());
+        if (attackerGame != null || victimGame != null) {
+            if (attackerGame != victimGame || !plugin.getRegistry().isPlaying(attacker.getUniqueId())
+                    || !plugin.getRegistry().isPlaying(victim.getUniqueId())) event.setCancelled(true);
             return;
         }
-
-        // The owning mode handles team rules, countdowns, and spectator protection.
-        if (minigames != null && (minigames.owns(attackerUuid) || minigames.owns(victimUuid))) {
-            if (!minigames.sameEvent(attackerUuid, victimUuid)) event.setCancelled(true);
-            return;
-        }
-
-        // Admins bypass all PvP restrictions when the override is enabled
-        if (pvpSettings.isAdminPvpOverride() && attacker.hasPermission("contender.admin")) return;
-
-        // If the attacker is an active duel contestant, the duel state handles it
-        if (attackerDuel != null && !attackerDuel.isSpectator(attackerUuid)) return;
-
-        // If the victim is an active duel contestant, the duel state handles it
-        if (victimDuel != null && !victimDuel.isSpectator(victimUuid)) return;
-
-        // Determine if both players are lobby players (not in any duel role)
-        boolean attackerIsLobby = !isInAnyDuelRole(attackerUuid);
-        boolean victimIsLobby = !isInAnyDuelRole(victimUuid);
-
-        // Rule 1: Lobby PvP — block if both players are lobby players and setting is off
-        if (!pvpSettings.isAllowLobbyPvp() && attackerIsLobby && victimIsLobby) {
-            event.setCancelled(true);
-            return;
-        }
-
-        // Rule 2: Non-duel world PvP — block if the victim's world has no active duel
-        if (!pvpSettings.isAllowNonDuelWorldPvp()) {
-            String worldName = victim.getWorld().getName();
-            boolean worldHasActiveDuel = false;
-            for (Duel duel : duelManager.getActiveDuels()) {
-                if (duel.getMap().getWorldName().equals(worldName)) {
-                    worldHasActiveDuel = true;
-                    break;
-                }
-            }
-            if (!worldHasActiveDuel) {
-                event.setCancelled(true);
-            }
-        }
-    }
-
-    /** Returns true if the player is in any duel-related role (contestant or spectator). */
-    private boolean isInAnyDuelRole(UUID uuid) {
-        if (duelManager.getDuel(uuid) != null) return true;
-        if (!roleManager.isContestant(uuid)) return true;
-        return false;
+        PvPSettings settings = plugin.getPvpSettings();
+        if (settings.isAdminPvpOverride() && attacker.hasPermission("contender.admin")) return;
+        boolean lobby = plugin.getLobby().isLobbyWorld(victim.getWorld());
+        if (lobby ? !settings.isAllowLobbyPvp() : !settings.isAllowNonDuelWorldPvp()) event.setCancelled(true);
     }
 }

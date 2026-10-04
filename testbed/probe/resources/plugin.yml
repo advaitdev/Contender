@@ -1,0 +1,8 @@
+name: ContenderProbe
+version: 1.0
+main: probe.Probe
+api-version: '26.2'
+depend: [Contender]
+commands:
+  probe:
+    permission: op

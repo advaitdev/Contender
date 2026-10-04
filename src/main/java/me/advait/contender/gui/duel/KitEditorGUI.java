@@ -35,11 +35,11 @@ public final class KitEditorGUI {
     public static final int BLOCK_PLACE_SLOT = 42;
     public static final int BLOCK_BREAK_SLOT = 43;
     public static final int NATURAL_REGEN_SLOT = 44;
-    public static final int SPECTATOR_INVISIBLE_SLOT = 45;
     public static final int DELETE_SLOT = 53;
-    public static final int PVP_HURT_SLOT = 46;
+    public static final int PVP_HURT_SLOT = 45;
     public static final int CANCEL_SLOT = 51;
-    public static final int PVE_HURT_SLOT = 47;
+    public static final int PVE_HURT_SLOT = 46;
+    public static final int HEALTH_SLOT = 47;
     public static final int SAVE_SLOT = 49;
     public static final int ICON_SLOT = 52;
 
@@ -56,7 +56,7 @@ public final class KitEditorGUI {
 
         ItemStack filler = controlItem(Material.GRAY_STAINED_GLASS_PANE, " ");
         for (int i = 45; i < SIZE; i++) {
-            if (i != SPECTATOR_INVISIBLE_SLOT && i != DELETE_SLOT && i != CANCEL_SLOT && i != SAVE_SLOT && i != ICON_SLOT) {
+            if (i != DELETE_SLOT && i != CANCEL_SLOT && i != SAVE_SLOT && i != ICON_SLOT) {
                 inv.setItem(i, filler);
             }
         }
@@ -122,20 +122,17 @@ public final class KitEditorGUI {
                         : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
                 "",
                 "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
-
-        boolean si = kit.isSpectatorInvisible();
-        inv.setItem(SPECTATOR_INVISIBLE_SLOT, controlItem(si ? Material.LIME_DYE : Material.RED_DYE,
-                "<color:" + MessageUtil.PRIMARY + ">Spectator Invisibility",
-                "<color:" + MessageUtil.MUTED + ">Currently: " + (si
-                        ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
-                        : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
-                "<color:" + MessageUtil.MUTED + ">Enabled: always hidden from contestants</color>",
-                "<color:" + MessageUtil.MUTED + ">Disabled: hidden within " + me.advait.contender.spectator.SpectatorVisibility.HIDE_DISTANCE_BLOCKS + " blocks</color>",
-                "",
-                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
-
         inv.setItem(PVP_HURT_SLOT, hurtControl(Material.DIAMOND_CHESTPLATE, "PvP Hurt", kit.isPvpHurt(), "Hits from players deal no damage."));
         inv.setItem(PVE_HURT_SLOT, hurtControl(Material.FEATHER, "PvE Hurt", kit.isPveHurt(), "Other damage is ignored, except the void."));
+        boolean health = kit.isHealthUnderName();
+        inv.setItem(HEALTH_SLOT, controlItem(Material.GLISTERING_MELON_SLICE,
+                "<color:" + MessageUtil.PRIMARY + ">Health Above Name",
+                "<color:" + MessageUtil.MUTED + ">Currently: " + (health
+                        ? "<color:" + MessageUtil.PRIMARY + ">Enabled</color>"
+                        : "<color:" + MessageUtil.ERROR + ">Disabled</color>"),
+                "<color:" + MessageUtil.MUTED + ">Shows health out of 20, like 17 ❤, above each name</color>",
+                "",
+                "<color:" + MessageUtil.ACCENT + ">Click to toggle</color>"));
 
         if (!isNew) {
             inv.setItem(DELETE_SLOT, controlItem(Material.TNT,

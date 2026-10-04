@@ -67,6 +67,18 @@ public class MapManager {
                 );
             }
 
+            for (var point : section.getMapList("ffa-spawns")) {
+                try {
+                    map.addFfaSpawn(((Number) point.get("x")).doubleValue(), ((Number) point.get("y")).doubleValue(), ((Number) point.get("z")).doubleValue(),
+                            point.get("yaw") instanceof Number yaw ? yaw.floatValue() : 0, point.get("pitch") instanceof Number pitch ? pitch.floatValue() : 0);
+                } catch (RuntimeException invalid) {
+                    plugin.getLogger().warning("Skipping an invalid FFA spawn on map " + id + ".");
+                }
+            }
+            if (section.isDouble("void-level") || section.isInt("void-level")) map.setVoidY(section.getDouble("void-level"));
+            ConfigurationSection hill = section.getConfigurationSection("hill");
+            if (hill != null) map.setHill(hill.getDouble("x"), hill.getDouble("y"), hill.getDouble("z"));
+
             ConfigurationSection rb = section.getConfigurationSection("rollback-region");
             if (rb != null) {
                 ConfigurationSection c1 = rb.getConfigurationSection("corner1");
@@ -95,8 +107,22 @@ public class MapManager {
         return maps.containsKey(id);
     }
 
+    /** A file-safe id derived from a display name, for example "The Mines" becomes "the_mines". */
+    public static String idFor(String name) {
+        String id = name.strip().toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        return id.length() > 40 ? id.substring(0, 40) : id;
+    }
+
+    public void delete(String id) {
+        if (maps.remove(id) != null) writeAll();
+    }
+
     public void save(ArenaMap map) {
         maps.put(map.getId(), map);
+        writeAll();
+    }
+
+    private void writeAll() {
         YamlConfiguration config = new YamlConfiguration();
         for (ArenaMap entry : maps.values()) {
             String path = "maps." + entry.getId();
@@ -108,6 +134,10 @@ public class MapManager {
             writeSpawn(config, path + ".team1-spawn", entry.getTeam1Point());
             writeSpawn(config, path + ".team2-spawn", entry.getTeam2Point());
             writeSpawn(config, path + ".spectator-spawn", entry.getSpectatorPoint());
+            writeSpawn(config, path + ".hill", entry.getHillPoint());
+            if (entry.getVoidY() != null) config.set(path + ".void-level", entry.getVoidY());
+            if (!entry.getFfaPoints().isEmpty()) config.set(path + ".ffa-spawns", entry.getFfaPoints().stream()
+                    .map(point -> java.util.Map.of("x", point.x(), "y", point.y(), "z", point.z(), "yaw", (double) point.yaw(), "pitch", (double) point.pitch())).toList());
             BlockBounds b = entry.getBounds();
             if (b != null) {
                 config.set(path + ".rollback-region.corner1.x", b.minX());

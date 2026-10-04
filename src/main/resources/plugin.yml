@@ -5,83 +5,130 @@ api-version: '26.2'
 depend: [FastAsyncWorldEdit]
 softdepend: [voicechat]
 commands:
-  votetimer:
-    description: Place or remove the vote timer
-    usage: /votetimer [remove]
-    permission: contender.master
-  hacks:
-    description: Configure your hacker abilities
-    usage: /hacks
-  pickhacker:
-    description: Select the hackers and announce their teammates privately
-    permission: contender.master
-    usage: /pickhacker <name> [name ...] or /pickhacker --clear
-  setlobby:
-    description: Set the lobby return location
-    permission: contender.master
-    usage: /setlobby
-  lobby:
-    description: Return to the lobby
-    usage: /lobby
-  bracket:
-    description: Choose tab rounds, pages and standings
-    usage: /bracket
-  role:
-    description: Assign director, spectator, or contestant roles
-    permission: contender.master
-    usage: /role [player] [director|spectator|contestant]
-  tier:
-    description: Look up a player's MCTiers rankings
-    usage: /tier [player]
-  arena:
-    description: Create maps and prepare arena copies
-    permission: contender.master
-    usage: /arena
   tournament:
-    description: Set up a round-robin tournament
+    description: "Run the show: events, matches, setup tools and hacker controls"
     permission: contender.master
-    usage: /tournament
-  spectate:
-    description: Choose a match to watch
-    usage: /spectate
+    usage: "/tournament"
   duel:
-    description: Open the duel setup menu
+    description: "Start a one-off match"
     permission: contender.master
-    usage: /duel
-  contender:
-    description: Contender admin commands
+    usage: "/duel"
+  arena:
+    description: "Save maps and set their spawns"
     permission: contender.master
-    usage: /contender reload | /contender voice [player]
-  cancelduel:
-    description: Cancel a player's duel without recording a result
+    usage: "/arena"
+  spectate:
+    description: "Watch a match or minigame"
+    usage: "/spectate"
+  lobby:
+    description: "Return to the lobby"
+    usage: "/lobby"
+  setlobby:
+    description: "Set the lobby to where you stand"
     permission: contender.master
-    usage: /cancelduel [player]
-  cancelall:
-    description: Force cancel all events, duels, and votes
-    permission: contender.master
-    usage: /cancelall
-  endduel:
-    description: End the duel you are currently in
-    permission: contender.master
-    usage: /endduel
-  startvote:
-    description: Start a community vote
-    permission: contender.master
-    usage: /startvote <seconds>
-  endvote:
-    description: End the current community vote
-    permission: contender.master
-    usage: /endvote
-  vote:
-    description: Open the voting GUI
-    usage: /vote
+    usage: "/setlobby"
+  bracket:
+    description: "Choose what the tab list shows"
+    usage: "/bracket"
   options:
-    description: Open settings and configure role nametags
-    usage: /options
+    description: "Settings"
+    usage: "/options"
+  role:
+    description: "Make a player a director, spectator or contestant"
+    permission: contender.master
+    usage: "/role [player] [director|spectator|contestant]"
+  tier:
+    description: "Look up a player's MCTiers rankings"
+    usage: "/tier [player]"
+  vote:
+    description: "Vote, or see the vote"
+    usage: "/vote [player|skip]"
+  goldenhead:
+    description: "Get golden heads (for you or a kit)"
+    permission: contender.master
+    usage: "/goldenhead [amount] [player]"
+  startvote:
+    description: "Start a community vote"
+    permission: contender.master
+    usage: "/startvote [seconds] [live] [quick] [spectate|keep] [stay|nomove] [anonymous] [noskip|skipsdontcount] [mustvote] [safe:names] [sitout:names]"
+  endvote:
+    description: "Close the vote and show the results"
+    permission: contender.master
+    usage: "/endvote"
+  votetimer:
+    description: "Add a vote timer where you look (on a wall or floating), or remove one"
+    permission: contender.master
+    usage: "/votetimer [size 1-10|remove|clear]"
+  setvotestage:
+    description: "Set where candidates gather for the vote results"
+    permission: contender.master
+    usage: "/setvotestage [remove]"
+  setboard:
+    description: "Hang the tournament board on the wall you're looking at, or remove it"
+    permission: contender.master
+    usage: "/setboard [remove]"
+  setvotingroom:
+    description: "Set where contestants are sent when a vote starts"
+    permission: contender.master
+    usage: "/setvotingroom [remove]"
+  setjudgeroom:
+    description: "Set where everyone who isn't voting is sent when a vote starts"
+    permission: contender.master
+    usage: "/setjudgeroom [remove]"
+  hacks:
+    description: "See or change your hacks"
+    usage: "/hacks"
+  hackers:
+    description: "Pick the hackers and control their hacks and sabotages"
+    permission: contender.master
+    usage: "/hackers"
+  pickhacker:
+    description: "Pick the hackers by name"
+    permission: contender.master
+    usage: "/pickhacker <name> [name ...] or /pickhacker --clear"
+  sabotage:
+    description: "Trigger a sabotage"
+    usage: "/sabotage"
+  interview:
+    description: "Bring a player into the interview room"
+    permission: contender.master
+    usage: "/interview <player>"
+  uninterview:
+    description: "End the interview and send everyone back"
+    permission: contender.master
+    usage: "/uninterview"
+  setinterviewerposition:
+    description: "Set your spot in the interview room"
+    permission: contender.master
+    usage: "/setinterviewerposition"
+  setintervieweeposition:
+    description: "Set the interviewed player's spot"
+    permission: contender.master
+    usage: "/setintervieweeposition"
+  endduel:
+    description: "End a match now with its current score"
+    permission: contender.master
+    usage: "/endduel [player]"
+  replayround:
+    description: "Play a match's current round again, or the round that just ended"
+    permission: contender.master
+    usage: "/replayround [player]"
+  cancelduel:
+    description: "Cancel a match without recording a result"
+    permission: contender.master
+    usage: "/cancelduel [player]"
+  cancelall:
+    description: "Stop every event, match, vote and interview"
+    permission: contender.master
+    usage: "/cancelall"
+  contender:
+    description: "Status, reload and voice checks"
+    permission: contender.master
+    usage: "/contender [status|reload|voice]"
 permissions:
   contender.master:
-    description: Allows access to duel management
+    description: "Run events and use every director tool"
     default: op
   contender.admin:
-    description: Allows lobby, chat, voice and PvP settings, and configured admin bypasses
+    description: "Lobby, chat and PvP settings, and admin bypasses"
     default: op

@@ -123,7 +123,7 @@ public final class UnderNameTags extends Module {
         ActivityRegistry.Claim claim = plugin.getRegistry().claim(player.getUniqueId());
         if (claim == null || claim.involvement() != ActivityRegistry.Involvement.PLAYING || claim.activity() == null) return null;
         if (player.getGameMode() == GameMode.SPECTATOR || player.isDead() || player.isInvisible()
-                || player.hasPotionEffect(PotionEffectType.INVISIBILITY) || plugin.getNameTagManager().hidden()) return null;
+                || player.hasPotionEffect(PotionEffectType.INVISIBILITY) || plugin.getNameTagManager().hidden(player.getUniqueId())) return null;
         Activity activity = claim.activity();
         Component label = activity.underName(player);
         Kit kit = activity.kit();

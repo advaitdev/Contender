@@ -34,15 +34,29 @@ import java.util.logging.Level;
  */
 public final class SabotageService extends Module implements StageService.Listener {
     /** A sabotage that is currently running. {@code endsAt} is 0 when it lasts until the event ends. */
-    public record Active(Sabotage sabotage, UUID triggeredBy, long endsAt, SabotageContext context, Set<UUID> applied) { }
+    public record Active(Sabotage sabotage, UUID triggeredBy, long endsAt, SabotageContext context, Set<UUID> applied, Scope scope) { }
+
+    /**
+     * Who a sabotage hits: everyone in the current event, or the players in one duel that isn't part of an event.
+     * Uses, cooldowns and the running limit are counted per scope.
+     */
+    public record Scope(String key, me.advait.contender.duel.Duel duel) {
+        public static final Scope EVENT = new Scope("event", null);
+        static Scope of(me.advait.contender.duel.Duel duel) { return new Scope("duel-" + duel.id(), duel); }
+        /** The key a running sabotage is stored under; event sabotages keep their plain id. */
+        String key(Sabotage sabotage) { return duel == null ? sabotage.id() : key + ":" + sabotage.id(); }
+        String noun() { return duel == null ? "event" : "duel"; }
+    }
 
     private final File file;
     private YamlConfiguration config;
     private LagInjector lag;
     private Map<String, Sabotage> all = Map.of();
     private final Map<String, Active> active = new LinkedHashMap<>();
-    private final Map<UUID, Integer> uses = new HashMap<>();
-    private long lastTrigger;
+    /** Sabotages used, by scope key and then hacker. */
+    private final Map<String, Map<UUID, Integer>> uses = new HashMap<>();
+    /** When each scope last had a sabotage started. */
+    private final Map<String, Long> lastTrigger = new HashMap<>();
     private long seconds;
 
     public SabotageService(Contender plugin) {
@@ -121,12 +135,28 @@ public final class SabotageService extends Module implements StageService.Listen
     public Collection<Sabotage> all() { return all.values(); }
     public Sabotage byId(String id) { return all.get(id); }
     public Map<String, Active> active() { return Collections.unmodifiableMap(active); }
-    public int usesLeft(UUID hacker) { return Math.max(0, usesPerHacker() - uses.getOrDefault(hacker, 0)); }
+    /** Where this hacker's sabotages would land: their event, their duel, or nowhere (null). */
+    public Scope scopeFor(Player hacker) {
+        UUID id = hacker.getUniqueId();
+        Stage stage = plugin.getStages().current();
+        if (plugin.getStages().running() && stage != null && stage.involves(id)) return Scope.EVENT;
+        var duel = plugin.getDuels().duelOf(id);
+        if (duel != null && duel.isPlayer(id) && !duel.isOver()) return Scope.of(duel);
+        return plugin.getStages().running() ? Scope.EVENT : null;
+    }
 
-    public long cooldownLeft() {
-        long left = lastTrigger + cooldownSeconds() * 1000L - System.currentTimeMillis();
+    public int usesLeft(Player hacker) {
+        Scope scope = scopeFor(hacker);
+        int used = scope == null ? 0 : uses.getOrDefault(scope.key(), Map.of()).getOrDefault(hacker.getUniqueId(), 0);
+        return Math.max(0, usesPerHacker() - used);
+    }
+
+    private long cooldownLeft(Scope scope) {
+        long left = lastTrigger.getOrDefault(scope.key(), 0L) + cooldownSeconds() * 1000L - System.currentTimeMillis();
         return Math.max(0, (left + 999) / 1000);
     }
+
+    private long runningIn(Scope scope) { return active.values().stream().filter(running -> running.scope().equals(scope)).count(); }
 
     /** Whether this hacker can open the sabotage menu right now. */
     public boolean available(Player player) {
@@ -137,12 +167,13 @@ public final class SabotageService extends Module implements StageService.Listen
     public String blocked(Player hacker, Sabotage sabotage) {
         if (!enabled()) return "Only the director can start sabotages right now.";
         if (!plugin.getHackers().isHacker(hacker.getUniqueId())) return "Only hackers can sabotage.";
-        if (!plugin.getStages().running()) return "Sabotages work once an event has started.";
+        Scope scope = scopeFor(hacker);
+        if (scope == null) return "Sabotages work during an event or a duel.";
         if (sabotage != null && !allowed(sabotage.id())) return "That sabotage is turned off.";
-        if (sabotage != null && active.containsKey(sabotage.id())) return sabotage.name() + " is already running.";
-        if (usesLeft(hacker.getUniqueId()) <= 0) return "You've used all your sabotages for this event.";
-        if (active.size() >= maxActive()) return "Too many sabotages are running already.";
-        long cooldown = cooldownLeft();
+        if (sabotage != null && active.containsKey(scope.key(sabotage))) return sabotage.name() + " is already running.";
+        if (usesLeft(hacker) <= 0) return "You've used all your sabotages for this " + scope.noun() + ".";
+        if (runningIn(scope) >= maxActive()) return "Too many sabotages are running already.";
+        long cooldown = cooldownLeft(scope);
         if (cooldown > 0) return "Wait " + cooldown + "s before the next sabotage.";
         return null;
     }
@@ -152,23 +183,24 @@ public final class SabotageService extends Module implements StageService.Listen
     public void trigger(Player hacker, Sabotage sabotage) {
         String reason = blocked(hacker, sabotage);
         if (reason != null) throw new IllegalStateException(reason);
-        uses.merge(hacker.getUniqueId(), 1, Integer::sum);
-        begin(sabotage, hacker.getUniqueId());
+        Scope scope = scopeFor(hacker);
+        uses.computeIfAbsent(scope.key(), ignored -> new HashMap<>()).merge(hacker.getUniqueId(), 1, Integer::sum);
+        begin(sabotage, hacker.getUniqueId(), scope);
     }
 
     /** Directors can start any sabotage, ignoring uses and cooldowns. */
     public void force(Sabotage sabotage, UUID by) {
         if (active.containsKey(sabotage.id())) throw new IllegalStateException(sabotage.name() + " is already running.");
-        begin(sabotage, by);
+        begin(sabotage, by, Scope.EVENT);
     }
 
-    private void begin(Sabotage sabotage, UUID by) {
+    private void begin(Sabotage sabotage, UUID by, Scope scope) {
         ConfigurationSection settings = config.getConfigurationSection("settings." + sabotage.id());
-        SabotageContext context = new SabotageContext(plugin, settings, this::affected);
+        SabotageContext context = new SabotageContext(plugin, settings, id -> affected(id, scope));
         long endsAt = durationSeconds() == 0 ? 0 : System.currentTimeMillis() + durationSeconds() * 1000L;
-        Active running = new Active(sabotage, by, endsAt, context, new HashSet<>());
-        active.put(sabotage.id(), running);
-        lastTrigger = System.currentTimeMillis();
+        Active running = new Active(sabotage, by, endsAt, context, new HashSet<>(), scope);
+        active.put(scope.key(sabotage), running);
+        lastTrigger.put(scope.key(), System.currentTimeMillis());
         safely(running, () -> sabotage.start(context));
         sync(running);
         safely(running, () -> announce(running));
@@ -180,16 +212,21 @@ public final class SabotageService extends Module implements StageService.Listen
         String who = trigger == null ? "A director" : trigger.getName();
         Component subtitle = Msg.text(sabotage.description(), DialogPalette.TEXT);
         Component title = Msg.text("Sabotage: " + sabotage.name(), DialogPalette.DANGER);
+        Set<UUID> audience = audience(running.scope());
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Msg.title(player, title, subtitle, 5, 60, 15);
-            Sounds.SABOTAGE.play(player);
             boolean director = player.hasPermission("contender.master");
+            // A duel's sabotage is only news to that duel; directors still get the chat line.
+            if (audience != null && !audience.contains(player.getUniqueId()) && !director) continue;
+            if (audience == null || audience.contains(player.getUniqueId())) {
+                Msg.title(player, title, subtitle, 5, 60, 15);
+                Sounds.SABOTAGE.play(player);
+            }
             Component line = Msg.text("Sabotage! ", DialogPalette.DANGER).append(Msg.text(sabotage.name(), DialogPalette.ACCENT))
                     .append(Msg.text(" · " + sabotage.description(), DialogPalette.MUTED));
             if (revealHacker() || director) line = line.append(Msg.text(" (" + who + ")", DialogPalette.MUTED));
             player.sendMessage(line);
         }
-        plugin.getLogger().info("Sabotage " + sabotage.id() + " started by " + who);
+        plugin.getLogger().info("Sabotage " + sabotage.id() + " started by " + who + (running.scope().duel() == null ? "" : " in " + running.scope().duel().displayName()));
     }
 
     /** Ends a sabotage early (director control) or when its time runs out. */
@@ -202,23 +239,34 @@ public final class SabotageService extends Module implements StageService.Listen
         }
         running.applied().clear();
         safely(running, () -> running.sabotage().stop(running.context()));
-        if (announce) Msg.broadcast(Msg.text(running.sabotage().name() + " wore off.", DialogPalette.MUTED));
+        if (!announce) return;
+        Component line = Msg.text(running.sabotage().name() + " wore off.", DialogPalette.MUTED);
+        Set<UUID> audience = audience(running.scope());
+        if (audience == null) Msg.broadcast(line);
+        else for (UUID member : audience) { Player player = Bukkit.getPlayer(member); if (player != null) player.sendMessage(line); }
     }
+
+    /** Who hears about a sabotage: everyone for the event, or a duel's players and watchers (null means everyone). */
+    private static Set<UUID> audience(Scope scope) { return scope.duel() == null ? null : scope.duel().audience(); }
 
     public void endAll(boolean announce) { for (String id : List.copyOf(active.keySet())) end(id, announce); }
 
-    @Override public void stageStarted(Stage stage) { uses.clear(); lastTrigger = 0; }
+    @Override public void stageStarted(Stage stage) { uses.remove(Scope.EVENT.key()); lastTrigger.remove(Scope.EVENT.key()); }
 
     @Override public void stageEnded(Stage stage) {
-        if (!active.isEmpty()) endAll(true);
-        uses.clear();
+        for (var entry : List.copyOf(active.entrySet())) if (entry.getValue().scope().duel() == null) end(entry.getKey(), true);
+        uses.remove(Scope.EVENT.key());
     }
 
-    /** Contestants in the current event (or online contestants between events), and hackers only if configured. */
-    private boolean affected(UUID id) {
+    /**
+     * Event sabotages: contestants in the current event (or online contestants between events). Duel sabotages:
+     * that duel's players. Hackers only if configured.
+     */
+    private boolean affected(UUID id, Scope scope) {
         Player player = Bukkit.getPlayer(id);
         if (player == null || plugin.getRoleManager().getRole(id) != PlayerRole.CONTESTANT) return false;
         if (!affectsHackers() && plugin.getHackers().isHacker(id)) return false;
+        if (scope.duel() != null) return scope.duel().isPlayer(id) && !scope.duel().isOver();
         Stage stage = plugin.getStages().current();
         return stage == null || stage.involves(id) || !stage.started();
     }
@@ -226,7 +274,7 @@ public final class SabotageService extends Module implements StageService.Listen
     private void sync(Active running) {
         for (Player player : Bukkit.getOnlinePlayers()) {
             UUID id = player.getUniqueId();
-            boolean should = affected(id) && !player.isDead();
+            boolean should = affected(id, running.scope()) && !player.isDead();
             if (should && !running.applied().contains(id)) {
                 running.applied().add(id);
                 safely(running, () -> running.sabotage().apply(player, running.context()));
@@ -240,8 +288,17 @@ public final class SabotageService extends Module implements StageService.Listen
     private void tick() {
         seconds++;
         long now = System.currentTimeMillis();
-        for (Active running : List.copyOf(active.values())) {
-            if (running.endsAt() > 0 && now >= running.endsAt()) { end(running.sabotage().id(), true); continue; }
+        for (var entry : List.copyOf(active.entrySet())) {
+            Active running = entry.getValue();
+            var duel = running.scope().duel();
+            // A duel's sabotages end with the duel.
+            if (duel != null && (duel.isOver() || !plugin.getDuels().duels().contains(duel))) {
+                end(entry.getKey(), false);
+                uses.remove(running.scope().key());
+                lastTrigger.remove(running.scope().key());
+                continue;
+            }
+            if (running.endsAt() > 0 && now >= running.endsAt()) { end(entry.getKey(), true); continue; }
             sync(running);
             safely(running, () -> running.sabotage().tick(running.context(), seconds));
         }

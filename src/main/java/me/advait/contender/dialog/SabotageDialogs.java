@@ -35,8 +35,10 @@ public final class SabotageDialogs {
         if (!service.available(player)) { player.closeDialog(); Dialogs.error(player, "Sabotages aren't available right now."); return; }
         String general = service.blocked(player, null);
         List<DialogBody> body = new ArrayList<>();
-        Component status = DialogText.lines(DialogText.muted("Change the rules for everyone in this event. " + (service.revealHacker() ? "Everyone will see it was you." : "Only directors see it was you.")),
-                DialogText.detail("Sabotages left", Integer.toString(service.usesLeft(player.getUniqueId())), ACCENT));
+        SabotageService.Scope scope = service.scopeFor(player);
+        String where = scope != null && scope.duel() != null ? "this duel" : "this event";
+        Component status = DialogText.lines(DialogText.muted("Change the rules for everyone in " + where + ". " + (service.revealHacker() ? "Everyone will see it was you." : "Only directors see it was you.")),
+                DialogText.detail("Sabotages left", Integer.toString(service.usesLeft(player)), ACCENT));
         if (general != null) status = DialogText.lines(status, text(general, WARNING));
         if (!service.active().isEmpty()) status = DialogText.lines(status, DialogText.detail("Running", String.join(", ",
                 service.active().values().stream().map(active -> active.sabotage().name()).toList())));

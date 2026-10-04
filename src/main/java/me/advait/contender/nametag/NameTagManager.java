@@ -25,15 +25,23 @@ public final class NameTagManager extends Module {
     private record Entry(String name, Team team, String previousTeam) { }
     private final Map<Scoreboard, Map<UUID, Entry>> boards = new IdentityHashMap<>();
     private long nextTeam;
-    private boolean hidden;
+    /** Who has their nametag hidden, by whoever asked (the Nameless sabotage, once per event or duel). */
+    private final Map<Object, java.util.function.Predicate<UUID>> hiders = new IdentityHashMap<>();
 
-    /** Whether every nametag is hidden right now. */
-    public boolean hidden() { return hidden; }
+    /** Whether this player's nametag is hidden right now. */
+    public boolean hidden(UUID player) {
+        for (var hider : hiders.values()) if (hider.test(player)) return true;
+        return false;
+    }
 
-    /** Hides every nametag (used by the Nameless sabotage). */
-    public void setHidden(boolean hide) {
-        hidden = hide;
+    /** Hides the nametags of the players {@code who} matches until {@link #show(Object)} with the same owner. */
+    public void hide(Object owner, java.util.function.Predicate<UUID> who) {
+        hiders.put(owner, who);
         refresh();
+    }
+
+    public void show(Object owner) {
+        if (hiders.remove(owner) != null) refresh();
     }
 
     public NameTagManager(Contender plugin) { super(plugin); }
@@ -97,7 +105,7 @@ public final class NameTagManager extends Module {
                     entry = new Entry(player.getName(), team, previous == null ? null : previous.getName());
                     entries.put(player.getUniqueId(), entry);
                 }
-                Team.OptionStatus visibility = hidden ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS;
+                Team.OptionStatus visibility = hidden(player.getUniqueId()) ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS;
                 if (entry.team().getOption(Team.Option.NAME_TAG_VISIBILITY) != visibility) entry.team().setOption(Team.Option.NAME_TAG_VISIBILITY, visibility);
                 Tag tag = tags.get(player.getUniqueId());
                 if (!tag.prefix().equals(entry.team().prefix())) entry.team().prefix(tag.prefix());

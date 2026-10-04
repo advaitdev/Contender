@@ -8,9 +8,10 @@ lobby:
   pitch: 0.0
   # These settings can also be changed in /options > Lobby Settings.
   teleport-on-join: true
-  # Applies to breaking blocks and collecting fluids with buckets.
+  # Breaking blocks and collecting fluids with buckets, in the lobby and every other world outside a game.
+  # Players in a match or minigame follow its kit's Break Blocks setting instead.
   allow-block-break: false
-  # Applies to placing blocks and emptying buckets.
+  # Placing blocks and emptying buckets, with the same scope (games follow the kit's Place Blocks setting).
   allow-block-place: false
   # Players with contender.admin can build even when the options above are blocked.
   admin-build-bypass: true
@@ -22,6 +23,27 @@ arenas:
   spacing: 1024
   # Maximum selected volume per map, including air.
   max-template-blocks: 100000000
+
+matches:
+  # How long a match waits for a player who disconnects before they forfeit the round.
+  reconnect-seconds: 60
+
+display:
+  # Colors for boards, holograms, vote timers and fireworks.
+  # ocean, amethyst, sunset, gold, mint, crimson, frost or mono. Change this in /options > Display Colors.
+  theme: ocean
+  # Hide "Advancement Made" and "New Recipes Unlocked" pop-ups, which appear whenever a kit is handed out.
+  hide-advancement-toasts: true
+
+voice:
+  # Directors can be heard by everyone, wherever they are (needs Simple Voice Chat).
+  # Change this in /options > Chat & Voice.
+  director-broadcast: false
+
+# Saved by commands; there's no need to edit these by hand:
+#   /setinterviewerposition and /setintervieweeposition save interview positions
+#   /setvotestage saves where players gather when votes are revealed
+#   /votetimer saves where the vote countdown appears
 
 nametags:
   roles:
@@ -38,6 +60,11 @@ tablist:
   title: ""
   color: gold
 
-# 0 is transparent; 100 is solid. Change this in /options > Board appearance.
+# 0 is transparent; 100 is solid. Change this in /options > Board Background.
 tournament-board:
-  background-opacity: 0
+  background-opacity: 30
+
+minigames:
+  # Directors and spectators who aren't busy are brought to watch when a minigame starts, and sent back to the
+  # lobby when it ends. Round robin tournaments don't do this.
+  bring-watchers: true

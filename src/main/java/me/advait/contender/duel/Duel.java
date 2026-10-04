@@ -1,907 +1,689 @@
 package me.advait.contender.duel;
 
 import me.advait.contender.Contender;
-import me.advait.contender.arena.ArenaLease;
+import me.advait.contender.activity.Activity;
+import me.advait.contender.activity.ActivityRegistry;
+import me.advait.contender.arena.ArenaActivity;
+import me.advait.contender.arena.ArenaCopy;
+import me.advait.contender.core.Msg;
+import me.advait.contender.core.Sounds;
+import me.advait.contender.core.Tasks;
+import me.advait.contender.dialog.DialogPalette;
 import me.advait.contender.kit.Kit;
 import me.advait.contender.map.ArenaMap;
-import me.advait.contender.spectator.SpectatorVisibility;
-import me.advait.contender.util.MessageUtil;
-import me.advait.contender.util.StringUtil;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Mannequin;
-import io.papermc.paper.datacomponent.item.ResolvableProfile;
+import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.logging.Level;
 
-public class Duel {
+/**
+ * One match in one arena copy.
+ *
+ * Phases: SORTING (round one: arrange your inventory) → FIGHTING → ROUND_OVER → RESETTING (arena paste
+ * when blocks changed) → COUNTDOWN → FIGHTING … → ENDING (celebration) → CLOSED (everyone back in the lobby).
+ * Eliminated players watch the rest of the round in Spectator mode. Nobody actually dies unless a totem
+ * is involved; lethal hits are intercepted and turned into eliminations.
+ */
+public final class Duel implements Activity, ArenaActivity, me.advait.contender.spectate.Spectatable {
+    public enum Phase { SORTING, FIGHTING, ROUND_OVER, RESETTING, COUNTDOWN, ENDING, CLOSED }
 
+    private static final AtomicInteger IDS = new AtomicInteger();
+    private static final int MAX_DRAWS = 3;
+
+    private final int id = IDS.incrementAndGet();
     private final Contender plugin;
-    private final DuelManager manager;
-    private final Kit kit;
-    private final ArenaMap map;
-    private final ArenaLease arena;
-    private final boolean tournamentDuel;
-    private DuelResult.Reason resultReason = DuelResult.Reason.CANCELLED;
-    private Integer forfeitWinner;
-    private final DuelTeam team1;
-    private final DuelTeam team2;
-    private final int totalRounds;
-    private final int preRoundDelay;
-    private final DuelMode mode;
-    private final Set<UUID> spectators;
-    private final Set<UUID> deadPlayerSpectators;
-    private final Set<Location> placedBlocks;
-    private final Map<UUID, InventorySnapshot> sortedInventories;
-    private final Map<UUID, InventorySnapshot> preDuelInventories;
-    private final SpectatorVisibility spectatorVisibility;
+    private final DuelService service;
+    private final DuelSettings settings;
+    private final ArenaCopy arena;
+    private final List<DuelTeam> teams;
+    private final String label;
+    private final Consumer<DuelResult> onResult;
+    private final Tasks tasks;
+    private final Map<UUID, DuelTeam> teamOf = new HashMap<>();
+    private final Set<UUID> watchers = new LinkedHashSet<>();
+    private final Map<UUID, ItemStack[]> loadouts = new HashMap<>();
+    private final Set<Long> placedBlocks = new HashSet<>();
+    private final Map<DuelTeam, BukkitTask> forfeitTimers = new HashMap<>();
+    private final DuelHud hud;
+    private Phase phase = Phase.SORTING;
+    private int round;
+    private int draws;
+    /** Bumped by a replay, so steps scheduled for the replaced round do nothing. */
+    private int roundToken;
+    /** The last round that was scored, so a replay can take its point back. */
+    private DuelTeam lastRoundWinner;
+    private int lastRoundNumber;
+    private boolean lastRoundCounted;
+    private boolean resultReported;
+    private DuelResult result;
 
-    private AbstractDuelState state;
-    private boolean started;
-    private boolean participantsRestored;
-    private final Set<UUID> lobbyReturnsCompleted = new HashSet<>();
-    private int currentRound;
-    private BukkitTask spectatorVisibilityTask;
-    private boolean firstRound;
-    private final Set<UUID> startEquipped = new HashSet<>();
-    private Map<UUID, Location> roundSpawnPlan;
-    private UUID preparingPlayer;
-    private Location preparingDestination;
-    private final Map<Entity, BukkitTask> deathEffects = new HashMap<>();
-
-
-    private static ItemStack[] cloneArray(ItemStack[] arr) {
-        if (arr == null) return new ItemStack[0];
-        ItemStack[] clone = new ItemStack[arr.length];
-        for (int i = 0; i < arr.length; i++) {
-            if (arr[i] != null) clone[i] = arr[i].clone();
-        }
-        return clone;
-    }
-
-    private record InventorySnapshot(ItemStack[] storage, ItemStack[] armor, ItemStack offhand) {
-        InventorySnapshot {
-            storage = Duel.cloneArray(storage);
-            armor = Duel.cloneArray(armor);
-            offhand = offhand != null ? offhand.clone() : null;
-        }
-    }
-
-    public Duel(Contender plugin, DuelManager manager, DuelSetup setup) {
-        this(plugin, manager, setup, null, false);
-    }
-
-    public Duel(Contender plugin, DuelManager manager, DuelSetup setup, ArenaLease arena, boolean tournamentDuel) {
+    Duel(Contender plugin, DuelService service, DuelSettings settings, ArenaCopy arena,
+         List<List<UUID>> sides, List<String> names, String label, Consumer<DuelResult> onResult) {
         this.plugin = plugin;
-        this.manager = manager;
-        this.kit = setup.getSelectedKit();
+        this.service = service;
+        this.settings = settings;
         this.arena = arena;
-        this.tournamentDuel = tournamentDuel;
-        this.map = arena == null ? setup.getSelectedMap() : arena.instance().map();
-
-        this.team1 = new DuelTeam("Team 1");
-        if (setup.getTeam1().hasCustomName()) this.team1.setName(setup.getTeam1().getName());
-        for (UUID uuid : setup.getTeam1().getPlayers()) {
-            this.team1.addPlayer(uuid);
+        this.label = label;
+        this.onResult = onResult;
+        this.tasks = new Tasks(plugin, "Duel #" + id);
+        List<DuelTeam> built = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            String name = names != null && i < names.size() && names.get(i) != null ? names.get(i) : joinNames(sides.get(i));
+            DuelTeam team = new DuelTeam(i + 1, name, sides.get(i));
+            built.add(team);
+            for (UUID player : team.players()) teamOf.put(player, team);
         }
+        teams = List.copyOf(built);
+        ArenaMap layout = arena.layout();
+        hud = new DuelHud(plugin, layout.getTeam1Spawn(), layout.getTeam2Spawn());
+    }
 
-        this.team2 = new DuelTeam("Team 2");
-        if (setup.getTeam2().hasCustomName()) this.team2.setName(setup.getTeam2().getName());
-        for (UUID uuid : setup.getTeam2().getPlayers()) {
-            this.team2.addPlayer(uuid);
+    private static String joinNames(List<UUID> players) {
+        List<String> names = new ArrayList<>();
+        for (UUID id : players) {
+            String name = Bukkit.getOfflinePlayer(id).getName();
+            names.add(name == null ? "Player" : name);
         }
-
-        this.mode = setup.getMode();
-        this.totalRounds = setup.getRounds();
-        this.preRoundDelay = setup.getPreRoundDelay();
-        this.spectators = new HashSet<>();
-        this.deadPlayerSpectators = new HashSet<>();
-        this.placedBlocks = new HashSet<>();
-        this.sortedInventories = new HashMap<>();
-        this.preDuelInventories = new HashMap<>();
-        this.spectatorVisibility = new SpectatorVisibility(plugin);
-        this.state = new StartingState(this);
-        this.currentRound = 0;
-        this.firstRound = true;
+        return String.join(", ", names);
     }
 
-    public void start() {
-        if (started || isFinished()) return;
-        started = true;
-        enableState();
+    // ---- Accessors -----------------------------------------------------------------------------
+
+    public int id() { return id; }
+    public String label() { return label; }
+    @Override public String displayName() { return label == null ? "Duel #" + id : label; }
+    public DuelSettings settings() { return settings; }
+
+    /**
+     * A director's correction of the round wins, one score per side. Each stays below the number needed to
+     * win; End Match Now finishes a match.
+     */
+    /**
+     * Plays a round again: the one being fought, or the one that just ended (its point is taken back). The arena is
+     * reset and the round starts over with the same score, for when someone disconnected or something glitched.
+     */
+    public void replayRound() {
+        if (isOver() || phase == Phase.ENDING || phase == Phase.CLOSED) throw new IllegalStateException("This match has already ended.");
+        boolean fighting = phase == Phase.FIGHTING;
+        if (!fighting && !lastRoundCounted) throw new IllegalStateException("No round has been played yet.");
+        int replayed = fighting ? round : lastRoundNumber;
+        roundToken++;
+        if (!fighting) {
+            if (lastRoundWinner == null) draws = Math.max(0, draws - 1);
+            else lastRoundWinner.setScore(Math.max(0, lastRoundWinner.score() - 1));
+        }
+        lastRoundCounted = false;
+        hud.hide();
+        round = replayed - 1;
+        Msg.send(audience(), Msg.text("Round " + replayed + " will be played again.", DialogPalette.ACCENT));
+        Msg.notice(audience(), Msg.text("Replaying round " + replayed + "  ", DialogPalette.ACCENT).append(scoreLine()));
+        plugin.getLogger().info(displayName() + ": a director is replaying round " + replayed + ".");
+        resetRound();
+        plugin.getStages().refreshDisplays();
     }
 
-    public void setState(AbstractDuelState next) {
-        Objects.requireNonNull(next);
-        if (next.duel != this) throw new IllegalArgumentException("State belongs to another duel");
-        if (state == next || isFinished()) return;
-        state.disable();
-        state = next;
-        if (!next.isFinished()) enableState();
-        plugin.refreshVoiceRouting();
-        plugin.refreshHackerAttributes();
+    public void correctScores(List<Integer> scores) {
+        if (isOver() || phase == Phase.ENDING || phase == Phase.CLOSED) throw new IllegalStateException("This match has already ended.");
+        if (scores.size() != teams.size()) throw new IllegalArgumentException("Give a score for each side.");
+        for (int score : scores) {
+            if (score < 0 || score >= settings.winsNeeded()) throw new IllegalArgumentException("Each side needs fewer than "
+                    + settings.winsNeeded() + " round wins. To finish the match, use End Match Now.");
+        }
+        for (int i = 0; i < teams.size(); i++) teams.get(i).setScore(scores.get(i));
+        Msg.notice(audience(), Msg.text("Score corrected  ", DialogPalette.MUTED).append(scoreLine()));
+        plugin.getLogger().info(displayName() + ": a director set the score to " + scores.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining("-")) + ".");
+        plugin.getStages().refreshDisplays();
+    }
+    public Kit kit() { return settings.kit(); }
+    public ArenaCopy arena() { return arena; }
+    public ArenaMap layout() { return arena.layout(); }
+    public Phase phase() { return phase; }
+    public int round() { return round; }
+    public List<DuelTeam> teams() { return teams; }
+    public DuelTeam team(UUID player) { return teamOf.get(player); }
+    public boolean isPlayer(UUID player) { return teamOf.containsKey(player); }
+    public boolean isAlive(UUID player) { DuelTeam team = teamOf.get(player); return team != null && team.isAlive(player); }
+    public boolean isOver() { return phase == Phase.ENDING || phase == Phase.CLOSED; }
+    @Override public Set<UUID> players() { return Collections.unmodifiableSet(teamOf.keySet()); }
+    public Set<UUID> watchers() { return Collections.unmodifiableSet(watchers); }
+    public DuelResult result() { return result; }
+
+    /** Everyone who should see this match's messages: players and spectators. */
+    public Set<UUID> audience() {
+        Set<UUID> audience = new LinkedHashSet<>(teamOf.keySet());
+        audience.addAll(watchers);
+        return audience;
     }
 
-    private void enableState() {
+    @Override public Location focus() {
+        Location first = layout().getTeam1Spawn(), second = layout().getTeam2Spawn();
+        if (first == null || second == null) return null;
+        Location middle = first.clone().add(second).multiply(0.5);
+        middle.setWorld(first.getWorld());
+        return middle.add(0, 1, 0);
+    }
+
+    @Override public Location spectatorSpawn() {
+        Location spawn = layout().getSpectatorSpawn();
+        return spawn == null ? layout().getTeam1Spawn() : spawn;
+    }
+
+    // ---- Start ---------------------------------------------------------------------------------
+
+    /** Claims, snapshots and moves every player. Undoes everything and throws if any step fails. */
+    void start() {
+        ActivityRegistry registry = plugin.getRegistry();
+        List<UUID> claimed = new ArrayList<>();
         try {
-            state.enable();
-        } catch (RuntimeException | Error failure) {
-            shutdown();
+            for (UUID player : teamOf.keySet()) {
+                Player online = Bukkit.getPlayer(player);
+                if (online == null) throw new IllegalStateException(nameOf(player) + " is offline.");
+                if (online.isDead()) throw new IllegalStateException(online.getName() + " must respawn first.");
+                registry.claim(player, this, ActivityRegistry.Involvement.PLAYING);
+                claimed.add(player);
+            }
+            for (UUID player : teamOf.keySet()) plugin.getSnapshots().capture(Bukkit.getPlayer(player));
+            round = 1;
+            Map<UUID, Location> spawns = spawns();
+            for (var entry : spawns.entrySet()) {
+                Player player = Bukkit.getPlayer(entry.getKey());
+                if (!teleport(player, entry.getValue())) throw new IllegalStateException("Could not move " + player.getName() + " into the arena.");
+            }
+        } catch (RuntimeException failure) {
+            for (UUID player : claimed) {
+                registry.release(player, this);
+                Player online = Bukkit.getPlayer(player);
+                if (online != null && plugin.getSnapshots().has(player)) plugin.getSnapshots().restoreToLobby(online);
+            }
+            tasks.close();
             throw failure;
         }
+        for (DuelTeam team : teams) team.revive(online(team.players()));
+        for (UUID player : teamOf.keySet()) equip(Bukkit.getPlayer(player), true);
+        plugin.getHackers().refresh();
+        Component vs = Component.empty();
+        for (int i = 0; i < teams.size(); i++) {
+            if (i > 0) vs = vs.append(Msg.text(" vs ", DialogPalette.MUTED));
+            vs = vs.append(Msg.text(teams.get(i).name(), DialogPalette.ACCENT));
+        }
+        Msg.send(audience(), vs.append(Msg.text("  ·  " + arena.layout().getDisplayName()
+                + "  ·  first to " + settings.winsNeeded(), DialogPalette.MUTED)));
+        hud.versus(teams, settings.winsNeeded());
+        phase = Phase.SORTING;
+        countdown(settings.sortSeconds(), true, this::beginFight);
     }
 
-    boolean prepareStart() {
-        if (map.getTeam1Spawn() == null || map.getTeam2Spawn() == null) {
-            for (UUID uuid : team1.getPlayers()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    player.sendMessage(Component.text("Couldn't start the duel because the spawn location was null").color(NamedTextColor.RED));
-                }
+    private Map<UUID, Location> spawns() {
+        Map<UUID, Location> spawns = new LinkedHashMap<>();
+        ArenaMap layout = layout();
+        if (settings.freeForAll()) {
+            List<UUID> order = new ArrayList<>(teamOf.keySet());
+            Collections.shuffle(order);
+            List<Location> ring = SpawnRing.around(layout.getTeam1Spawn(), layout.getTeam2Spawn(), order.size());
+            for (int i = 0; i < order.size(); i++) spawns.put(order.get(i), ring.get(i));
+        } else {
+            for (DuelTeam team : teams) {
+                Location spawn = team.number() == 1 ? layout.getTeam1Spawn() : layout.getTeam2Spawn();
+                for (UUID player : team.players()) spawns.put(player, spawn);
             }
-            for (UUID uuid : team2.getPlayers()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    player.sendMessage(Component.text("Couldn't start the duel because the spawn location was null").color(NamedTextColor.RED));
-                }
-            }
-            return false;
         }
+        return spawns;
+    }
 
-        var world = map.getTeam1Spawn().getWorld();
-        world.setGameRule(org.bukkit.GameRules.LOCATOR_BAR, false);
-        world.setGameRule(org.bukkit.GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
-
-        // Capture pre-duel inventories for No Clear kit before any changes
+    /** Full health, the kit (or the saved hotbar arrangement), and no leftover effects. */
+    private void equip(Player player, boolean firstRound) {
+        if (player == null) return;
+        player.setGameMode(GameMode.SURVIVAL);
+        player.setAllowFlight(false);
+        player.setFlying(false);
+        player.closeInventory();
+        Kit kit = settings.kit();
         if (kit.isNoClear()) {
-            for (UUID uuid : getAllDuelPlayers()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    preDuelInventories.putIfAbsent(uuid, new InventorySnapshot(
-                            player.getInventory().getStorageContents(),
-                            player.getInventory().getArmorContents(),
-                            player.getInventory().getItemInOffHand()
-                    ));
-                }
-            }
+            if (!firstRound) restoreLoadout(player);
+        } else if (firstRound || !restoreLoadout(player)) {
+            kit.apply(player);
         }
+        player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
+        heal(player);
+        player.setFireTicks(0);
+        player.setFreezeTicks(0);
+        player.setFallDistance(0);
+        player.setLevel(0);
+        player.setExp(0);
+        player.setVelocity(new Vector());
+    }
 
-        // Every contestant must reach the arena before anyone receives or loses equipment.
-        Map<UUID, Location> destinations = teamSpawns();
-        moveContestants(destinations);
-        for (UUID uuid : destinations.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (!startEquipped.contains(uuid)) {
-                player.setGameMode(GameMode.SURVIVAL);
-                if (kit.isNoClear()) kit.applyEffectsOnly(player);
-                else kit.apply(player);
-                startEquipped.add(uuid);
-            }
-        }
-
-        Location specSpawn = map.getSpectatorSpawn();
-        for (UUID uuid : spectators) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                if (specSpawn != null) {
-                    player.teleport(specSpawn);
-                }
-                applySpectatorMode(player);
-            }
-        }
-
-        startSpectatorVisibilityTask();
-
-        MiniMessage mm = MiniMessage.miniMessage();
-        String team1Names = buildTeamNames(team1);
-        String team2Names = buildTeamNames(team2);
-        Component vsMessage = mm.deserialize(
-                "<color:gray>Starting duel: " +
-                "<color:" + MessageUtil.ERROR + ">" + team1Names + "</color>" +
-                        " <color:gray>vs</color> " +
-                        "<color:" + MessageUtil.SECONDARY + ">" + team2Names + "</color>"
-        );
-
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                p.sendMessage(vsMessage);
-            }
-        }
-
+    private boolean restoreLoadout(Player player) {
+        ItemStack[] saved = loadouts.get(player.getUniqueId());
+        if (saved == null) return false;
+        ItemStack[] copy = new ItemStack[saved.length];
+        for (int i = 0; i < saved.length; i++) copy[i] = saved[i] == null ? null : saved[i].clone();
+        player.getInventory().setContents(copy);
         return true;
     }
 
-    private String buildTeamNames(DuelTeam team) {
-        if (team.hasCustomName()) return MiniMessage.miniMessage().escapeTags(team.getName());
-        StringBuilder sb = new StringBuilder();
-        List<UUID> players = team.getPlayers();
-        for (int i = 0; i < players.size(); i++) {
-            Player p = Bukkit.getPlayer(players.get(i));
-            if (p != null) {
-                if (i > 0) sb.append(", ");
-                sb.append(p.getName());
-            }
-        }
-        return sb.toString();
+    static void heal(Player player) {
+        var max = player.getAttribute(Attribute.MAX_HEALTH);
+        player.setHealth(max == null ? 20 : max.getValue());
+        player.setAbsorptionAmount(0);
+        player.setFoodLevel(20);
+        player.setSaturation(5);
+        player.setExhaustion(0);
     }
 
-    void captureInventories() {
-        for (UUID uuid : getAllDuelPlayers()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                sortedInventories.put(uuid, new InventorySnapshot(
-                        player.getInventory().getStorageContents(),
-                        player.getInventory().getArmorContents(),
-                        player.getInventory().getItemInOffHand()
-                ));
-            }
-        }
-    }
+    // ---- Countdowns and rounds -----------------------------------------------------------------
 
-    private void restoreInventories() {
-        for (UUID uuid : getAllDuelPlayers()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null) continue;
-
-            InventorySnapshot snapshot = sortedInventories.get(uuid);
-            if (snapshot != null) {
-                player.getInventory().clear();
-                player.getInventory().setStorageContents(cloneArray(snapshot.storage()));
-                player.getInventory().setArmorContents(cloneArray(snapshot.armor()));
-                if (snapshot.offhand() != null) {
-                    player.getInventory().setItemInOffHand(snapshot.offhand().clone());
-                }
-                player.updateInventory();
-            } else {
-                kit.apply(player);
-            }
-
-            player.setHealth(Math.min(20.0, player.getMaxHealth()));
-            player.setFoodLevel(20);
-            player.setSaturation(5.0f);
-            player.setLevel(0);
-            player.setExp(0);
-            player.setFireTicks(0);
-            player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
-        }
-    }
-
-    void prepareRound() {
-        if (roundSpawnPlan == null) {
-            roundSpawnPlan = teamSpawns();
-            if (mode == DuelMode.FFA) {
-                List<UUID> players = new ArrayList<>(getAllDuelPlayers());
-                Collections.shuffle(players);
-                for (int i = 0; i < players.size(); i++) roundSpawnPlan.put(players.get(i),
-                        i % 2 == 0 ? map.getTeam1Spawn() : map.getTeam2Spawn());
-            }
-        }
-        moveContestants(roundSpawnPlan);
-
-        // Restore players who watched the rest of the previous round.
-        for (UUID deadSpec : new HashSet<>(deadPlayerSpectators)) {
-            Player p = Bukkit.getPlayer(deadSpec);
-            if (p != null) removeSpectatorMode(p);
-        }
-        deadPlayerSpectators.clear();
-
-        for (UUID uuid : roundSpawnPlan.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            player.setGameMode(GameMode.SURVIVAL);
-        }
-
-        if (!firstRound) {
-            restoreInventories();
-        }
-        updateSpectatorVisibility();
-        team1.resetAlive();
-        team2.resetAlive();
-        firstRound = false;
-        currentRound++;
-        roundSpawnPlan = null;
-    }
-
-    private Map<UUID, Location> teamSpawns() {
-        Map<UUID, Location> destinations = new LinkedHashMap<>();
-        for (UUID id : team1.getPlayers()) destinations.put(id, map.getTeam1Spawn());
-        for (UUID id : team2.getPlayers()) destinations.put(id, map.getTeam2Spawn());
-        return destinations;
-    }
-
-    private void moveContestants(Map<UUID, Location> destinations) {
-        // Validate all players first so a dead teammate cannot start a partial setup.
-        for (UUID id : destinations.keySet()) {
-            Player player = Bukkit.getPlayer(id);
-            if (player == null) throw new IllegalStateException("Waiting for a contestant to reconnect.");
-            if (player.isDead()) throw new IllegalStateException("Waiting for " + player.getName() + " to respawn.");
-        }
-        for (var entry : destinations.entrySet()) checkedSpawnTeleport(Bukkit.getPlayer(entry.getKey()), entry.getValue());
-    }
-
-    private void checkedSpawnTeleport(Player player, Location destination) {
-        if (destination == null || destination.getWorld() == null) throw new IllegalStateException("The duel's spawn world is not loaded.");
-        // Round resets already place players at their spawns; avoid another unnecessary teleport.
-        if (player.getWorld().equals(destination.getWorld()) && player.getLocation().distanceSquared(destination) < 0.0001) return;
-        preparingPlayer = player.getUniqueId();
-        preparingDestination = destination.clone();
-        try {
-            if (!player.teleport(destination.clone()) || !player.getWorld().equals(destination.getWorld())
-                    || player.getLocation().distanceSquared(destination) > 1) {
-                throw new IllegalStateException("Could not move " + player.getName() + " to the duel spawn.");
-            }
-        } finally { preparingPlayer = null; preparingDestination = null; }
-    }
-
-    boolean holdPreparationMovement(org.bukkit.event.player.PlayerMoveEvent event) {
-        if (event instanceof org.bukkit.event.player.PlayerTeleportEvent) {
-            if (event.getPlayer().getUniqueId().equals(preparingPlayer) && preparingDestination.equals(event.getTo())) return true;
-            event.setCancelled(true);
-        } else if (event.hasChangedPosition()) {
-            Location fixed = event.getFrom().clone();
-            fixed.setYaw(event.getTo().getYaw()); fixed.setPitch(event.getTo().getPitch());
-            event.setTo(fixed);
-        }
-        return true;
-    }
-
-    void holdPreparingPlayers() {
-        for (UUID id : getAllParticipants()) {
-            try {
-                Player player = Bukkit.getPlayer(id);
-                if (player != null) {
-                    player.setVelocity(new org.bukkit.util.Vector());
-                    player.setFallDistance(0);
-                }
-            } catch (RuntimeException failure) {
-                plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not hold a player while preparing the duel.", failure);
-            }
-        }
-    }
-
-    public void handleDeath(Player deadPlayer, Player killer) {
-        if (!isCombatActive()) return;
-
-        UUID deadUuid = deadPlayer.getUniqueId();
-        DuelTeam deadTeam = getTeam(deadUuid);
-        if (deadTeam == null) return;
-
-        // Guard against double-firing (e.g. EntityDamageEvent interception + PlayerDeathEvent fallback)
-        if (!deadTeam.getAlivePlayers().contains(deadUuid)) return;
-        deadTeam.markDead(deadUuid);
-
-        // Let the eliminated player watch the rest of this round.
-        deadPlayerSpectators.add(deadUuid);
-        plugin.refreshVoiceRouting();
-        plugin.refreshHackerAttributes();
-        deadPlayer.getInventory().clear();
-        deadPlayer.setGameMode(GameMode.ADVENTURE);
-        applySpectatorMode(deadPlayer);
-
-        Component killMsg;
-        if (killer != null) {
-            Component killerHead = StringUtil.getPlayerHead(killer);
-            Component deadHead = StringUtil.getPlayerHead(deadPlayer);
-            killMsg = Component.empty()
-                    .append(deadHead).appendSpace()
-                    .append(MiniMessage.miniMessage().deserialize(
-                            "<color:" + MessageUtil.MUTED + ">" +
-                                    deadPlayer.getName() + " was slain by </color>"))
-                    .append(killerHead).appendSpace()
-                    .append(MiniMessage.miniMessage().deserialize(
-                            "<color:" + MessageUtil.PRIMARY + ">" +
-                                    killer.getName() + "</color>"));
-        } else {
-            Component deadHead = StringUtil.getPlayerHead(deadPlayer);
-            killMsg = Component.empty()
-                    .append(deadHead).appendSpace()
-                    .append(MiniMessage.miniMessage().deserialize(
-                            "<color:" + MessageUtil.MUTED + ">" +
-                                    deadPlayer.getName() + " has been eliminated!</color>"));
-        }
-
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                p.sendMessage(killMsg);
-                MessageUtil.playElimination(p);
-            }
-        }
-
-        if (mode == DuelMode.FFA) {
-            int alive = team1.getAlivePlayers().size() + team2.getAlivePlayers().size();
-            if (alive <= 1) {
-                DuelTeam winner = !team1.getAlivePlayers().isEmpty() ? team1
-                        : !team2.getAlivePlayers().isEmpty() ? team2
-                        : null;
-                endRound(winner);
-            }
-        } else {
-            if (deadTeam.isEliminated()) {
-                endRound(getOpponent(deadTeam));
-            }
-        }
-    }
-
-    private void endRound(DuelTeam winner) {
-        setState(new RoundEndState(this, winner));
-    }
-
-    public void endDuel() {
-        if (state.isEnding() || isFinished()) return;
-        resultReason = DuelResult.Reason.FINISHED;
-        manager.reportResult(this);
-        setState(new EndingState(this, false));
-    }
-
-    void announceResult() {
-        MiniMessage mm = MiniMessage.miniMessage();
-        boolean tie = team1.getScore() == team2.getScore();
-
-        if (tie) {
-            String msg = "<color:" + MessageUtil.WARNING + ">The duel ended in a tie! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>";
-            broadcastMessage(mm.deserialize(msg));
-        } else {
-            DuelTeam winner = team1.getScore() > team2.getScore() ? team1 : team2;
-            String winnerName = mm.escapeTags(winner.getName());
-            String msg = "<color:" + MessageUtil.PRIMARY + ">" + winnerName + " wins the duel! " +
-                    "<color:" + MessageUtil.SECONDARY + ">" + team1.getScore() + " - " + team2.getScore() + "</color></color>";
-            broadcastMessage(mm.deserialize(msg));
-
-            for (UUID uuid : winner.getPlayers()) {
-                Player p = Bukkit.getPlayer(uuid);
-                if (p != null) {
-                    //MessageUtil.playDuelEnd(p);
-                }
-            }
-        }
-    }
-
-    void returnParticipantsToLobby() {
-        try { tryReturnParticipantsToLobby(); }
-        catch (RuntimeException failure) {
-            plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not return every duel participant to the lobby.", failure);
-        }
-    }
-
-    /** Retain each participant until their lobby transfer and inventory restoration both succeed. */
-    boolean tryReturnParticipantsToLobby() {
-        if (participantsRestored) return true;
-        if (spectatorVisibilityTask != null) {
-            spectatorVisibilityTask.cancel();
-            spectatorVisibilityTask = null;
-        }
-        boolean complete = true;
-        RuntimeException incomplete = null;
-        for (UUID uuid : getAllParticipants()) {
-            if (lobbyReturnsCompleted.contains(uuid)) continue;
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                lobbyReturnsCompleted.add(uuid);
-                continue;
-            }
-            if (player.isDead()) {
-                complete = false;
-                continue;
-            }
-            try {
-                if (!plugin.getLobbyManager().sendToLobbyChecked(player)) {
-                    complete = false;
-                    continue;
-                }
-                if (isSpectator(uuid)) removeSpectatorMode(player);
-                if (plugin.getRoleManager() != null) plugin.getRoleManager().applySpectatorRole(player);
-                restorePreDuelInventory(uuid, player);
-                lobbyReturnsCompleted.add(uuid);
-            } catch (RuntimeException failure) {
-                complete = false;
-                if (incomplete == null) incomplete = new IllegalStateException("Could not finish every participant's lobby return.");
-                incomplete.addSuppressed(failure);
-            }
-        }
-        if (complete) {
-            stopSpectatorVisibility();
-            clearDeathEffects();
-            participantsRestored = true;
-        }
-        if (incomplete != null) throw incomplete;
-        return complete;
-    }
-
-    void finish() {
-        if (isFinished()) return;
-        stopSpectatorVisibility();
-        setState(new EndedState(this));
-        manager.endDuel(this);
-    }
-
-    void rollbackArena(Runnable onComplete) {
-        if (arena == null) {
-            clearPlacedBlocks();
-            cleanupEntitiesInRegion();
-            onComplete.run();
-            return;
-        }
-        completeRollback(plugin.getArenaManager().reset(arena), onComplete);
-    }
-
-    void rollbackRoundArena(java.util.function.Consumer<Player> protectOccupant, Runnable onComplete) {
-        if (arena == null) { rollbackArena(onComplete); return; }
-        completeRollback(plugin.getArenaManager().resetRound(arena, getAllParticipants(), protectOccupant), onComplete);
-    }
-
-    private void completeRollback(java.util.concurrent.CompletableFuture<Void> reset, Runnable onComplete) {
-        AbstractDuelState owner = state;
-        reset.whenComplete((ignored, failure) -> {
-            if (!plugin.isEnabled() || isFinished() || state != owner || !owner.isEnabled()) return;
-            if (failure != null) {
-                if (!owner.recoverArenaResetFailure(failure)) resetFailed(failure);
+    private void countdown(int seconds, boolean sorting, Runnable then) {
+        int[] remaining = {seconds};
+        BukkitTask[] task = new BukkitTask[1];
+        int token = roundToken;
+        Runnable step = () -> {
+            if (token != roundToken) { tasks.cancel(task[0]); return; }
+            int left = remaining[0]--;
+            if (left <= 0) {
+                tasks.cancel(task[0]);
+                then.run();
                 return;
             }
-            placedBlocks.clear();
-            onComplete.run();
-        });
-    }
-
-    void resetFailed(Throwable failure) {
-        if (isFinished()) return;
-        if (plugin.isEnabled() && state.isEnabled() && state.recoverResetFailure(failure)) return;
-        plugin.getLogger().log(java.util.logging.Level.SEVERE, "Could not reset arena " + (arena == null ? map.getId() : arena.instance().slot()), failure);
-        // Cleanup failures cannot erase a result that has already been decided.
-        if (!state.isEnding()) resultReason = DuelResult.Reason.CANCELLED;
-        shutdown();
-    }
-
-    private void cleanupEntitiesInRegion() {
-        World world = Bukkit.getWorld(map.getWorldName());
-        if (world == null) return;
-
-        if (map.getBounds() == null) return;
-        for (Entity entity : world.getEntities()) {
-            if (!(entity instanceof Player) && map.contains(entity.getLocation())) entity.remove();
-        }
-    }
-
-    // -------------------------------------------------------------------------
-
-    private void clearPlacedBlocks() {
-        for (Location loc : placedBlocks) {
-            loc.getBlock().setType(Material.AIR);
-        }
-        placedBlocks.clear();
-    }
-
-    public void addPlacedBlock(Location location) {
-        placedBlocks.add(location.toBlockLocation());
-    }
-
-    public boolean isPlacedBlock(Location location) {
-        return placedBlocks.contains(location.toBlockLocation());
-    }
-
-    public void removePlacedBlock(Location location) {
-        placedBlocks.remove(location.toBlockLocation());
-    }
-
-    public void addSpectator(UUID uuid) {
-        spectators.add(uuid);
-        plugin.refreshVoiceRouting();
-        plugin.refreshHackerAttributes();
-        Player player = Bukkit.getPlayer(uuid);
-        if (player != null) {
-            // Joining spectators receive an avatar immediately.
-            if (state.canAddSpectator()) {
-                if (map.getSpectatorSpawn() != null) {
-                    player.teleport(map.getSpectatorSpawn());
-                }
-                applySpectatorMode(player);
+            Set<UUID> audience = audience();
+            if (left <= 3) {
+                Msg.title(audience, Msg.text(Integer.toString(left), plugin.getThemes().current().primary()), Component.empty(), 0, 22, 2);
+                Sounds.TICK_HIGH.play(audience);
+            } else {
+                Component bar = sorting ? Msg.text("Arrange your inventory  ", DialogPalette.MUTED).append(Msg.text(left + "s", DialogPalette.ACCENT))
+                        : Msg.text("Next round in " + left, DialogPalette.MUTED);
+                Msg.actionBar(audience, bar);
+                if (left <= 5) Sounds.TICK.play(audience);
             }
-        }
+        };
+        task[0] = tasks.repeat(0, 20, step);
     }
 
-    /** Attach after DuelManager has confirmed the spectator's transfer succeeded. */
-    public void attachSpectator(Player player) {
-        spectators.add(player.getUniqueId());
-        applySpectatorMode(player);
-        plugin.refreshVoiceRouting();
-        plugin.refreshHackerAttributes();
-    }
-
-    public void disconnectSpectator(Player player) {
-        spectators.remove(player.getUniqueId());
-        state.participantLeaving(player);
-        removeSpectatorMode(player);
-    }
-
-    public void removeSpectator(Player player) {
-        if (!spectators.remove(player.getUniqueId())) return;
-        state.participantLeaving(player);
-        removeSpectatorMode(player);
-        updateSpectatorVisibility();
-        plugin.getLobbyManager().sendToLobby(player);
-    }
-
-    public void forfeit(UUID player) {
-        if (!tournamentDuel) { forceEnd(); return; }
-        if (state.isEnding() || isFinished()) return;
-        DuelTeam leaving = getTeam(player);
-        if (leaving == null) return;
-        forfeitWinner = leaving == team1 ? 2 : 1;
-        resultReason = DuelResult.Reason.FORFEIT;
-        manager.reportResult(this);
-        broadcastMessage(Component.text(getOpponent(leaving).getName() + " wins by forfeit."));
-        setState(new EndingState(this, true));
-    }
-
-    public ArenaLease getArena() { return arena; }
-    void reportResult() { manager.reportResult(this); }
-    public DuelResult getResult() {
-        Integer winner = forfeitWinner != null ? forfeitWinner
-                : team1.getScore() == team2.getScore() ? null : team1.getScore() > team2.getScore() ? 1 : 2;
-        return new DuelResult(resultReason, team1.getScore(), team2.getScore(), winner);
-    }
-
-    public DuelMode getMode() { return mode; }
-
-    public boolean isInvincibilityActive() {
-        return state instanceof ActiveState active && active.isInvincibilityActive();
-    }
-
-    private void restorePreDuelInventory(UUID uuid, Player player) {
-        InventorySnapshot snap = preDuelInventories.get(uuid);
-        if (snap == null) return;
-        // sendToLobby already cleared inventory; restore original contents on top
-        player.getInventory().setStorageContents(cloneArray(snap.storage()));
-        player.getInventory().setArmorContents(cloneArray(snap.armor()));
-        if (snap.offhand() != null) player.getInventory().setItemInOffHand(snap.offhand().clone());
-        player.updateInventory();
-    }
-
-    /** Called after a real respawn (vanilla death path) to re-apply the spectator state. */
-    public void applyDeadSpectatorMode(Player player) {
-        applySpectatorMode(player);
-    }
-
-    private void applySpectatorMode(Player player) {
-        player.setGameMode(GameMode.ADVENTURE);
-        spectatorVisibility.enter(player);
-        if (plugin.getSpectatorControls() != null) plugin.getSpectatorControls().giveCompass(player);
-        updateSpectatorVisibility();
-    }
-
-    private void removeSpectatorMode(Player player) {
-        spectatorVisibility.remove(player);
-    }
-
-    private void startSpectatorVisibilityTask() {
-        spectatorVisibilityTask = plugin.getServer().getScheduler()
-                .runTaskTimer(plugin, this::updateSpectatorVisibility, 0L, 2L);
-    }
-
-    private void updateSpectatorVisibility() {
-        if (participantsRestored || isFinished()) return;
-        List<Player> contestants = new ArrayList<>();
-        List<Player> watching = new ArrayList<>();
-        for (UUID uuid : getAllParticipants()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null) continue;
-            if (isSpectator(uuid)) watching.add(player);
-            else contestants.add(player);
-        }
-        spectatorVisibility.update(contestants, watching, kit.isSpectatorInvisible());
-    }
-
-    public DuelTeam getTeam(UUID uuid) {
-        if (team1.hasPlayer(uuid)) return team1;
-        if (team2.hasPlayer(uuid)) return team2;
-        return null;
-    }
-
-    public DuelTeam getOpponent(DuelTeam team) {
-        return team == team1 ? team2 : team1;
-    }
-
-    public Set<UUID> getAllDuelPlayers() {
-        Set<UUID> all = new HashSet<>(team1.getPlayers());
-        all.addAll(team2.getPlayers());
-        return all;
-    }
-
-    public Set<UUID> getAllParticipants() {
-        Set<UUID> all = getAllDuelPlayers();
-        all.addAll(spectators);
-        return all;
-    }
-
-    public boolean isInDuel(UUID uuid) {
-        return team1.hasPlayer(uuid) || team2.hasPlayer(uuid);
-    }
-
-    public boolean isSpectator(UUID uuid) {
-        return spectators.contains(uuid) || deadPlayerSpectators.contains(uuid);
-    }
-
-    void broadcastMessage(Component message) {
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                p.sendMessage(message);
-            }
-        }
-    }
-
-    void broadcastCountdown(int seconds) {
-        Component message = Component.text("Starts in ", NamedTextColor.GRAY)
-                .append(Component.text(seconds, NamedTextColor.GOLD));
-        for (UUID uuid : getAllParticipants()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) player.sendActionBar(message);
-        }
-    }
-
-    void clearCountdown() {
-        for (UUID uuid : getAllParticipants()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) player.sendActionBar(Component.empty());
-        }
-    }
-
-    enum SoundType {
-        COUNTDOWN_TICK, COUNTDOWN_GO
-    }
-
-    void broadcastSound(SoundType type) {
-        for (UUID uuid : getAllParticipants()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                switch (type) {
-                    case COUNTDOWN_TICK -> MessageUtil.playCountdownTick(p);
-                    case COUNTDOWN_GO -> MessageUtil.playCountdownGo(p);
-                }
-            }
-        }
-    }
-
-    public AbstractDuelState getState() {
-        return state;
-    }
-
-    public Kit getKit() {
-        return kit;
-    }
-
-    public ArenaMap getMap() {
-        return map;
-    }
-
-    public DuelTeam getTeam1() {
-        return team1;
-    }
-
-    public DuelTeam getTeam2() {
-        return team2;
-    }
-
-    public int getCurrentRound() {
-        return currentRound;
-    }
-
-    public int getTotalRounds() {
-        return totalRounds;
-    }
-
-    public Set<UUID> getSpectators() {
-        return spectators;
-    }
-
-    public Set<Location> getPlacedBlocks() {
-        return placedBlocks;
-    }
-
-    public void forceEnd() {
-        if (isFinished()) return;
-        if (!plugin.isEnabled()) {
-            shutdown();
+    private void beginFight() {
+        if (isOver()) return;
+        List<DuelTeam> absent = teams.stream().filter(team -> online(team.players()).isEmpty()).toList();
+        if (!absent.isEmpty()) {
+            // Hold the countdown until the side returns; its forfeit timer ends the match if it doesn't.
+            Msg.actionBar(audience(), Msg.text("Waiting for " + absent.getFirst().name() + " to reconnect", DialogPalette.WARNING));
+            int token = roundToken;
+            tasks.later(20, () -> { if (token == roundToken) beginFight(); });
             return;
         }
-        if (state instanceof EndingState ending && ending.isForced()) return;
-        resultReason = DuelResult.Reason.CANCELLED;
-        setState(new EndingState(this, true));
-    }
-
-    /** Stop immediately without waiting on a rollback or recording a match result. */
-    public void forceCancel() {
-        if (isFinished()) return;
-        resultReason = DuelResult.Reason.CANCELLED;
-        AbstractDuelState previous = state;
-        state = new EndedState(this);
-        RuntimeException incomplete = new IllegalStateException("Could not finish every duel cleanup step.");
-        cleanupStep(previous::disable, incomplete);
-        cleanupStep(this::stopSpectatorVisibility, incomplete);
-        if (!participantsRestored) {
-            participantsRestored = true;
-            for (UUID id : getAllParticipants()) {
-                Player player = Bukkit.getPlayer(id);
-                if (player == null) continue;
-                cleanupStep(() -> {
-                    plugin.getLobbyManager().sendToLobby(player);
-                    restorePreDuelInventory(id, player);
-                }, incomplete);
+        if (round == 1) {
+            for (UUID player : teamOf.keySet()) {
+                Player online = Bukkit.getPlayer(player);
+                if (online != null) {
+                    online.closeInventory();
+                    // Inventory items are live views; copy each one so later rounds start with the full loadout.
+                    loadouts.put(player, java.util.Arrays.stream(online.getInventory().getContents())
+                            .map(item -> item == null ? null : item.clone()).toArray(ItemStack[]::new));
+                }
             }
         }
-        cleanupStep(this::clearCountdown, incomplete);
-        cleanupStep(this::clearDeathEffects, incomplete);
-        placedBlocks.clear();
-        if (arena != null) cleanupStep(() -> plugin.getArenaManager().abandon(arena), incomplete);
-        cleanupStep(() -> manager.endDuel(this), incomplete);
-        if (incomplete.getSuppressed().length > 0) throw incomplete;
+        hud.hide();
+        phase = Phase.FIGHTING;
+        Set<UUID> audience = audience();
+        Msg.actionBar(audience, Component.empty());
+        Msg.title(audience, Msg.text("Fight!", plugin.getThemes().current().primary()), Component.empty(), 0, 16, 6);
+        Sounds.GO.play(audience);
+        checkRound();
     }
 
-    private static void cleanupStep(Runnable action, RuntimeException failure) {
-        try { action.run(); }
-        catch (RuntimeException problem) { failure.addSuppressed(problem); }
+    /** Ends the round when at most one side has players standing. */
+    private void checkRound() {
+        if (phase != Phase.FIGHTING) return;
+        List<DuelTeam> standing = teams.stream().filter(DuelTeam::anyAlive).toList();
+        if (standing.size() <= 1) roundOver(standing.isEmpty() ? null : standing.getFirst());
     }
 
-    /** Synchronous teardown for plugin disable; it must not schedule new plugin tasks. */
-    public void shutdown() {
-        if (isFinished()) return;
-        state.disable();
-        if (arena != null) plugin.getArenaManager().discard(arena);
-        stopSpectatorVisibility();
-        returnParticipantsToLobby();
-        clearPlacedBlocks();
-        cleanupEntitiesInRegion();
-        finish();
-    }
-
-    private void stopSpectatorVisibility() {
-        if (spectatorVisibilityTask != null) {
-            spectatorVisibilityTask.cancel();
-            spectatorVisibilityTask = null;
+    private void roundOver(DuelTeam winner) {
+        phase = Phase.ROUND_OVER;
+        if (winner == null) draws++;
+        else winner.addPoint();
+        lastRoundWinner = winner;
+        lastRoundNumber = round;
+        lastRoundCounted = true;
+        int token = roundToken;
+        Set<UUID> audience = audience();
+        var theme = plugin.getThemes().current();
+        Component scoreLine = scoreLine();
+        // The score card in the arena shows the round result; a title on top of it would repeat it.
+        if (winner == null) {
+            Msg.notice(audience, Msg.text("Draw  ", theme.secondary()).append(scoreLine));
+        } else {
+            Msg.notice(audience, Msg.text(winner.name(), theme.primary()).append(Msg.text(" wins the round  ", DialogPalette.MUTED)).append(scoreLine));
+            for (UUID player : winner.players()) { Player online = Bukkit.getPlayer(player); if (online != null) Sounds.ROUND_WIN.play(online); }
         }
-        spectatorVisibility.clear();
+        hud.score(teams, winner);
+        DuelTeam champion = winner != null && winner.score() >= settings.winsNeeded() ? winner : null;
+        if (champion != null) { tasks.later(30, () -> { if (token == roundToken) finish(champion, DuelResult.Reason.FINISHED); }); return; }
+        if (draws > MAX_DRAWS) {
+            DuelTeam leader = leader();
+            tasks.later(30, () -> { if (token == roundToken) finish(leader, DuelResult.Reason.FINISHED); });
+            return;
+        }
+        tasks.later(50, () -> { if (token == roundToken) resetRound(); });
     }
 
-    void spawnDeathMannequin(Player player) {
-        Location location = player.getLocation();
-        World world = location.getWorld();
-        if (world == null) return;
-        Mannequin mannequin = (Mannequin) world.spawnEntity(location, EntityType.MANNEQUIN);
-        mannequin.setProfile(ResolvableProfile.resolvableProfile(player.getPlayerProfile()));
-        mannequin.setRotation(location.getYaw(), location.getPitch());
-        mannequin.setImmovable(true);
-        mannequin.setGravity(false);
-        mannequin.damage(100);
-        BukkitTask removal = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            mannequin.remove();
-            deathEffects.remove(mannequin);
-        }, 60L);
-        deathEffects.put(mannequin, removal);
+    private DuelTeam leader() {
+        DuelTeam best = null;
+        boolean tied = false;
+        for (DuelTeam team : teams) {
+            if (best == null || team.score() > best.score()) { best = team; tied = false; }
+            else if (team.score() == best.score()) tied = true;
+        }
+        return tied ? null : best;
     }
 
-    private void clearDeathEffects() {
-        deathEffects.forEach((entity, task) -> {
-            task.cancel();
-            entity.remove();
+    private Component scoreLine() {
+        var theme = plugin.getThemes().current();
+        Component line = Component.empty();
+        for (int i = 0; i < teams.size(); i++) {
+            if (i > 0) line = line.append(Msg.text(" - ", DialogPalette.MUTED));
+            line = line.append(Component.text(teams.get(i).score(), theme.secondary()));
+        }
+        return line;
+    }
+
+    private void resetRound() {
+        if (isOver()) return;
+        phase = Phase.RESETTING;
+        // Everyone floats safely in Spectator mode while the arena is restored underneath them.
+        for (UUID player : teamOf.keySet()) {
+            Player online = Bukkit.getPlayer(player);
+            if (online != null && !online.isDead()) online.setGameMode(GameMode.SPECTATOR);
+        }
+        attemptReset(0);
+    }
+
+    private void attemptReset(int attempt) {
+        int token = roundToken;
+        plugin.getArenas().resetForRound(arena).whenComplete((ignored, failure) -> {
+            if (phase != Phase.RESETTING || token != roundToken) return;
+            if (failure != null) {
+                plugin.getLogger().log(Level.WARNING, displayName() + ": arena reset failed (attempt " + (attempt + 1) + "): " + Msg.reason(failure));
+                if (attempt < 2) { tasks.later(60, () -> attemptReset(attempt + 1)); return; }
+                Msg.send(audience(), Msg.text("The arena could not be fully reset. Playing on.", DialogPalette.WARNING));
+            }
+            startRound();
         });
-        deathEffects.clear();
     }
 
-    public boolean isCombatActive() { return state.isEnabled() && state.isCombatPhase(); }
-    public boolean isFinished() { return state.isFinished(); }
-    public boolean hasParticipant(UUID uuid) { return manager.getDuel(uuid) == this; }
-    public Contender getPlugin() { return plugin; }
-    int getPreRoundDelay() { return preRoundDelay; }
+    private void startRound() {
+        if (isOver()) return;
+        if (teams.stream().anyMatch(team -> online(team.players()).isEmpty())) {
+            // A side is entirely offline; its forfeit timer decides. Check again shortly.
+            int token = roundToken;
+            tasks.later(20, () -> { if (token == roundToken) startRound(); });
+            return;
+        }
+        round++;
+        Map<UUID, Location> spawns = spawns();
+        for (var entry : spawns.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            if (player == null || player.isDead()) continue;
+            if (!teleport(player, entry.getValue())) {
+                plugin.getLogger().warning(displayName() + ": could not move " + player.getName() + " to their spawn; retrying.");
+                int token = roundToken;
+                tasks.later(20, () -> { if (token == roundToken) retryStart(); });
+                round--;
+                return;
+            }
+            equip(player, false);
+        }
+        for (DuelTeam team : teams) team.revive(online(team.players()).stream().filter(id -> !Bukkit.getPlayer(id).isDead()).toList());
+        plugin.getArenas().clearEntities(arena);
+        phase = Phase.COUNTDOWN;
+        countdown(3, false, this::beginFight);
+    }
+
+    private void retryStart() { if (phase == Phase.RESETTING) startRound(); }
+
+    // ---- Eliminations --------------------------------------------------------------------------
+
+    /** Removes a player from the current round. Safe to call more than once. */
+    void eliminate(Player victim, Player killer) {
+        DuelTeam team = teamOf.get(victim.getUniqueId());
+        if (team == null || phase != Phase.FIGHTING || !team.down(victim.getUniqueId())) return;
+        plugin.getDeathEffect().play(victim);
+        Location at = victim.getLocation();
+        victim.getInventory().clear();
+        victim.setGameMode(GameMode.SPECTATOR);
+        heal(victim);
+        victim.setFireTicks(0);
+        // Knocked off the map (or below its floor): watch the rest of the round from the spectator spawn.
+        if (!arena.insideMap(at) || at.getY() < layout().getBounds().minY() + 1) teleport(victim, watchSpot());
+        else victim.setVelocity(new Vector(0, 0.4, 0));
+        var theme = plugin.getThemes().current();
+        Component message = killer != null && !killer.equals(victim)
+                ? plugin.getNameTagManager().displayName(victim).append(Msg.text(" was eliminated by ", DialogPalette.MUTED))
+                        .append(plugin.getNameTagManager().displayName(killer))
+                : plugin.getNameTagManager().displayName(victim).append(Msg.text(" was eliminated", DialogPalette.MUTED));
+        Msg.send(audience(), message);
+        Sounds.ELIMINATED.play(audience());
+        Msg.title(victim, Msg.text("Eliminated", DialogPalette.DANGER), Msg.text("Watch the rest of the round", DialogPalette.MUTED), 2, 30, 8);
+        plugin.getCelebrations().burst(at.clone().add(0, 1, 0));
+        if (killer != null && theme != null) Sounds.POP.play(killer);
+        checkRound();
+    }
+
+    // ---- Finish --------------------------------------------------------------------------------
+
+    private void finish(DuelTeam winner, DuelResult.Reason reason) {
+        if (isOver()) return;
+        phase = Phase.ENDING;
+        tasks.cancelAll();
+        forfeitTimers.values().forEach(BukkitTask::cancel);
+        forfeitTimers.clear();
+        report(resultFor(winner, reason));
+        hud.remove();
+        Set<UUID> audience = audience();
+        var theme = plugin.getThemes().current();
+        Msg.actionBar(audience, Component.empty());
+        if (winner == null) {
+            Msg.title(audience, Msg.text("Draw", theme.secondary()), scoreLine(), 4, 60, 10);
+            Msg.send(audience, Msg.text("The match ended in a draw.", DialogPalette.MUTED));
+        } else {
+            Msg.title(audience, me.advait.contender.util.StringUtil.headed(winner.players(), Msg.text(winner.name(), theme.primary())),
+                    Msg.text(reason == DuelResult.Reason.FORFEIT ? "wins by forfeit" : "wins the match  ", DialogPalette.MUTED)
+                            .append(reason == DuelResult.Reason.FORFEIT ? Component.empty() : scoreLine()), 4, 60, 10);
+            Msg.send(audience, Msg.text(winner.name(), DialogPalette.ACCENT).append(Msg.text(
+                    reason == DuelResult.Reason.FORFEIT ? " wins by forfeit." : " wins the match ", DialogPalette.TEXT))
+                    .append(reason == DuelResult.Reason.FORFEIT ? Component.empty() : scoreLine()));
+            for (UUID player : teamOf.keySet()) {
+                Player online = Bukkit.getPlayer(player);
+                if (online == null) continue;
+                if (winner.has(player)) {
+                    Sounds.VICTORY.play(online);
+                    if (!online.isDead() && online.getGameMode() != GameMode.SPECTATOR) plugin.getCelebrations().fireworks(online.getLocation(), 3);
+                } else Sounds.ROUND_LOSS.play(online);
+            }
+        }
+        for (UUID player : teamOf.keySet()) {
+            Player online = Bukkit.getPlayer(player);
+            if (online != null && online.getGameMode() != GameMode.SPECTATOR) heal(online);
+        }
+        tasks.later(80, this::close);
+    }
+
+    private DuelResult resultFor(DuelTeam winner, DuelResult.Reason reason) {
+        int first = teams.get(0).score(), second = teams.size() > 1 ? teams.get(1).score() : 0;
+        Integer side = winner == null || teams.size() != 2 ? null : winner.number();
+        if (reason == DuelResult.Reason.FORFEIT && side == null) reason = DuelResult.Reason.FINISHED;
+        return new DuelResult(reason, first, second, side);
+    }
+
+    private void report(DuelResult outcome) {
+        result = outcome;
+        if (resultReported) return;
+        resultReported = true;
+        if (onResult == null) return;
+        try { onResult.accept(outcome); }
+        catch (RuntimeException failure) { plugin.getLogger().log(Level.SEVERE, displayName() + ": could not record the result " + outcome, failure); }
+    }
+
+    /** Ends the match now and records the current score, as /endduel does. */
+    public void endNow() {
+        if (isOver()) return;
+        finish(leader(), DuelResult.Reason.FINISHED);
+    }
+
+    /** Returns everyone to the lobby and frees the arena. */
+    private void close() {
+        if (phase == Phase.CLOSED) return;
+        phase = Phase.CLOSED;
+        tasks.close();
+        forfeitTimers.values().forEach(BukkitTask::cancel);
+        forfeitTimers.clear();
+        hud.remove();
+        for (UUID watcher : List.copyOf(watchers)) plugin.getSpectate().stop(watcher, true);
+        watchers.clear();
+        for (UUID player : teamOf.keySet()) {
+            plugin.getRegistry().release(player, this);
+            Player online = Bukkit.getPlayer(player);
+            if (online == null) continue;
+            if (online.isDead()) continue; // Restored on respawn or rejoin from the saved snapshot.
+            online.sendActionBar(Component.empty());
+            plugin.getSnapshots().restoreToLobby(online);
+        }
+        plugin.getArenas().release(arena);
+        service.closed(this);
+        plugin.getHackers().refresh();
+    }
+
+    @Override public void forceStop(String reason) {
+        if (phase == Phase.CLOSED) return;
+        if (!resultReported) report(DuelResult.cancelled(teams.get(0).score(), teams.size() > 1 ? teams.get(1).score() : 0));
+        if (reason != null && !reason.isBlank()) Msg.send(audience(), Msg.text(reason, DialogPalette.WARNING));
+        close();
+    }
+
+    // ---- Disconnects ---------------------------------------------------------------------------
+
+    @Override public void handleQuit(Player player) {
+        DuelTeam team = teamOf.get(player.getUniqueId());
+        if (team == null || isOver() || Bukkit.isStopping()) return;
+        Msg.send(audience(), plugin.getNameTagManager().displayName(player).append(Msg.text(" left the match.", DialogPalette.WARNING)));
+        if (phase == Phase.FIGHTING) { team.down(player.getUniqueId()); checkRound(); }
+        else team.down(player.getUniqueId());
+        if (online(team.players()).stream().noneMatch(id -> !id.equals(player.getUniqueId())) && !forfeitTimers.containsKey(team)) {
+            int seconds = settings.reconnectSeconds();
+            if (seconds == 0) { tasks.later(1, () -> forfeit(team)); return; }
+            Msg.send(audience(), Msg.text(team.name() + " has " + seconds + " seconds to return before forfeiting.", DialogPalette.MUTED));
+            forfeitTimers.put(team, tasks.later(seconds * 20L, () -> forfeit(team)));
+        }
+    }
+
+    private void forfeit(DuelTeam leaving) {
+        forfeitTimers.remove(leaving);
+        if (isOver() || !online(leaving.players()).isEmpty()) return;
+        List<DuelTeam> others = teams.stream().filter(team -> team != leaving).toList();
+        if (others.size() == 1) finish(others.getFirst(), DuelResult.Reason.FORFEIT);
+        else {
+            List<DuelTeam> present = others.stream().filter(team -> !online(team.players()).isEmpty()).toList();
+            if (present.size() <= 1) finish(present.isEmpty() ? null : present.getFirst(), DuelResult.Reason.FORFEIT);
+        }
+    }
+
+    @Override public void handleJoin(Player player) {
+        DuelTeam team = teamOf.get(player.getUniqueId());
+        if (team == null) return;
+        BukkitTask timer = forfeitTimers.remove(team);
+        if (timer != null) {
+            timer.cancel();
+            Msg.send(audience(), plugin.getNameTagManager().displayName(player).append(Msg.text(" is back.", DialogPalette.SUCCESS)));
+        }
+        if (isOver()) {
+            plugin.getRegistry().release(player.getUniqueId(), this);
+            plugin.getSnapshots().restoreToLobby(player);
+            return;
+        }
+        switch (phase) {
+            case SORTING, COUNTDOWN -> {
+                Location spawn = spawns().get(player.getUniqueId());
+                if (spawn != null && teleport(player, spawn)) {
+                    equip(player, phase == Phase.SORTING);
+                    team.revive(concat(team.alive(), player.getUniqueId()));
+                }
+            }
+            default -> {
+                // Watch until the next round starts.
+                player.setGameMode(GameMode.SPECTATOR);
+                teleport(player, watchSpot());
+            }
+        }
+    }
+
+    private static List<UUID> concat(Set<UUID> alive, UUID extra) {
+        List<UUID> list = new ArrayList<>(alive);
+        if (!list.contains(extra)) list.add(extra);
+        return list;
+    }
+
+    // ---- Watchers ------------------------------------------------------------------------------
+
+    @Override public boolean acceptsWatchers() { return !isOver(); }
+    @Override public void addWatcher(UUID player) { watchers.add(player); }
+    @Override public void removeWatcher(UUID player) { watchers.remove(player); }
+    @Override public boolean contains(Location location) { return arena.contains(location); }
+
+    // ---- Rules used by the listener ------------------------------------------------------------
+
+    boolean frozen() { return phase == Phase.SORTING || phase == Phase.COUNTDOWN; }
+
+    @Override public boolean allowBlockChange(Player player, Location at, boolean placing) {
+        if (phase != Phase.FIGHTING || !isAlive(player.getUniqueId())) return false;
+        long key = blockKey(at);
+        if (placing) {
+            if (!settings.kit().isAllowBlockPlace()) return false;
+            placedBlocks.add(key);
+            return true;
+        }
+        if (!settings.kit().isAllowBlockBreak() || !placedBlocks.contains(key)) return false;
+        placedBlocks.remove(key);
+        return true;
+    }
+
+    @Override public boolean environmentActive() { return phase == Phase.FIGHTING; }
+
+    void clearPlacedBlocks() { placedBlocks.clear(); }
+
+    private static long blockKey(Location at) {
+        return ((long) at.getBlockX() & 0x3FFFFFF) << 38 | ((long) at.getBlockZ() & 0x3FFFFFF) << 12 | (at.getBlockY() & 0xFFF);
+    }
+
+    // ---- Helpers -------------------------------------------------------------------------------
+
+    boolean teleport(Player player, Location destination) {
+        if (player == null || destination == null || destination.getWorld() == null) return false;
+        if (player.isInsideVehicle()) player.leaveVehicle();
+        service.allowTeleport(player.getUniqueId());
+        try {
+            if (!player.teleport(destination)) return false;
+        } finally { service.endTeleport(player.getUniqueId()); }
+        player.setFallDistance(0);
+        player.setVelocity(new Vector());
+        return true;
+    }
+
+    static List<UUID> online(Collection<UUID> players) {
+        List<UUID> online = new ArrayList<>();
+        for (UUID id : players) if (Bukkit.getPlayer(id) != null) online.add(id);
+        return online;
+    }
+
+    private static String nameOf(UUID id) {
+        String name = Bukkit.getOfflinePlayer(id).getName();
+        return name == null ? "A player" : name;
+    }
 }

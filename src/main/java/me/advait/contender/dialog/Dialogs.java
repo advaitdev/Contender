@@ -39,6 +39,11 @@ public final class Dialogs {
     /** Centered category menus use one column; forms use a fixed two-button navigation row. */
     public void show(Player player, String title, List<DialogBody> body, List<DialogInput> inputs,
                      List<ActionButton> buttons, int columns, int closeWidth, ActionButton footer) {
+        show(player, DialogText.heading(title), body, inputs, buttons, columns, closeWidth, footer);
+    }
+    /** As above, with a styled title (for example a heading followed by a short status). */
+    public void show(Player player, Component title, List<DialogBody> body, List<DialogInput> inputs,
+                     List<ActionButton> buttons, int columns, int closeWidth, ActionButton footer) {
         // Paper reserves "id" for its callback UUID.
         if (inputs.stream().anyMatch(input -> input.key().equals("id"))) {
             throw new IllegalArgumentException("Dialog input key 'id' is reserved for Paper callbacks.");
@@ -49,7 +54,7 @@ public final class Dialogs {
         List<DialogBody> styledBody = body.stream().map(part -> part instanceof io.papermc.paper.registry.data.dialog.body.PlainMessageDialogBody plain
                 ? DialogBody.plainMessage(DialogPalette.regular(plain.contents()), plain.width()) : part).toList();
         player.showDialog(Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(DialogText.heading(title)).body(styledBody)
+                .base(DialogBase.builder(title).body(styledBody)
                         .inputs(inputs).pause(false).canCloseWithEscape(true).afterAction(DialogBase.DialogAfterAction.NONE).build())
                 .type(buttons.isEmpty() ? DialogType.notice(exit) : DialogType.multiAction(buttons, exit, columns))));
     }
@@ -76,13 +81,8 @@ public final class Dialogs {
         return button(owner, icon, label, true, action);
     }
     public ActionButton button(Player owner, DialogIcon icon, String label, boolean admin, BiConsumer<Player, DialogResponseView> action) {
-        var color = switch (icon) {
-            case SAVE, NEXT -> DialogPalette.ACCENT;
-            case CLOSE -> DialogPalette.DANGER;
-            case BACK -> DialogPalette.MUTED;
-            default -> DialogPalette.TEXT;
-        };
-        return button(owner, icon.label(label, color), admin, action);
+        // A plain control. Callers that need gold, muted or coral pass the color with the label.
+        return button(owner, icon.label(label, DialogPalette.TEXT), admin, action);
     }
     public ActionButton button(Player owner, Component label, boolean admin, BiConsumer<Player, DialogResponseView> action) {
         return button(owner, label, null, admin, action);

@@ -13,12 +13,22 @@ public record TabStyle(String title, NamedTextColor color, boolean enabled) {
         java.util.Objects.requireNonNull(color);
     }
     public Component header(String tournamentName) {
-        String heading = title.isBlank() ? tournamentName == null ? "Contender" : tournamentName : title;
-        return Component.text("\n" + heading + "\n", color);
+        return Component.text("\n" + heading(tournamentName) + "\n", color);
+    }
+    /** The title text alone: the custom title, otherwise the event name. */
+    public String heading(String tournamentName) {
+        return title.isBlank() ? tournamentName == null ? "Contender" : tournamentName : title;
     }
     public static TabStyle read(ConfigurationSection config) {
-        return new TabStyle(config.getString("tablist.title", ""),
-                RoleStyle.parseColor(config.getString("tablist.color", "gold")), config.getBoolean("tablist.enabled", true));
+        var color = RoleStyle.lenientColor(config.getString("tablist.color"), net.kyori.adventure.text.format.NamedTextColor.GOLD, "tablist.color");
+        boolean enabled = config.getBoolean("tablist.enabled", true);
+        String title = config.getString("tablist.title", "");
+        try { return new TabStyle(title, color, enabled); }
+        catch (IllegalArgumentException invalid) {
+            // Read every second by the tab list and the board, so warn once per bad value.
+            me.advait.contender.role.RoleStyle.warnOnce("tablist.title", title, invalid.getMessage());
+            return new TabStyle("", color, enabled);
+        }
     }
     public void write(ConfigurationSection config) {
         config.set("tablist.title", title);

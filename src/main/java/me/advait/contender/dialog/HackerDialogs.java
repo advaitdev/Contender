@@ -1,95 +1,71 @@
 package me.advait.contender.dialog;
 
-import io.papermc.paper.dialog.DialogResponseView;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.Contender;
-import me.advait.contender.hacker.*;
+import me.advait.contender.hacker.HackSettings;
+import me.advait.contender.hacker.HackerService;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
+import static me.advait.contender.dialog.DialogPalette.*;
+
+/** /hacks: what a hacker sees. */
 public final class HackerDialogs {
-    private record Session(UUID selection) { }
-
-    private final HackerManager hackers;
     private final Contender plugin;
     private final Dialogs dialogs;
-    private final Map<UUID, Session> sessions = new HashMap<>();
 
-    public HackerDialogs(Contender plugin, HackerManager hackers) {
+    public HackerDialogs(Contender plugin) {
         this.plugin = plugin;
-        this.hackers = hackers;
-        dialogs = new Dialogs(plugin);
+        this.dialogs = new Dialogs(plugin);
     }
 
     public void open(Player player) {
+        HackerService hackers = plugin.getHackers();
         if (!hackers.isHacker(player.getUniqueId())) {
-            player.closeDialog(); Dialogs.error(player, "Only selected hackers can open this menu."); return;
+            player.closeDialog();
+            Dialogs.error(player, "Only the hackers can open this menu.");
+            return;
         }
-        var profile = hackers.profile(player.getUniqueId());
-        var session = new Session(profile.selection());
-        sessions.put(player.getUniqueId(), session);
-        List<DialogInput> inputs = new ArrayList<>();
-        for (HackSetting setting : HackSetting.values()) {
-            Component label = setting.icon.label(setting.label, DialogPalette.TEXT)
-                    .append(DialogPalette.text(" [" + setting.display(setting.warning) + "]", DialogPalette.MUTED));
-            String suffix = switch (setting.unit) { case "%" -> "%%"; case "blocks" -> " blocks"; default -> setting.unit; };
-            inputs.add(DialogInput.numberRange(setting.key(), DialogPalette.regular(label), (float) setting.min, (float) setting.max)
-                    .initial((float) profile.settings().get(setting)).step(step(setting)).width(300)
-                    .labelFormat("%s: %s" + suffix).build());
+        if (hackers.mode() == HackerService.Mode.SELF) {
+            List<HackEditor.Extra> extras = plugin.getSabotage().available(player)
+                    ? List.of(new HackEditor.Extra(DialogIcon.SKULL, "Sabotage", "Change the rules for everyone in this event.", p -> new SabotageDialogs(plugin).open(p)))
+                    : List.of();
+            new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", List.of(),
+                    p -> require(p).profile(p.getUniqueId()).own(),
+                    (p, settings) -> require(p).setOwn(p, settings), null, extras));
+            return;
         }
-        // A notice's Close button is also its Escape action, and includes all current input values.
-        ActionButton close = dialogs.button(player, DialogPalette.text("Close", DialogPalette.MUTED), null, false, 150,
-                (p, response) -> {
-                    check(p, session);
-                    HackSettings settings = read(response);
-                    hackers.update(p, session.selection(), settings);
-                    forget(p);
-                    p.closeDialog();
-                    Dialogs.tell(p, "Hacks applied.");
-                });
-        dialogs.show(player, "Hacks", List.of(
-                DialogBody.plainMessage(DialogPalette.text("Close this menu or press Escape to apply your changes.", DialogPalette.MUTED), 300),
-                DialogBody.plainMessage(DialogPalette.text("Hacks stay active everywhere, including the lobby.", DialogPalette.SUCCESS), 300),
-                DialogBody.plainMessage(DialogIcon.INFO.label("Values above the limits in brackets may look blatant.", DialogPalette.ACCENT), 300)),
-                inputs, List.of(), 1, 150, close);
+        directed(player);
     }
 
-    public void forget(Player player) { sessions.remove(player.getUniqueId()); }
-
-    public void clear() {
-        Set<UUID> open = Set.copyOf(sessions.keySet());
-        sessions.clear();
-        for (Player player : plugin.getServer().getOnlinePlayers()) if (open.contains(player.getUniqueId())) player.closeDialog();
-    }
-
-    private void check(Player player, Session session) {
-        var profile = hackers.profile(player.getUniqueId());
-        if (sessions.get(player.getUniqueId()) != session || !hackers.isHacker(player.getUniqueId())
-                || profile == null || !profile.selection().equals(session.selection())) {
-            throw new IllegalStateException("This menu has expired. Open /hacks again.");
+    /** When the director picks the hacks, the hacker only sees them. */
+    private void directed(Player player) {
+        HackerService hackers = plugin.getHackers();
+        HackSettings plan = hackers.plan(player.getUniqueId());
+        List<DialogBody> body = new ArrayList<>();
+        Component state = hackers.planActive()
+                ? text("On now", SUCCESS)
+                : text("Off until the next event starts", MUTED);
+        body.add(DialogBody.plainMessage(DialogText.lines(DialogText.muted("The director chooses your hacks for each event."), state), 320));
+        body.add(DialogBody.plainMessage(DialogText.lines(text(hackers.planActive() ? "Your hacks" : "Planned for next event", ACCENT),
+                text(plan.active().isEmpty() ? "Nothing yet" : String.join("\n", plan.active().stream()
+                        .map(setting -> setting.label + "  " + setting.display(plan.get(setting))).toList()), TEXT)), 320));
+        List<ActionButton> buttons = new ArrayList<>();
+        if (plugin.getSabotage().available(player)) {
+            buttons.add(dialogs.button(player, DialogIcon.SKULL.label("Sabotage", ACCENT), DialogText.muted("Change the rules for everyone in this event."),
+                    false, 300, (p, view) -> new SabotageDialogs(plugin).open(p)));
         }
+        buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), null, false, 300, (p, view) -> open(p)));
+        dialogs.show(player, "Hacks", body, List.of(), buttons, 1, 150, null);
     }
 
-    private static float step(HackSetting setting) {
-        return switch (setting) {
-            case RESISTANCE, ANTI_KNOCKBACK -> 1f;
-            case MOVEMENT_SPEED, JUMP_STRENGTH -> .01f;
-            default -> .05f;
-        };
-    }
-
-    private static HackSettings read(DialogResponseView response) {
-        var values = new EnumMap<HackSetting, Double>(HackSetting.class);
-        for (HackSetting setting : HackSetting.values()) {
-            Float value = response.getFloat(setting.key());
-            if (value == null || !Float.isFinite(value)) throw new IllegalArgumentException("Choose a value for " + setting.label + ".");
-            // Use the slider's decimal representation, avoiding float noise at limits such as 0.6.
-            values.put(setting, setting.validate(Double.parseDouble(Float.toString(value))));
-        }
-        return new HackSettings(values);
+    private HackerService require(Player player) {
+        HackerService hackers = plugin.getHackers();
+        if (!hackers.isHacker(player.getUniqueId())) throw new IllegalStateException("You're no longer a hacker.");
+        return hackers;
     }
 }

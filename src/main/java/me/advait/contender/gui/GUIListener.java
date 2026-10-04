@@ -41,6 +41,8 @@ public class GUIListener implements Listener {
         Kit kit = holder.getData("kit");
         boolean isNew = holder.getData("isNew");
         if (kit == null) return;
+        // Double-click collecting would pull items out of the armor, offhand and button slots.
+        if (event.getAction() == org.bukkit.event.inventory.InventoryAction.COLLECT_TO_CURSOR) { event.setCancelled(true); return; }
 
         // Main inventory item slots — allow vanilla behavior
         if (rawSlot >= 0 && rawSlot < 36) {
@@ -55,12 +57,16 @@ public class GUIListener implements Listener {
                 event.setCurrentItem(KitEditorGUI.getSlotPlaceholder(rawSlot));
             } else if (event.isLeftClick()) {
                 ItemStack cursor = event.getCursor();
+                ItemStack current = event.getCurrentItem();
+                boolean holdsItem = current != null && !current.isSimilar(KitEditorGUI.getSlotPlaceholder(rawSlot));
                 if (cursor != null && cursor.getType() != Material.AIR) {
-                    // Place the cursor item into the slot
+                    // Swap, so whatever was in the slot moves to the cursor instead of disappearing.
                     event.setCurrentItem(cursor.clone());
-                    event.getView().setCursor(new ItemStack(Material.AIR));
+                    event.getView().setCursor(holdsItem ? current.clone() : new ItemStack(Material.AIR));
+                } else if (holdsItem) {
+                    event.getView().setCursor(current.clone());
+                    event.setCurrentItem(KitEditorGUI.getSlotPlaceholder(rawSlot));
                 }
-                // Left-click with empty cursor — do nothing (don't let placeholder be picked up)
             }
             return;
         }
@@ -80,6 +86,12 @@ public class GUIListener implements Listener {
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }
+            case KitEditorGUI.HEALTH_SLOT -> {
+                saveKitFromInventory(event.getInventory(), kit);
+                kit.setHealthUnderName(!kit.isHealthUnderName());
+                MessageUtil.playClick(player);
+                KitEditorGUI.open(player, kit, isNew);
+            }
             case KitEditorGUI.BLOCK_PLACE_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kit.setAllowBlockPlace(!kit.isAllowBlockPlace());
@@ -95,12 +107,6 @@ public class GUIListener implements Listener {
             case KitEditorGUI.NATURAL_REGEN_SLOT -> {
                 saveKitFromInventory(event.getInventory(), kit);
                 kit.setNaturalRegen(!kit.isNaturalRegen());
-                MessageUtil.playClick(player);
-                KitEditorGUI.open(player, kit, isNew);
-            }
-            case KitEditorGUI.SPECTATOR_INVISIBLE_SLOT -> {
-                saveKitFromInventory(event.getInventory(), kit);
-                kit.setSpectatorInvisible(!kit.isSpectatorInvisible());
                 MessageUtil.playClick(player);
                 KitEditorGUI.open(player, kit, isNew);
             }

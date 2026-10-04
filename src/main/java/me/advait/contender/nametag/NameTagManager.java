@@ -1,7 +1,7 @@
 package me.advait.contender.nametag;
 
 import me.advait.contender.Contender;
-import me.advait.contender.game.AbstractGameState;
+import me.advait.contender.core.Module;
 import me.advait.contender.role.PlayerRole;
 import me.advait.contender.role.RoleStyle;
 import me.advait.contender.tier.TierFormatter;
@@ -18,21 +18,30 @@ import org.bukkit.scoreboard.Team;
 import java.util.*;
 
 /** Adds nametag teams to the scoreboards viewers already use, preserving their objectives. */
-public final class NameTagManager extends AbstractGameState {
+public final class NameTagManager extends Module {
     private record Tag(Component prefix, NamedTextColor color) {
         Component name(String name) { return prefix.append(Component.text(name, color)); }
     }
     private record Entry(String name, Team team, String previousTeam) { }
-    private final Contender contender;
     private final Map<Scoreboard, Map<UUID, Entry>> boards = new IdentityHashMap<>();
     private long nextTeam;
+    private boolean hidden;
 
-    public NameTagManager(Contender plugin) { super(plugin); contender = plugin; }
+    /** Whether every nametag is hidden right now. */
+    public boolean hidden() { return hidden; }
+
+    /** Hides every nametag (used by the Nameless sabotage). */
+    public void setHidden(boolean hide) {
+        hidden = hide;
+        refresh();
+    }
+
+    public NameTagManager(Contender plugin) { super(plugin); }
     @Override protected void onEnable() {
         refresh();
         refreshTiers();
-        runRepeating(this::refresh, 20L, 20L);
-        runRepeating(this::refreshTiers, 1200L, 1200L);
+        tasks.repeat(20L, 20L, this::refresh);
+        tasks.repeat(1200L, 1200L, this::refreshTiers);
     }
     @Override protected void onDisable() {
         boards.forEach((board, entries) -> entries.values().forEach(entry -> remove(board, entry)));
@@ -40,7 +49,7 @@ public final class NameTagManager extends AbstractGameState {
     }
     @EventHandler public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        runLater(() -> { if (player.isOnline()) { refresh(); fetch(player); } }, 1L);
+        tasks.later(1L, () -> { if (player.isOnline()) { refresh(); fetch(player); } });
     }
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         boards.forEach((board, entries) -> {
@@ -50,12 +59,13 @@ public final class NameTagManager extends AbstractGameState {
     }
     private void refreshTiers() { for (Player player : Bukkit.getOnlinePlayers()) fetch(player); }
     private void fetch(Player player) {
-        contender.getTierService().refresh(player.getUniqueId()).whenComplete((data, failure) -> {
+        plugin.getTierService().refresh(player.getUniqueId()).whenComplete((data, failure) -> {
             if (isEnabled() && player.isOnline()) refresh();
         });
     }
     public void refresh() {
         if (!isEnabled()) return;
+        readStyles();
         var online = List.copyOf(Bukkit.getOnlinePlayers());
         Set<Scoreboard> used = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Player viewer : online) used.add(viewer.getScoreboard());
@@ -87,6 +97,8 @@ public final class NameTagManager extends AbstractGameState {
                     entry = new Entry(player.getName(), team, previous == null ? null : previous.getName());
                     entries.put(player.getUniqueId(), entry);
                 }
+                Team.OptionStatus visibility = hidden ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS;
+                if (entry.team().getOption(Team.Option.NAME_TAG_VISIBILITY) != visibility) entry.team().setOption(Team.Option.NAME_TAG_VISIBILITY, visibility);
                 Tag tag = tags.get(player.getUniqueId());
                 if (!tag.prefix().equals(entry.team().prefix())) entry.team().prefix(tag.prefix());
                 if (!entry.team().hasColor() || !tag.color().equals(entry.team().color())) entry.team().color(tag.color());
@@ -97,10 +109,20 @@ public final class NameTagManager extends AbstractGameState {
         return tag(player.getUniqueId());
     }
     private Tag tag(UUID id) {
-        PlayerRole role = contender.getRoleManager().getRole(id);
-        if (role == PlayerRole.CONTESTANT) return new Tag(TierFormatter.prefix(contender.getTierService().cached(id)), NamedTextColor.WHITE);
-        RoleStyle style = RoleStyle.read(contender.getConfig(), role);
+        PlayerRole role = plugin.getRoleManager().getRole(id);
+        if (role == PlayerRole.CONTESTANT) return new Tag(TierFormatter.prefix(plugin.getTierService().cached(id)), NamedTextColor.WHITE);
+        RoleStyle style = styles.get(role);
+        if (style == null) style = RoleStyle.read(plugin.getConfig(), role);
         return new Tag(style.prefixComponent(), style.color());
+    }
+
+    // Read from config on the server thread; chat formatting reads it from the async chat thread.
+    private volatile Map<PlayerRole, RoleStyle> styles = Map.of();
+
+    private void readStyles() {
+        Map<PlayerRole, RoleStyle> read = new EnumMap<>(PlayerRole.class);
+        for (PlayerRole role : PlayerRole.values()) if (role != PlayerRole.CONTESTANT) read.put(role, RoleStyle.read(plugin.getConfig(), role));
+        styles = read;
     }
     public Component displayName(Player player) { return displayName(player.getUniqueId(), player.getName()); }
     public Component displayName(UUID id, String name) { return tag(id).name(name); }

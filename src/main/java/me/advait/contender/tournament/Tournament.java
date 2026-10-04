@@ -16,8 +16,10 @@ public final class Tournament {
     private final int sortingSeconds;
     private final int maxParallel;
     private final int rounds;
+    private final int schedule;
     private boolean running;
     private boolean cancelled;
+    private boolean started;
 
     public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
                       boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel) {
@@ -26,6 +28,10 @@ public final class Tournament {
     }
     public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
                       boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel, int rounds) {
+        this(id, name, mapId, kitId, entries, teams, waitForRound, bestOf, sortingSeconds, maxParallel, rounds, RoundRobinSchedule.CURRENT);
+    }
+    public Tournament(UUID id, String name, String mapId, String kitId, List<TournamentEntry> entries,
+                      boolean teams, boolean waitForRound, int bestOf, int sortingSeconds, int maxParallel, int rounds, int schedule) {
         if (name == null || name.isBlank() || name.length() > 64) throw new IllegalArgumentException("Choose a tournament name between 1 and 64 characters.");
         if (sortingSeconds < 5 || sortingSeconds > 60 || maxParallel < 1 || maxParallel > 100) throw new IllegalArgumentException("Invalid tournament settings.");
         Set<UUID> players = new HashSet<>();
@@ -45,13 +51,16 @@ public final class Tournament {
         this.sortingSeconds = sortingSeconds;
         this.maxParallel = maxParallel;
         this.rounds = rounds;
+        this.schedule = schedule;
         List<TournamentMatch> scheduled = new ArrayList<>();
-        for (var pairing : RoundRobinSchedule.create(entries.size(), rounds)) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
+        for (var pairing : RoundRobinSchedule.create(entries.size(), rounds, schedule)) scheduled.add(new TournamentMatch(scheduled.size() + 1, pairing, bestOf));
         matches = List.copyOf(scheduled);
     }
     public UUID id() { return id; }
     public String name() { return name; }
     public String mapId() { return mapId; }
+    /** Which {@link RoundRobinSchedule} layout the matches use. */
+    public int schedule() { return schedule; }
     public String kitId() { return kitId; }
     public List<TournamentEntry> entries() { return entries; }
     public List<TournamentMatch> matches() { return matches; }
@@ -69,10 +78,28 @@ public final class Tournament {
     public void resume() {
         if (isComplete() || cancelled) throw new IllegalStateException("This tournament has ended.");
         running = true;
+        started = true;
     }
+    /** Play has begun at least once (survives restarts). */
+    public boolean started() { return started || matches.stream().anyMatch(m -> m.status() != TournamentMatch.Status.WAITING); }
+    void restoreStarted(boolean value) { started = value; }
     public void pause() { running = false; }
     public void cancel() { cancelled = true; running = false; }
     public String statusText() { return cancelled ? "Cancelled" : isComplete() ? "Finished" : running ? "Playing" : "Paused"; }
+
+    /** One bracket round's state: Finished, Playing or Not started (or the event's, when it's paused or cancelled). */
+    public String roundStatus(int round) {
+        List<TournamentMatch> inRound = matches.stream().filter(m -> m.round() == round).toList();
+        if (cancelled) return "Cancelled";
+        if (inRound.stream().allMatch(m -> m.status() == TournamentMatch.Status.FINISHED)) return "Finished";
+        if (!running) return statusText();
+        return inRound.stream().anyMatch(m -> m.status() == TournamentMatch.Status.PLAYING) ? "Playing" : "Not started";
+    }
+
+    /** Every match in this bracket round has a result. */
+    public boolean roundFinished(int round) {
+        return matches.stream().filter(m -> m.round() == round).allMatch(m -> m.status() == TournamentMatch.Status.FINISHED);
+    }
 
     /** The caller starts each returned match before asking for the next candidate. */
     public TournamentMatch nextMatch(Predicate<UUID> available) {
@@ -107,7 +134,8 @@ public final class Tournament {
                 else if (score.winner() == (first ? 1 : 2)) wins++;
                 else losses++;
             }
-            result.add(new Standing(entries.get(i), played, wins, draws, losses, wins * 3 + draws, difference));
+            // One point per match won. Round difference only breaks ties in the order shown.
+            result.add(new Standing(entries.get(i), played, wins, draws, losses, wins, difference));
         }
         result.sort(Comparator.comparingInt(Standing::points).reversed()
                 .thenComparing(Comparator.comparingInt(Standing::roundDifference).reversed())

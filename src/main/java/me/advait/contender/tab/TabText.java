@@ -37,7 +37,7 @@ public final class TabText {
                 : component instanceof net.kyori.adventure.text.ObjectComponent ? 9 : 0;
         return own + component.children().stream().mapToInt(child -> width(child, bold)).sum();
     }
-    public static Component scored(Component name, String score, NamedTextColor scoreColor, int totalWidth) {
+    public static Component scored(Component name, String score, net.kyori.adventure.text.format.TextColor scoreColor, int totalWidth) {
         return Component.textOfChildren(name, padding(totalWidth - width(name) - width(score)), Component.text(score, scoreColor))
                 .font(Key.key("minecraft", "default"));
     }

@@ -12,6 +12,8 @@ public class ArenaMap {
     private SpawnPoint team1Spawn;
     private SpawnPoint team2Spawn;
     private SpawnPoint spectatorSpawn;
+    /** King of the Hill's hill, or null for the middle between the team spawns. */
+    private SpawnPoint hill;
     private BlockBounds bounds;
     private String schematic;
     private int copies = 20;
@@ -29,6 +31,7 @@ public class ArenaMap {
     public SpawnPoint getTeam1Point() { return team1Spawn; }
     public SpawnPoint getTeam2Point() { return team2Spawn; }
     public SpawnPoint getSpectatorPoint() { return spectatorSpawn; }
+    public SpawnPoint getHillPoint() { return hill; }
     public BlockBounds getBounds() { return bounds; }
     public String getSchematic() { return schematic; }
     public void setSchematic(String schematic) { this.schematic = schematic; }
@@ -48,6 +51,10 @@ public class ArenaMap {
     public Location getTeam1Spawn() { return location(team1Spawn); }
     public Location getTeam2Spawn() { return location(team2Spawn); }
     public Location getSpectatorSpawn() { return location(spectatorSpawn == null ? team1Spawn : spectatorSpawn); }
+    /** The hill's center, at floor level, or null when the map doesn't set one. */
+    public Location getHill() { return location(hill); }
+    public void setHill(double x, double y, double z) { hill = new SpawnPoint(x, y, z, 0, 0); }
+    public void clearHill() { hill = null; }
     public void setTeam1Spawn(double x, double y, double z, float yaw, float pitch) {
         team1Spawn = new SpawnPoint(x, y, z, yaw, pitch);
     }
@@ -82,6 +89,7 @@ public class ArenaMap {
         copy.team1Spawn = team1Spawn.move(dx, dy, dz);
         copy.team2Spawn = team2Spawn.move(dx, dy, dz);
         copy.spectatorSpawn = (spectatorSpawn == null ? team1Spawn : spectatorSpawn).move(dx, dy, dz);
+        copy.hill = hill == null ? null : hill.move(dx, dy, dz);
         return copy;
     }
 }

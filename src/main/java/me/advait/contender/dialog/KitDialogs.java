@@ -25,22 +25,21 @@ public final class KitDialogs {
         var kits = plugin.getKitManager().getKits().stream().sorted(Comparator.comparing(Kit::getDisplayName)).toList();
         int pages = Math.max(1, (kits.size() + 7) / 8), page = Math.clamp(requestedPage, 0, pages - 1);
         List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogs.button(player, DialogIcon.SAVE.label("Create New Kit", ACCENT), DialogText.muted("Name it, then lay out its items."), true, 220, (p, view) -> create(p, back)));
         for (Kit kit : kits.subList(page * 8, Math.min(kits.size(), page * 8 + 8))) {
             buttons.add(dialogs.button(player, KitIcons.label(kit), DialogText.muted("Edit this kit's items and rules."), true, 220, (p, view) -> {
                 if (plugin.getKitManager().getKit(kit.getId()) != kit) throw new IllegalStateException("This kit changed. Open the kit list again.");
-                p.closeDialog(); KitEditorGUI.open(p, kit, false);
+                p.closeDialog(); KitEditorGUI.open(p, kit.copy(), false);
             }));
         }
         Dialogs.navigationRow(buttons,
-                dialogs.button(player, DialogIcon.SAVE.label("Create New Kit", ACCENT), null, true, 220, (p, view) -> create(p, back)),
-                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, 220, (p, view) -> back.accept(p)));
-        Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK, "Previous Page", (p, view) -> open(p, page - 1, back)) : null,
-                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT, "Next Page", (p, view) -> open(p, page + 1, back)) : null);
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous Page", TEXT), null, true, 220, (p, view) -> open(p, page - 1, back)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next Page", TEXT), null, true, 220, (p, view) -> open(p, page + 1, back)) : null, 220);
         List<DialogBody> body = new ArrayList<>();
         body.add(DialogBody.plainMessage(DialogText.muted(kits.isEmpty() ? "Create a kit to set up its items and rules." : "Choose a kit to edit its items and rules."), 320));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
-        dialogs.show(player, "Kits", body, List.of(), buttons, 2, 150, null);
+        dialogs.show(player, "Kits", body, List.of(), buttons, 2, 150,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, 150, (p, view) -> back.accept(p)));
     }
     private void create(Player player, Consumer<Player> back) {
         dialogs.show(player, "New Kit", List.of(DialogBody.plainMessage(DialogText.muted("Name the kit, then fill its inventory and save it."), 320)),

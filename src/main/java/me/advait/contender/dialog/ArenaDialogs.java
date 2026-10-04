@@ -1,130 +1,172 @@
 package me.advait.contender.dialog;
 
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import me.advait.contender.Contender;
 import me.advait.contender.map.ArenaMap;
-import io.papermc.paper.registry.data.dialog.ActionButton;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
+import static me.advait.contender.dialog.DialogPalette.*;
+
+/** /arena: save a WorldEdit selection as a map, set its spawns, and watch its copies prepare. */
 public final class ArenaDialogs {
-    private static final String MAP_ID_INPUT = "map_id";
+    private static final int WIDE = 300, NAV = 150, PER_PAGE = 8;
     private final Contender plugin;
     private final Dialogs dialogs;
-    public ArenaDialogs(Contender plugin) { this.plugin = plugin; dialogs = new Dialogs(plugin); }
-    public void open(Player player) { open(player, 0); }
-    private void open(Player player, int page) {
-        List<ArenaMap> maps = new ArrayList<>(plugin.getMapManager().getMaps());
-        List<ActionButton> buttons = new ArrayList<>();
-        for (int i = page * 8; i < Math.min(page * 8 + 8, maps.size()); i++) {
-            ArenaMap map = maps.get(i);
-            buttons.add(dialogs.button(player, DialogIcon.MAP, map.getDisplayName(), (p, view) -> edit(p, map.getId())));
-        }
-        buttons.add(dialogs.button(player, DialogIcon.MAP, "Create Map", (p, view) -> create(p)));
-        Dialogs.navigationRow(buttons,
-                page > 0 ? dialogs.button(player, DialogIcon.BACK, "Previous Page", (p, view) -> open(p, page - 1)) : null,
-                (page + 1) * 8 < maps.size() ? dialogs.button(player, DialogIcon.NEXT, "Next Page", (p, view) -> open(p, page + 1)) : null);
-        dialogs.show(player, "Maps", DialogText.paragraphs(
-                DialogText.muted("Select a map to edit its spawns or check its arena copies.\nCopies prepare automatically and reset after use."),
-                DialogText.muted("Creating a map?\nSelect both corners with the WorldEdit wand first."),
-                DialogText.page(page + 1, Math.max(1, (maps.size() + 7) / 8))), List.of(), buttons);
+    /** Where the map list's Back goes. */
+    private final Consumer<Player> back;
+
+    public ArenaDialogs(Contender plugin) { this(plugin, p -> new TournamentDialogs(plugin).tools(p)); }
+
+    public ArenaDialogs(Contender plugin, Consumer<Player> back) {
+        this.plugin = plugin;
+        this.dialogs = new Dialogs(plugin);
+        this.back = back;
     }
+
+    public void open(Player player) { open(player, 0); }
+
+    private void open(Player player, int requestedPage) {
+        List<ArenaMap> maps = new ArrayList<>(plugin.getMapManager().getMaps());
+        int pages = Math.max(1, (maps.size() + PER_PAGE - 1) / PER_PAGE), page = Math.clamp(requestedPage, 0, pages - 1);
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogs.button(player, DialogIcon.SAVE.label("New Map", ACCENT), DialogText.muted("Save your WorldEdit selection as a map."),
+                true, NAV, (p, view) -> create(p)));
+        for (ArenaMap map : maps.subList(page * PER_PAGE, Math.min(maps.size(), (page + 1) * PER_PAGE))) {
+            int ready = plugin.getArenas().ready(map.getId());
+            Component tooltip = DialogText.lines(DialogText.muted(map.isComplete() ? ready + " of " + map.getCopies() + " copies ready" : "Needs both team spawns"),
+                    DialogText.muted(plugin.getArenas().readiness(map.getId())));
+            buttons.add(dialogs.button(player, DialogIcon.MAP.label(map.getDisplayName(), map.isComplete() ? TEXT : WARNING), tooltip, true, NAV, (p, view) -> edit(p, map.getId())));
+        }
+        Dialogs.navigationRow(buttons,
+                page > 0 ? dialogs.button(player, DialogIcon.BACK.label("Previous", TEXT), null, true, NAV, (p, view) -> open(p, page - 1)) : null,
+                page + 1 < pages ? dialogs.button(player, DialogIcon.NEXT.label("Next", TEXT), null, true, NAV, (p, view) -> open(p, page + 1)) : null, NAV);
+        List<DialogBody> body = new ArrayList<>();
+        Component intro = DialogText.muted("Each map is copied into its own arenas, so several matches can run at once.");
+        if (maps.stream().anyMatch(map -> !map.isComplete())) intro = DialogText.lines(intro, DialogText.muted("Maps in orange still need spawns."));
+        body.add(DialogBody.plainMessage(intro, 320));
+        if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 320));
+        dialogs.show(player, "Maps", body, List.of(), buttons, 2, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)));
+    }
+
     private ArenaMap map(String id) {
         ArenaMap map = plugin.getMapManager().getMap(id);
         if (map == null) throw new IllegalArgumentException("That map no longer exists.");
         return map;
     }
+
     public void create(Player player) {
-        dialogs.show(player, "Create Map", DialogText.paragraphs(
-                DialogText.muted("Save the selected blocks and entities as a map."),
-                DialogText.lines(DialogText.detail("Map ID", "mines"),
-                        DialogText.muted("A unique short name. Use lowercase letters, numbers, - or _.")),
-                DialogText.lines(DialogText.detail("Map name", "The Mines"),
-                        DialogText.muted("The name shown when choosing a map."))), List.of(
-                Dialogs.text(MAP_ID_INPUT, "Map ID", "", 40), Dialogs.text("name", "Map name", "", 64),
-                Dialogs.number("copies", "Arena copies", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100), 1, 100, 1)),
-                List.of(dialogs.button(player, DialogIcon.SAVE, "Save Selection", (p, view) -> {
-                    String id = Dialogs.text(view, MAP_ID_INPUT);
-                    var result = plugin.getArenaManager().create(p, id, Dialogs.text(view, "name"), Dialogs.number(view, "copies", 1, 100));
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save Map", ACCENT), null, true, NAV, (p, view) -> {
+                    String name = Dialogs.text(view, "name");
+                    if (name.isBlank()) throw new IllegalArgumentException("Give the map a name.");
+                    var result = plugin.getArenas().create(p, name, Dialogs.number(view, "copies", 1, 100));
                     p.closeDialog();
-                    acknowledgeSave(p, id, result);
+                    acknowledge(p, result);
                     result.whenComplete((map, failure) -> {
                         if (!p.isOnline()) return;
                         if (failure != null) Dialogs.error(p, Dialogs.message(failure));
-                        else { Dialogs.tell(p, map.getDisplayName() + " saved. Set both team spawns to prepare its arenas automatically."); edit(p, map.getId()); }
+                        else { Dialogs.tell(p, map.getDisplayName() + " saved. Now set both team spawns."); edit(p, map.getId()); }
                     });
-                }), dialogs.button(player, DialogIcon.BACK, "Back", (p, view) -> open(p))));
+                }), NAV);
+        dialogs.show(player, "New Map", List.of(DialogBody.plainMessage(DialogText.lines(
+                DialogText.muted("Saves everything inside your WorldEdit selection, including"),
+                DialogText.muted("air above the floor and any decorations. Spawns come next.")), 320)), List.of(
+                Dialogs.text("name", "Map name", "", 64),
+                Dialogs.number("copies", "Arena copies (matches at once)", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100), 1, 100, 1)),
+                buttons, 2, NAV, null);
     }
+
     public void edit(Player player, String id) {
         ArenaMap map = map(id);
-        int ready = plugin.getArenaManager().available(id);
         Component body = DialogText.paragraphs(
-                DialogText.muted("ID: " + id),
-                DialogText.detail("Arena copies", plugin.getArenaManager().readiness(id),
-                        ready > 0 ? DialogPalette.SUCCESS : DialogPalette.WARNING),
-                DialogText.muted("Copies prepare automatically and reset after use."),
                 DialogText.lines(
-                        DialogText.detail("Team 1 spawn", map.getTeam1Point() == null ? "Not set" : "Saved",
-                                map.getTeam1Point() == null ? DialogPalette.WARNING : DialogPalette.SUCCESS),
-                        DialogText.detail("Team 2 spawn", map.getTeam2Point() == null ? "Not set" : "Saved",
-                                map.getTeam2Point() == null ? DialogPalette.WARNING : DialogPalette.SUCCESS),
-                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Saved",
-                                map.getSpectatorPoint() == null ? DialogPalette.MUTED : DialogPalette.SUCCESS)),
-                DialogText.muted("Stand at a spawn, then choose its button below."));
+                        spawnLine("Team 1 spawn", map.getTeam1Point() != null),
+                        spawnLine("Team 2 spawn", map.getTeam2Point() != null),
+                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS),
+                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS)),
+                DialogText.detail("Copies", plugin.getArenas().readiness(id), plugin.getArenas().ready(id) > 0 ? SUCCESS : WARNING),
+                DialogText.muted("Stand on a spawn and face the right way, then click its button."));
         List<ActionButton> buttons = new ArrayList<>();
         for (String side : List.of("1", "2", "spectator")) {
-            String label = side.equals("spectator") ? "Set Spectator Spawn" : "Set Team " + side + " Spawn";
-            buttons.add(dialogs.button(player, DialogIcon.SPAWN, label, (p, view) -> {
-                plugin.getArenaManager().setSpawn(map(id), side, p.getLocation());
-                p.closeDialog();
-                Dialogs.tell(p, "Spawn saved.");
+            String label = side.equals("spectator") ? "Set Spectator Spawn Here" : "Set Team " + side + " Spawn Here";
+            buttons.add(dialogs.button(player, DialogIcon.SPAWN.label(label, TEXT), null, true, WIDE, (p, view) -> {
+                plugin.getArenas().setSpawn(map(id), side, p.getLocation());
+                Dialogs.tell(p, side.equals("spectator") ? "Spectator spawn saved." : "Team " + side + " spawn saved.");
+                edit(p, id);
             }));
         }
-        buttons.add(dialogs.button(player, DialogIcon.NAME, "Name and Copy Count", (p, view) -> settings(p, id)));
-        buttons.add(dialogs.button(player, DialogIcon.SAVE, "Save Current Blocks", (p, view) -> {
-            var result = plugin.getArenaManager().saveBlocks(map(id));
+        buttons.add(dialogs.button(player, DialogIcon.CROWN.label("Set Hill Here", TEXT),
+                DialogText.muted("King of the Hill's hill is a circle around where you stand. Without one, it's the middle of the map."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().setSpawn(map(id), "hill", p.getLocation());
+                    Dialogs.tell(p, "Hill saved. It's a circle around this spot.");
+                    edit(p, id);
+                }));
+        if (map.getHillPoint() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Middle for the Hill", TEXT), null, true, WIDE, (p, view) -> {
+            plugin.getArenas().clearHill(map(id));
+            Dialogs.tell(p, "The hill is back in the middle of the map.");
+            edit(p, id);
+        }));
+        buttons.add(dialogs.button(player, DialogIcon.SAVE.label("Save Current Blocks", TEXT), DialogText.muted("Use after changing the original map. Copies update automatically."), true, WIDE, (p, view) -> {
+            var result = plugin.getArenas().saveBlocks(map(id));
             p.closeDialog();
-            acknowledgeSave(p, id, result);
+            acknowledge(p, result);
             result.whenComplete((ignored, failure) -> {
-                if (p.isOnline()) {
-                    if (failure != null) Dialogs.error(p, Dialogs.message(failure));
-                    else Dialogs.tell(p, "Template saved. Arena copies are updating automatically.");
-                }
+                if (!p.isOnline()) return;
+                if (failure != null) Dialogs.error(p, Dialogs.message(failure));
+                else Dialogs.tell(p, "Blocks saved. Copies are updating.");
             });
         }));
-        Dialogs.navigationRow(buttons,
-                dialogs.button(player, DialogIcon.BACK, "Back", (p, view) -> open(p)),
-                dialogs.button(player, DialogIcon.REFRESH, "Check Arena Copies", (p, view) -> {
-                    var preparation = plugin.getArenaManager().prepare(map(id));
-                    edit(p, id);
-                    preparation.whenComplete((ignored, failure) -> {
-                        if (plugin.isEnabled() && p.isOnline() && failure != null) {
-                            Dialogs.error(p, Dialogs.message(failure));
-                        }
-                    });
-                }));
-        dialogs.show(player, map.getDisplayName(), body, List.of(), buttons);
+        buttons.add(dialogs.button(player, DialogIcon.NAME.label("Name and Copies", TEXT), null, true, WIDE, (p, view) -> settings(p, id)));
+        buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("Delete Map", DANGER), null, true, WIDE, (p, view) -> confirmDelete(p, id)));
+        buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), DialogText.muted("Update the copy progress."), true, WIDE, (p, view) -> edit(p, id)));
+        dialogs.show(player, map.getDisplayName(), List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)));
     }
-    private void acknowledgeSave(Player player, String mapId, CompletableFuture<?> result) {
-        if (result.isDone()) return;
-        player.sendMessage(DialogPalette.text("Saving map selection. Large selections can take a while.", DialogPalette.ACCENT));
-        var reminder = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (!plugin.isEnabled() || !player.isOnline() || result.isDone()) return;
-            player.sendMessage(DialogPalette.text(plugin.getArenaManager().operationStatus(mapId), DialogPalette.MUTED));
-        }, 200L);
-        result.whenComplete((ignored, failure) -> reminder.cancel());
+
+    private static Component spawnLine(String label, boolean set) {
+        return DialogText.detail(label, set ? "Set" : "Not set", set ? SUCCESS : WARNING);
     }
+
     private void settings(Player player, String id) {
         ArenaMap map = map(id);
-        dialogs.show(player, "Map Settings", DialogText.paragraphs(DialogText.muted("ID: " + id),
-                DialogText.muted("Changes apply to arena copies automatically.")), List.of(
-                Dialogs.text("name", "Map name", map.getDisplayName(), 64),
-                Dialogs.number("copies", "Arena copies", map.getCopies(), 1, 100, 1)),
-                List.of(dialogs.button(player, DialogIcon.SAVE, "Save", (p, view) -> {
-                    plugin.getArenaManager().configure(map(id), Dialogs.text(view, "name"), Dialogs.number(view, "copies", 1, 100));
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> edit(p, id)),
+                dialogs.button(player, DialogIcon.SAVE.label("Save", ACCENT), null, true, NAV, (p, view) -> {
+                    plugin.getArenas().configure(map(id), Dialogs.text(view, "name"), Dialogs.number(view, "copies", 1, 100));
                     edit(p, id);
-                }), dialogs.button(player, DialogIcon.BACK, "Back", (p, view) -> edit(p, id))));
+                }), NAV);
+        dialogs.show(player, "Name and Copies", List.of(DialogBody.plainMessage(DialogText.muted("More copies let more matches run at the same time."), 320)), List.of(
+                Dialogs.text("name", "Map name", map.getDisplayName(), 64),
+                Dialogs.number("copies", "Arena copies", map.getCopies(), 1, 100, 1)), buttons, 2, NAV, null);
+    }
+
+    private void confirmDelete(Player player, String id) {
+        ArenaMap map = map(id);
+        List<ActionButton> buttons = new ArrayList<>();
+        Dialogs.navigationRow(buttons,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> edit(p, id)),
+                dialogs.button(player, DialogIcon.CLOSE.label("Delete", DANGER), null, true, NAV, (p, view) -> {
+                    plugin.getArenas().delete(map(id));
+                    Dialogs.tell(p, map.getDisplayName() + " deleted.");
+                    open(p);
+                }), NAV);
+        dialogs.show(player, "Delete " + map.getDisplayName() + "?", List.of(DialogBody.plainMessage(DialogText.muted(
+                "The original build stays where it is. Its arena copies stop being used."), 320)), List.of(), buttons, 2, NAV, null);
+    }
+
+    private void acknowledge(Player player, CompletableFuture<?> result) {
+        if (result.isDone()) return;
+        Dialogs.tell(player, "Saving the map. Large maps can take a little while.");
     }
 }

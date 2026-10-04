@@ -16,7 +16,9 @@ public final class TierService implements AutoCloseable {
     private final Lookup lookup;
     private final LongSupplier clock;
     private final ExecutorService executor;
-    private final Map<String, Cached> cache = new HashMap<>();
+    // Written on the server thread, read by chat formatting on the async chat thread.
+    private final Map<String, Cached> cache = new java.util.concurrent.ConcurrentHashMap<>();
+    private boolean failing;
     private final Map<String, CompletableFuture<PlayerData>> pending = new HashMap<>();
     private volatile boolean closed;
 
@@ -68,7 +70,7 @@ public final class TierService implements AutoCloseable {
         long now = clock.getAsLong();
         // Bound offline /tier lookups without evicting in-flight work.
         if (cache.size() >= 2048) cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
-        if (cache.size() >= 2048) cache.remove(cache.keySet().iterator().next());
+        if (cache.size() >= 2048) { var oldest = cache.keySet().iterator(); if (oldest.hasNext()) cache.remove(oldest.next()); }
         if (failure == null) {
             Cached entry = new Cached(data, now + 300_000, null);
             cache.put(key, entry);
@@ -76,10 +78,14 @@ public final class TierService implements AutoCloseable {
                 cache.put("u:" + data.uuid(), entry);
                 cache.put("n:" + data.name().toLowerCase(Locale.ROOT), entry);
             }
+            if (failing) plugin.getLogger().info("Tier lookups are working again.");
+            failing = false;
             result.complete(data);
         } else {
             cache.put(key, new Cached(old == null ? null : old.data(), now + 60_000, failure));
-            plugin.getLogger().warning("Could not refresh a tier profile: " + failure.getMessage());
+            // One warning per outage, not one per player per minute.
+            if (!failing) plugin.getLogger().warning("Could not reach MCTiers (" + failure.getMessage() + "). Tier tags keep their last value until it's back.");
+            failing = true;
             result.completeExceptionally(failure);
         }
     }

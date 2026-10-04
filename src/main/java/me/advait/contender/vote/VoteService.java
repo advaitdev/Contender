@@ -53,13 +53,18 @@ public final class VoteService extends Module {
      * @param safe       contestants who vote but can't be voted for
      * @param sittingOut contestants left out of the vote completely
      * @param skipping   whether players can vote Skip, and whether most skips saves everyone
+     * @param mustVote   a contestant who doesn't vote gets a vote against themselves
      */
     public record Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
-                          Set<UUID> safe, Set<UUID> sittingOut, VoteSession.Skipping skipping) {
+                          Set<UUID> safe, Set<UUID> sittingOut, VoteSession.Skipping skipping, boolean mustVote) {
         public Options {
             safe = Set.copyOf(safe);
             sittingOut = Set.copyOf(sittingOut);
             java.util.Objects.requireNonNull(skipping);
+        }
+        public Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
+                       Set<UUID> safe, Set<UUID> sittingOut, VoteSession.Skipping skipping) {
+            this(seconds, liveCounts, ceremony, elimination, rooms, anonymous, safe, sittingOut, skipping, false);
         }
         public Options(int seconds, boolean liveCounts, boolean ceremony, Elimination elimination, RoomMode rooms, boolean anonymous,
                        Set<UUID> safe, Set<UUID> sittingOut) {
@@ -110,6 +115,8 @@ public final class VoteService extends Module {
     }
 
     public boolean isActive() { return session != null; }
+    /** The running or last vote's options, or null before the first vote. */
+    public Options options() { return options; }
     public VoteSession session() { return session; }
     public boolean revealing() { return reveal != null; }
 
@@ -142,6 +149,7 @@ public final class VoteService extends Module {
             Sounds.ANNOUNCE.play(player);
         }
         Msg.broadcast(Msg.text("A vote has started. ", DialogPalette.ACCENT).append(Msg.text("Use /vote to choose a player.", DialogPalette.TEXT)));
+        if (chosen.mustVote()) Msg.broadcast(Msg.text("Everyone has to vote. If you don't, your vote counts against you.", DialogPalette.WARNING));
         second();
     }
 
@@ -188,6 +196,14 @@ public final class VoteService extends Module {
     public void end() {
         VoteSession closing = session;
         if (closing == null) return;
+        // Must Vote: missed votes count against the player who missed them.
+        if (options.mustVote()) {
+            Set<UUID> missed = closing.countMissedVotes();
+            if (!missed.isEmpty()) {
+                String names = String.join(", ", missed.stream().map(id -> closing.voters().get(id)).toList());
+                Msg.broadcast(Msg.text("Didn't vote, so it counts against them: ", DialogPalette.MUTED).append(Msg.text(names, DialogPalette.WARNING)));
+            }
+        }
         closing.close();
         session = null;
         // Voting's over, so the voting room can move freely again.

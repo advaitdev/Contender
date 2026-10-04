@@ -24,6 +24,8 @@ public final class VoteSession {
     /** Who can vote, by name: the contestants who aren't sitting out, plus anyone who joins and votes. */
     private final Map<UUID, String> voters = new LinkedHashMap<>();
     private final Set<UUID> sittingOut;
+    /** Voters whose missed vote was counted against themselves. */
+    private final Set<UUID> missed = new LinkedHashSet<>();
     private final Skipping skipping;
     private final boolean liveCounts;
     private final long endsAt;
@@ -99,6 +101,22 @@ public final class VoteSession {
     }
 
     public int skips() { return votesFor(SKIP); }
+
+    /**
+     * Must Vote: every voter who didn't vote and is on the ballot gets a vote against themselves. Safe players
+     * aren't on the ballot, so a missed vote does nothing for them. Returns who missed.
+     */
+    public Set<UUID> countMissedVotes() {
+        for (UUID voter : voters.keySet()) {
+            if (votes.containsKey(voter) || candidate(voter) == null) continue;
+            votes.put(voter, voter);
+            missed.add(voter);
+        }
+        return Collections.unmodifiableSet(missed);
+    }
+
+    /** Didn't vote, so their vote went against themselves. */
+    public boolean missed(UUID voter) { return missed.contains(voter); }
 
     /**
      * Skip won, so nobody is voted out: Skip has at least as many votes as anyone (a tie with Skip saves everyone

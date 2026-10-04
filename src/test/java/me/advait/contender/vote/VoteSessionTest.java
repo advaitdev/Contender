@@ -111,4 +111,20 @@ class VoteSessionTest {
         VoteSession off = skipping(VoteSession.Skipping.OFF);
         assertThrows(IllegalArgumentException.class, () -> off.skip(carl));
     }
+
+    @Test void missedVotesCountAgainstTheVoter() {
+        // Dana is safe (votes, not on the ballot). Alice votes; Bob, Carl and Dana don't.
+        Map<UUID, String> voters = new java.util.LinkedHashMap<>(Map.of(alice, "Alice", bob, "Bob", carl, "Carl", dana, "Dana"));
+        VoteSession session = new VoteSession(VoteSession.number(List.of(Map.entry(alice, "Alice"), Map.entry(bob, "Bob"), Map.entry(carl, "Carl"))),
+                voters, java.util.Set.of(), false, 0);
+        session.vote(alice, session.candidate(bob));
+        assertEquals(java.util.Set.of(bob, carl), session.countMissedVotes());
+        assertEquals(bob, session.voteOf(bob));
+        assertEquals(2, session.votesFor(bob));
+        assertEquals(1, session.votesFor(carl));
+        assertTrue(session.missed(carl));
+        assertFalse(session.missed(alice));
+        // A safe player who didn't vote has nobody to count it against.
+        assertNull(session.voteOf(dana));
+    }
 }

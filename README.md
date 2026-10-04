@@ -83,11 +83,12 @@ Form options:
   - Becomes a spectator, without dying.
   - Stays a contestant.
 - **Skip Votes**: **Most skips: nobody goes** (the default) means that if Skip gets at least as many votes as anyone, nobody is voted out. The ceremony still plays and pulls away at the end, like a tie. **Skips don't count** keeps the Skip button but the top player still goes. **No Skip choice** hides it.
+- **Must Vote** (No by default): when voting closes, a contestant who didn't vote gets a vote against themselves, and chat says who. Directors and spectators don't vote, and Safe players aren't on the ballot, so it doesn't touch them. A Skip vote still counts as voting.
 - **Rooms**: see below.
 - **Choose Players**: click a contestant to make them **Safe** (they vote but can't be voted for), click again for **Sitting Out** (they don't vote at all and wait in the judge room), and again to put them back in. **Everyone In** clears it.
 - **Anonymous Votes** (No by default). While it's No, once voting closes, a small display over each voter shows who they voted for (or that they didn't vote), so everyone is held to their vote. With the ceremony they appear once the spotlight lands, so they don't give the result away. They stay for 10 seconds and follow the players, and the vote isn't over until they're gone.
 
-With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), `anonymous` (hide who voted for whom), `noskip` or `skipsdontcount`, `safe:Alice,Bob` and `sitout:Carol`.
+With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `keep` (instead of dying), `stay` or `nomove` (rooms), `anonymous` (hide who voted for whom), `noskip` or `skipsdontcount`, `mustvote`, `safe:Alice,Bob` and `sitout:Carol`.
 
 **Edit Votes.** While a vote runs, directors have an **Edit Votes** button in `/vote`. It lists who voted for whom with the totals. Click a voter to change their vote or take it away. Players aren't told. It's meant for testing.
 

@@ -111,7 +111,9 @@ public final class VoteDialogs {
                 DialogText.detail("Votes cast", Integer.toString(session.totalVotes()))), 340));
         body.add(DialogBody.plainMessage(DialogText.muted(manage ? "Click a player to remove them from this vote."
                 : canVote ? (session.candidate(player.getUniqueId()) == null && plugin.getRoleManager().isContestant(player.getUniqueId())
-                        ? "You're safe this time. Pick a player, or click them again to undo." : "Pick a player. Click them again to undo.")
+                        ? "You're safe this time. Pick a player, or click them again to undo."
+                        : votes.options() != null && votes.options().mustVote() && mine == null
+                        ? "You have to vote. If you don't, your vote counts against you." : "Pick a player. Click them again to undo.")
                 : sittingOut ? "You're sitting out this vote, so you can only watch." : "You can watch the vote, but only contestants can vote."), 340));
         if (pages > 1) body.add(DialogBody.plainMessage(DialogText.page(page + 1, pages), 340));
         // Escape runs the footer button, so the footer stays a plain Close and Refresh goes in the grid.
@@ -205,9 +207,9 @@ public final class VoteDialogs {
 
     /** What the director filled in on Start a Vote, kept while they choose players. */
     private record StartDraft(int seconds, boolean live, boolean ceremony, VoteService.Elimination elimination, VoteSession.Skipping skipping,
-                              boolean anonymous, VoteService.RoomMode rooms, Map<UUID, Standing> players) {
+                              boolean mustVote, boolean anonymous, VoteService.RoomMode rooms, Map<UUID, Standing> players) {
         static StartDraft defaults() {
-            return new StartDraft(60, false, true, VoteService.Elimination.KILL, VoteSession.Skipping.SAVES, false, VoteService.RoomMode.RETURN, new LinkedHashMap<>());
+            return new StartDraft(60, false, true, VoteService.Elimination.KILL, VoteSession.Skipping.SAVES, false, false, VoteService.RoomMode.RETURN, new LinkedHashMap<>());
         }
         Set<UUID> with(Standing standing) {
             Set<UUID> ids = new HashSet<>();
@@ -229,6 +231,7 @@ public final class VoteDialogs {
                         .map(option -> Dialogs.option(option.name(), option.label, option == draft.elimination())).toList()).width(300).build(),
                 DialogInput.singleOption("skipping", DialogIcon.NEXT.label("Skip Votes"), java.util.Arrays.stream(VoteSession.Skipping.values())
                         .map(option -> Dialogs.option(option.name(), option.label, option == draft.skipping())).toList()).width(300).build(),
+                toggle("must_vote", DialogIcon.SKULL, "Must Vote", draft.mustVote(), "Yes, a missed vote counts against you", "No"),
                 toggle("anonymous", DialogIcon.PLAYERS, "Anonymous Votes", draft.anonymous(), "Yes", "No, show who everyone voted for")));
         // The rooms choice only appears once a voting or judge room is set.
         boolean rooms = plugin.getVotes().anyRoom();
@@ -246,7 +249,7 @@ public final class VoteDialogs {
                     StartDraft chosen = read(view, draft, rooms);
                     plugin.getVotes().start(new VoteService.Options(chosen.seconds(), chosen.live(), chosen.ceremony(), chosen.elimination(),
                             rooms ? chosen.rooms() : VoteService.RoomMode.OFF, chosen.anonymous(), chosen.with(Standing.SAFE), chosen.with(Standing.SITTING_OUT),
-                            chosen.skipping()));
+                            chosen.skipping(), chosen.mustVote()));
                     open(p);
                 }), NAV);
         // Short lines, so Start Vote stays on screen at small GUI sizes.
@@ -263,7 +266,7 @@ public final class VoteDialogs {
 
     private static StartDraft read(DialogResponseView view, StartDraft previous, boolean rooms) {
         return new StartDraft(Dialogs.number(view, "seconds", 10, 600), bool(view, "live"), bool(view, "ceremony"),
-                VoteService.Elimination.valueOf(Dialogs.text(view, "elimination")), VoteSession.Skipping.valueOf(Dialogs.text(view, "skipping")), bool(view, "anonymous"),
+                VoteService.Elimination.valueOf(Dialogs.text(view, "elimination")), VoteSession.Skipping.valueOf(Dialogs.text(view, "skipping")), bool(view, "must_vote"), bool(view, "anonymous"),
                 rooms ? VoteService.RoomMode.valueOf(Dialogs.text(view, "rooms")) : previous.rooms(), previous.players());
     }
 

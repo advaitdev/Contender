@@ -44,7 +44,9 @@ final class VoteReceipts {
             if (player == null || player.isDead()) continue;
             UUID choice = session.voteOf(voter);
             VoteSession.Candidate target = choice == null ? null : session.candidate(choice);
-            Component text = VoteSession.SKIP.equals(choice) ? Component.text("Skipped", theme.muted())
+            Component text = session.missed(voter) ? Component.text("Didn't vote", theme.muted()).appendNewline()
+                            .append(Component.text("Counted against them", theme.primary()))
+                    : VoteSession.SKIP.equals(choice) ? Component.text("Skipped", theme.muted())
                     : target == null ? Component.text("Didn't vote", theme.muted())
                     : Component.text("Voted for", theme.muted()).appendNewline()
                             .append(StringUtil.getPlayerHead(target.id())).append(Component.text(" " + target.name(), theme.primary()));

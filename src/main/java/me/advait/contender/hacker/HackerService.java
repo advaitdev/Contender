@@ -259,6 +259,8 @@ public final class HackerService extends Module implements StageService.Listener
         if (section == null) return HackSettings.defaults();
         Map<HackSetting, Double> values = new EnumMap<>(HackSetting.class);
         for (HackSetting setting : HackSetting.values()) values.put(setting, section.getDouble(setting.key(), setting.normal));
+        // Subtle reach used to be 3.3 blocks; it's 3.2 now, so saved Subtle picks follow it.
+        if (Math.abs(values.get(HackSetting.REACH) - 3.3) < 1e-6) values.put(HackSetting.REACH, 3.2);
         return new HackSettings(values);
     }
 

@@ -11,7 +11,7 @@ import java.util.Locale;
  * Multipliers apply on top of the held weapon and any kit attributes.
  */
 public enum HackSetting {
-    REACH("Reach", "How far you can hit players.", "blocks", DialogIcon.REACH, 3, 8, 3, 3.5, 3.3, 3.6, 4.2, 6),
+    REACH("Reach", "How far you can hit players.", "blocks", DialogIcon.REACH, 3, 8, 3, 3.5, 3.2, 3.6, 4.2, 6),
     ATTACK_SPEED("Attack Speed", "How quickly your weapon recharges.", "x", DialogIcon.REFRESH, 1, 5, 1, 1.3, 1.15, 1.35, 1.75, 3),
     ATTACK_DAMAGE("Damage", "How hard your melee hits land.", "x", DialogIcon.DUEL, 1, 4, 1, 1.25, 1.1, 1.25, 1.5, 2.5),
     RESISTANCE("Resistance", "Takes a share off every hit you receive.", "%", DialogIcon.ARMOR, 0, 90, 0, 25, 10, 20, 35, 60),

@@ -126,22 +126,11 @@ Set it up in `/hackers` → **Sabotage Settings**. **Hackers Can Sabotage** deci
 | Sabotage | Effect |
 | --- | --- |
 | Lag Spike | Everyone's ping jumps up. Hits land late. |
-| Double Health | Everyone gets twice the hearts. |
-| Glass Cannon | Hits deal double damage, but everyone has half the hearts. |
 | Tiny Fighters | Everyone shrinks to half size. |
 | Giants | Everyone grows taller, with longer reach. |
 | Moon Gravity | Gravity drops. Every hit sends people flying. |
 | Heavy Hits | Every hit knocks people much further. |
-| Sugar Rush | Everyone moves a third faster. |
-| Rusty Swords | Weapons take much longer to recharge. |
-| Pogo | Everyone jumps twice as high and takes less fall damage. |
-| Spotlight | Everyone glows through walls. |
-| Vampire | Hitting someone heals you. |
-| Fragile | Everyone takes 50% more damage. |
 | Butterfingers | Hotbars shuffle every few seconds. |
-| Switcheroo | Opponents swap places every so often. |
-| Nameless | Every nametag disappears. |
-| Blackout | Screens go dark every few seconds. |
 | Famished | Hunger drains fast, so healing stops. |
 
 ## Voice chat

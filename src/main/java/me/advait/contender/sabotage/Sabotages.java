@@ -16,6 +16,10 @@ import static org.bukkit.attribute.AttributeModifier.Operation.MULTIPLY_SCALAR_1
 public final class Sabotages {
     private Sabotages() { }
 
+    /** Built but switched off for now: they don't appear anywhere. Remove an id to bring it back. */
+    static final java.util.Set<String> DISABLED = java.util.Set.of("sugar_rush", "rusty_swords", "pogo", "spotlight", "vampire",
+            "fragile", "switcheroo", "nameless", "blackout", "double_health", "glass_cannon");
+
     public static Map<String, Sabotage> all(LagInjector lag) {
         List<Sabotage> list = List.of(
                 new LagSpike(lag),
@@ -51,7 +55,7 @@ public final class Sabotages {
                 new Blackout(),
                 new Famished());
         Map<String, Sabotage> byId = new LinkedHashMap<>();
-        for (Sabotage sabotage : list) byId.put(sabotage.id(), sabotage);
+        for (Sabotage sabotage : list) if (!DISABLED.contains(sabotage.id())) byId.put(sabotage.id(), sabotage);
         return byId;
     }
 }

@@ -441,9 +441,17 @@ public final class ArenaService extends Module {
             case "2" -> map.setTeam2Spawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "spectator" -> map.setSpectatorSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "hill" -> map.setHill(location.getX(), location.getY(), location.getZ());
+            case "void" -> map.setVoidY(Math.floor(location.getY()));
             case "ffa" -> map.addFfaSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             default -> throw new IllegalArgumentException("Choose team 1, team 2, spectator, or hill.");
         }
+        maps.save(map);
+        rebuildPool(map);
+    }
+
+    /** Falling counts from the bottom of the map's saved region again (or King of the Hill's own Void Level). */
+    public void clearVoidLevel(ArenaMap map) {
+        map.setVoidY(null);
         maps.save(map);
         rebuildPool(map);
     }

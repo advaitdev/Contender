@@ -128,7 +128,8 @@ public final class ArenaDialogs {
                         spawnLine("Team 2 spawn", map.getTeam2Point() != null),
                         DialogText.detail("FFA spawns", ffaCount(map), map.getFfaPoints().isEmpty() ? MUTED : SUCCESS),
                         DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS),
-                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS)),
+                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS),
+                        DialogText.detail("Void level", map.getVoidY() == null ? "Bottom of the map" : "Y " + map.getVoidY().intValue(), map.getVoidY() == null ? MUTED : SUCCESS)),
                 DialogText.muted("Stand on a spot and face the right way, then click its button."));
         List<ActionButton> buttons = new ArrayList<>();
         for (String side : List.of("1", "2")) {
@@ -164,6 +165,17 @@ public final class ArenaDialogs {
         if (map.getHillPoint() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Middle for the Hill", TEXT), null, true, WIDE, (p, view) -> {
             plugin.getArenas().clearHill(map(id));
             Dialogs.tell(p, "The hill is back in the middle of the map.");
+            spawns(p, id);
+        }));
+        buttons.add(dialogs.button(player, DialogIcon.STEP.label("Set Void Level Here", TEXT),
+                DialogText.muted("Falling below your height counts as falling off the map. In King of the Hill that sends players back to a spawn."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().setSpawn(map(id), "void", p.getLocation());
+                    Dialogs.tell(p, "Void level saved at Y " + map(id).getVoidY().intValue() + ".");
+                    spawns(p, id);
+                }));
+        if (map.getVoidY() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Bottom of the Map", TEXT), null, true, WIDE, (p, view) -> {
+            plugin.getArenas().clearVoidLevel(map(id));
+            Dialogs.tell(p, "The void level is the bottom of the map again.");
             spawns(p, id);
         }));
         dialogs.show(player, "Spawns", List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV,

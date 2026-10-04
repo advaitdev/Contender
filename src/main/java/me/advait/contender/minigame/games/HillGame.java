@@ -41,7 +41,7 @@ public final class HillGame extends ArenaGame {
 
         @Override public void openCreate(Player director) {
             new GameForm(plugin).open(director, new GameForm.Spec("King of the Hill", "King of the Hill",
-                    "The hill is the map's hill spot, or its middle if it has none. Respawns are on.", true, true, false,
+                    "The hill is the map's hill spot, or its middle if it has none. A map's own void level wins over Void Level.", true, true, false,
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 1, 15, 4, 1, "%s: %s min"),
                             GameForm.number("target", DialogIcon.STAR, "Points to Win", 20, 600, 90, 10, null),
                             GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks"),
@@ -159,7 +159,8 @@ public final class HillGame extends ArenaGame {
     /** The void starts a set distance below the hill (or at the bottom of the map, if that's higher). */
     @Override protected double voidLevel() {
         double bottom = super.voidLevel();
-        return hill == null ? bottom : Math.max(bottom, hill.getY() - voidDepth);
+        // A map's own void level wins over this game's Void Level.
+        return hill == null || mapSetsVoid() ? bottom : Math.max(bottom, hill.getY() - voidDepth);
     }
 
     /** With void respawns on, a fall isn't a death: straight back to a spawn, keeping health and items. */

@@ -16,6 +16,8 @@ public class ArenaMap {
     private SpawnPoint hill;
     /** Free-for-all spawns; games pick from these at random. Empty means a ring through the team spawns. */
     private final java.util.List<SpawnPoint> ffaSpawns = new java.util.ArrayList<>();
+    /** Below this height a player has fallen off the map, or null for the bottom of the saved region. */
+    private Double voidY;
     private BlockBounds bounds;
     private String schematic;
     private int copies = 20;
@@ -64,6 +66,8 @@ public class ArenaMap {
     }
     public void addFfaSpawn(double x, double y, double z, float yaw, float pitch) { ffaSpawns.add(new SpawnPoint(x, y, z, yaw, pitch)); }
     public void clearFfaSpawns() { ffaSpawns.clear(); }
+    public Double getVoidY() { return voidY; }
+    public void setVoidY(Double y) { voidY = y; }
     public void setTeam1Spawn(double x, double y, double z, float yaw, float pitch) {
         team1Spawn = new SpawnPoint(x, y, z, yaw, pitch);
     }
@@ -100,6 +104,7 @@ public class ArenaMap {
         copy.spectatorSpawn = (spectatorSpawn == null ? team1Spawn : spectatorSpawn).move(dx, dy, dz);
         copy.hill = hill == null ? null : hill.move(dx, dy, dz);
         for (SpawnPoint point : ffaSpawns) copy.ffaSpawns.add(point.move(dx, dy, dz));
+        copy.voidY = voidY == null ? null : voidY + dy;
         return copy;
     }
 }

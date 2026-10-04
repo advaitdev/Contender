@@ -202,8 +202,18 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         return Bukkit.getPlayer(hit.getKey());
     }
 
-    /** Below this height a player has fallen off the map. */
-    protected double voidLevel() { return arena.layout().getBounds().minY(); }
+    /**
+     * Below this height a player has fallen off the map: the map's void level when it has one, otherwise the bottom
+     * of its saved region (never lower, since nobody can leave the region).
+     */
+    protected double voidLevel() {
+        double bottom = arena.layout().getBounds().minY();
+        Double set = arena.layout().getVoidY();
+        return set == null ? bottom : Math.max(bottom, set);
+    }
+
+    /** Whether the map sets its own void level. */
+    protected boolean mapSetsVoid() { return arena.layout().getVoidY() != null; }
 
     /** A player fell into the void; {@code knocker} hit them last, or is null. It counts as a death unless a game says otherwise. */
     protected void fell(Player player, Player knocker) { killed(player, knocker); }

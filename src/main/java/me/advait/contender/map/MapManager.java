@@ -75,6 +75,7 @@ public class MapManager {
                     plugin.getLogger().warning("Skipping an invalid FFA spawn on map " + id + ".");
                 }
             }
+            if (section.isDouble("void-level") || section.isInt("void-level")) map.setVoidY(section.getDouble("void-level"));
             ConfigurationSection hill = section.getConfigurationSection("hill");
             if (hill != null) map.setHill(hill.getDouble("x"), hill.getDouble("y"), hill.getDouble("z"));
 
@@ -134,6 +135,7 @@ public class MapManager {
             writeSpawn(config, path + ".team2-spawn", entry.getTeam2Point());
             writeSpawn(config, path + ".spectator-spawn", entry.getSpectatorPoint());
             writeSpawn(config, path + ".hill", entry.getHillPoint());
+            if (entry.getVoidY() != null) config.set(path + ".void-level", entry.getVoidY());
             if (!entry.getFfaPoints().isEmpty()) config.set(path + ".ffa-spawns", entry.getFfaPoints().stream()
                     .map(point -> java.util.Map.of("x", point.x(), "y", point.y(), "z", point.z(), "yaw", (double) point.yaw(), "pitch", (double) point.pitch())).toList());
             BlockBounds b = entry.getBounds();

@@ -93,7 +93,7 @@ With `/startvote <seconds>`, add `live`, `quick` (chat only), `spectate` or `kee
 
 **The ceremony.** Stand on the middle of your stage, facing the audience, and run `/setvotestage`. When voting closes, contestants walk into a straight line on the stage, facing the way you faced. The line runs along whichever of X or Z has more floor. It never runs past the ends of the stage: when everyone doesn't fit, a second row lines up behind the first. The stage is the floor at the same height as the spot you set, up to a wall, a gap or a step, so a raised platform works well. A spotlight then sweeps back and forth along the line, slows down and stops on whoever got the most votes. On a tie it slows down over one of the tied players as if it's about to land, then pulls back up into the sky without picking anyone. The result goes in chat; there are no on-screen titles. Contestants further than 40 blocks away (or in another world) are teleported into line instead.
 
-**Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option decides what happens afterwards:
+**Rooms.** Stand where contestants should vote, facing the way they should look, and run `/setvotingroom`. While voting is open, contestants within 10 blocks of that spot (`votes.voting-room-radius` in `config.yml`) get Slowness II and can't jump, so they stay put. It lifts when they leave the room or voting closes. Do the same with `/setjudgeroom` for everyone who isn't voting: spectators, camera crew and directors. When a vote starts, players are spread out on the floor around each spot. Anyone in a match, interview or spectating stays put. The **Rooms** option decides what happens afterwards:
 
 - **Move, Then Send Back** (the default) returns everyone to where they were once the results finish.
 - **Move and Leave There** leaves them in the rooms.
@@ -118,7 +118,7 @@ There are two modes:
 
 ### Sabotage
 
-Turn it on in `/hackers` → **Sabotage Settings**. Hackers open `/sabotage` during an event and set off something that hits everyone in it, themselves included unless you change that. You choose how long sabotages last (or the whole event), how many each hacker gets, the cooldown, how many can run at once, which ones are allowed and whether the hacker's name is revealed.
+Set it up in `/hackers` → **Sabotage Settings**. **Hackers Can Sabotage** decides whether hackers can start them themselves; set it to **No, only directors** and only you can, with **Start One Now**. Hackers open `/sabotage` during an event and set off something that hits everyone in it, themselves included unless you change that. You choose how long sabotages last (or the whole event), how many each hacker gets, the cooldown, how many can run at once, which ones are allowed and whether the hacker's name is revealed.
 
 | Sabotage | Effect |
 | --- | --- |

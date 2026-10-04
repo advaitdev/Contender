@@ -48,7 +48,7 @@ public final class ContenderCommand implements TabExecutor {
         Msg.hint(sender, "  Vote: " + (plugin.getVotes().isActive() ? "running" : plugin.getVotes().revealing() ? "revealing" : "none"));
         Msg.hint(sender, "  Hackers: " + plugin.getHackers().hackers().size() + " · mode " + plugin.getHackers().mode().name().toLowerCase(Locale.ROOT)
                 + (plugin.getHackers().planActive() ? " · plan on" : ""));
-        Msg.hint(sender, "  Sabotages: " + (plugin.getSabotage().enabled() ? "on" : "off") + ", running: "
+        Msg.hint(sender, "  Hackers can sabotage: " + (plugin.getSabotage().enabled() ? "yes" : "no, only directors") + ", running: "
                 + (plugin.getSabotage().active().isEmpty() ? "none" : String.join(", ", plugin.getSabotage().active().keySet())));
         Msg.hint(sender, "  Interview: " + (plugin.getInterviews().active() ? "in progress" : "none"));
     }

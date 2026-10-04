@@ -135,7 +135,7 @@ public final class SabotageService extends Module implements StageService.Listen
 
     /** Explains why a hacker cannot trigger a sabotage now, or returns null when they can. */
     public String blocked(Player hacker, Sabotage sabotage) {
-        if (!enabled()) return "Sabotages are turned off.";
+        if (!enabled()) return "Only the director can start sabotages right now.";
         if (!plugin.getHackers().isHacker(hacker.getUniqueId())) return "Only hackers can sabotage.";
         if (!plugin.getStages().running()) return "Sabotages work once an event has started.";
         if (sabotage != null && !allowed(sabotage.id())) return "That sabotage is turned off.";

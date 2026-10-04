@@ -80,7 +80,7 @@ public final class SabotageDialogs {
     public void settings(Player player, Consumer<Player> back) {
         SabotageService service = plugin.getSabotage();
         List<DialogInput> inputs = List.of(
-                toggle("enabled", DialogIcon.SKULL, "Sabotages", service.enabled(), "On", "Off"),
+                toggle("enabled", DialogIcon.SKULL, "Hackers Can Sabotage", service.enabled(), "Yes", "No, only directors"),
                 toggle("affects_hackers", DialogIcon.PLAYERS, "Affects the Hackers Too", service.affectsHackers(), "Yes", "No"),
                 toggle("reveal", DialogIcon.EYE, "Show Who Sabotaged", service.revealHacker(), "Everyone sees", "Only directors see"),
                 durationInput(service.durationSeconds()),
@@ -103,7 +103,8 @@ public final class SabotageDialogs {
         Component running = service.active().isEmpty() ? DialogText.muted("None running.")
                 : DialogText.detail("Running", String.join(", ", service.active().values().stream().map(a -> a.sabotage().name()).toList()));
         dialogs.show(player, "Sabotage Settings", List.of(DialogBody.plainMessage(DialogText.lines(
-                DialogText.muted("Hackers use /sabotage during an event."), running), 320)), inputs, buttons, 2, NAV, null);
+                DialogText.muted(service.enabled() ? "Hackers use /sabotage during an event. You can also use Start One Now."
+                        : "Only directors start sabotages, with Start One Now."), running), 320)), inputs, buttons, 2, NAV, null);
     }
 
     private void save(DialogResponseView view) {

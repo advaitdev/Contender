@@ -82,6 +82,7 @@ public final class VoteService extends Module {
     private VoteTimerDisplay timer;
     private VoteRooms rooms;
     private VoteReceipts receipts;
+    private VoteRoomHold hold;
     private VoteReveal reveal;
     private Options options;
     /** Counts votes, so a delayed step from an old vote never touches a newer one. */
@@ -95,7 +96,9 @@ public final class VoteService extends Module {
         timer = new VoteTimerDisplay(plugin);
         rooms = new VoteRooms(plugin);
         receipts = new VoteReceipts(plugin);
+        hold = new VoteRoomHold(plugin, rooms);
         tasks.repeat(20, 20, this::second);
+        tasks.repeat(10, 10, () -> hold.update(session != null));
     }
 
     @Override protected void onDisable() {
@@ -103,6 +106,7 @@ public final class VoteService extends Module {
         session = null;
         timer.hide();
         receipts.clear();
+        hold.releaseAll();
     }
 
     public boolean isActive() { return session != null; }
@@ -186,6 +190,8 @@ public final class VoteService extends Module {
         if (closing == null) return;
         closing.close();
         session = null;
+        // Voting's over, so the voting room can move freely again.
+        hold.releaseAll();
         int current = generation;
         timer.update(0);
         // With a ceremony the timers stay at 00:00 until the spotlight is done (VoteReveal shows the results).
@@ -362,11 +368,13 @@ public final class VoteService extends Module {
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         if (session != null) session.unvote(event.getPlayer().getUniqueId());
         rooms.forget(event.getPlayer().getUniqueId());
+        hold.release(event.getPlayer());
     }
 
     @EventHandler public void onJoin(PlayerJoinEvent event) {
-        if (session == null) return;
         Player player = event.getPlayer();
+        VoteRoomHold.strip(player);
+        if (session == null) return;
         // After the lobby has placed them, send a late arrival to their room as well.
         tasks.later(5, () -> { if (session != null && player.isOnline()) rooms.admit(player, options.rooms()); });
     }

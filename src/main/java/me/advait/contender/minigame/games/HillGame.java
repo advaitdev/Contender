@@ -45,6 +45,9 @@ public final class HillGame extends ArenaGame {
                     List.of(GameForm.number("minutes", DialogIcon.CLOCK, "Length", 1, 15, 4, 1, "%s: %s min"),
                             GameForm.number("target", DialogIcon.STAR, "Points to Win", 20, 600, 90, 10, null),
                             GameForm.number("radius", DialogIcon.TARGET, "Hill Size", 2, 8, 3, 1, "%s: %s blocks"),
+                            DialogInput.singleOption("damage", DialogIcon.HEART.label("Damage"), List.of(
+                                    Dialogs.option("knockback", "Knockback only, no hearts or hunger lost", true),
+                                    Dialogs.option("normal", "Normal damage and hunger", false))).width(300).build(),
                             DialogInput.singleOption("void", DialogIcon.STEP.label("Void Falls"), List.of(
                                     Dialogs.option("spawn", "Back to a spawn, no death", true),
                                     Dialogs.option("death", "Counts as a death", false))).width(300).build(),
@@ -60,7 +63,7 @@ public final class HillGame extends ArenaGame {
             if (map == null || !map.isComplete()) throw new IllegalArgumentException("Choose a map with both spawns set.");
             if (kit == null) throw new IllegalArgumentException("Choose a kit.");
             return new HillGame(plugin, this, UUID.randomUUID(), name, roster, map, kit, GameForm.intOption(options, "minutes", 1, 15, 4) * 60, GameForm.intOption(options, "target", 20, 600, 90), GameForm.intOption(options, "radius", 2, 8, 3),
-                    !"death".equals(options.get("void")), GameForm.intOption(options, "void_depth", 2, 40, 8));
+                    !"death".equals(options.get("void")), GameForm.intOption(options, "void_depth", 2, 40, 8), !"normal".equals(options.get("damage")));
         }
 
         @Override public Minigame restore() {
@@ -71,7 +74,8 @@ public final class HillGame extends ArenaGame {
             Kit kit = extra == null ? null : plugin.getKitManager().getKit(extra.getString("kit", ""));
             HillGame game = new HillGame(plugin, this, UUID.fromString(yaml.getString("id")), yaml.getString("name", name()), savedRoster(yaml), map, kit,
                     extra == null ? 240 : extra.getInt("seconds", 240), extra == null ? 90 : extra.getInt("target", 90), extra == null ? 3 : extra.getInt("radius", 3),
-                    extra == null || extra.getBoolean("void-respawn", true), extra == null ? 8 : extra.getInt("void-depth", 8));
+                    extra == null || extra.getBoolean("void-respawn", true), extra == null ? 8 : extra.getInt("void-depth", 8),
+                    extra == null || extra.getBoolean("knockback-only", true));
             game.readSaved(yaml);
             return game;
         }
@@ -82,20 +86,25 @@ public final class HillGame extends ArenaGame {
     private final boolean voidRespawn;
     /** How far below the hill the void starts. */
     private final int voidDepth;
+    /** Hits only knock people back: no hearts or hunger lost. */
+    private final boolean knockbackOnly;
     private final Map<UUID, Integer> kills = new HashMap<>();
     private Location hill;
     private TextDisplay label;
     private int elapsed;
 
     HillGame(Contender plugin, MinigameType type, UUID id, String name, Map<UUID, String> players, ArenaMap map, Kit kit,
-             int seconds, int target, int radius, boolean voidRespawn, int voidDepth) {
+             int seconds, int target, int radius, boolean voidRespawn, int voidDepth, boolean knockbackOnly) {
         super(plugin, type, id, name, players, map, kit);
         this.seconds = seconds;
         this.target = target;
         this.radius = radius;
         this.voidRespawn = voidRespawn;
         this.voidDepth = voidDepth;
+        this.knockbackOnly = knockbackOnly;
     }
+
+    @Override protected boolean knockbackOnly() { return knockbackOnly; }
 
     @Override protected int minimumPlayers() { return 2; }
 
@@ -232,6 +241,7 @@ public final class HillGame extends ArenaGame {
         section.set("radius", radius);
         section.set("void-respawn", voidRespawn);
         section.set("void-depth", voidDepth);
+        section.set("knockback-only", knockbackOnly);
     }
 
     // ---- Director corrections ------------------------------------------------------------------

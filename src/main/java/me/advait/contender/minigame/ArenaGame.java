@@ -218,6 +218,9 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
     /** A player fell into the void; {@code knocker} hit them last, or is null. It counts as a death unless a game says otherwise. */
     protected void fell(Player player, Player knocker) { killed(player, knocker); }
 
+    /** Hits still knock players around, but nobody loses hearts or hunger (the void is handled on its own). */
+    protected boolean knockbackOnly() { return false; }
+
     /** Team rules. Everyone can hit everyone by default. */
     protected boolean canHit(Player attacker, Player victim) { return true; }
 
@@ -232,7 +235,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); fell(victim, knocker(victim)); return; }
         if (isProtected(victim)) { event.setCancelled(true); return; }
         boolean fromPlayer = attacker(event) != null;
-        if (fromPlayer ? kit.isPvpHurt() : kit.isPveHurt()) { HurtRules.removeHealthDamage(event); return; }
+        if (knockbackOnly() || (fromPlayer ? kit.isPvpHurt() : kit.isPveHurt())) { HurtRules.removeHealthDamage(event); return; }
         // Final damage is already reduced by absorption.
         if (victim.getHealth() - event.getFinalDamage() > 0) return;
         if (victim.getInventory().getItemInMainHand().getType() == Material.TOTEM_OF_UNDYING
@@ -318,7 +321,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onFood(FoodLevelChangeEvent event) {
-        if (event.getEntity() instanceof Player player && ours(player) && (!fighting(player) || kit.keepsHungerFull())) {
+        if (event.getEntity() instanceof Player player && ours(player) && (!fighting(player) || knockbackOnly() || kit.keepsHungerFull())) {
             event.setCancelled(true);
             player.setFoodLevel(20);
         }

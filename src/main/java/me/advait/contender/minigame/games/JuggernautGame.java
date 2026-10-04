@@ -173,6 +173,7 @@ public final class JuggernautGame extends ArenaGame {
         Player player = juggernaut == null ? null : Bukkit.getPlayer(juggernaut);
         if (player == null || crown == null || !crown.isValid()) return;
         me.advait.contender.display.Riders.keep(player, crown);
+        if (player.canSee(crown)) player.hideEntity(plugin, crown);
     }
 
     // ---- Play ----------------------------------------------------------------------------------

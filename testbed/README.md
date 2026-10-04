@@ -43,6 +43,7 @@ The fake players plugin is UHCR's FakePlayers tool (`tools/fakeplayers` in the U
 - `probe sabotage <id> [hacker]`, `probe sabotageconfig <on> <seconds> <uses>`
 - `probe dialog <player> <name>` opens any menu (`tournament`, `tools`, `formats`, `hacks`, `hackers`, `sabotage`, `startvote`, `racesetup`, `manhuntsetup`, …)
 - `probe registry` shows what every player is doing, and `probe gamestatus` shows the current minigame
+- `probe cansee <player>` shows whether a player can see each entity riding them
 - `probe verifycopies <map> [samples]` compares random blocks of every ready copy with the original map
 
 ## Render client

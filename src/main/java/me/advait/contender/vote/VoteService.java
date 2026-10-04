@@ -381,6 +381,20 @@ public final class VoteService extends Module {
     /** Stages set before facings were saved have none. */
     boolean stageHasFacing() { return plugin.getConfig().contains("votes.stage.yaw"); }
 
+    /** Nobody in the voting room (while voting is open) or the reveal lineup can hit or be hit by another player. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHit(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        Player attacker = event.getDamager() instanceof Player player ? player
+                : event.getDamager() instanceof org.bukkit.entity.Projectile projectile && projectile.getShooter() instanceof Player shooter ? shooter : null;
+        if (attacker == null || attacker.equals(victim)) return;
+        if (protectedFromHits(victim.getUniqueId()) || protectedFromHits(attacker.getUniqueId())) event.setCancelled(true);
+    }
+
+    private boolean protectedFromHits(UUID id) {
+        return session != null && hold.holds(id) || reveal != null && reveal.inLine(id);
+    }
+
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         if (session != null) session.unvote(event.getPlayer().getUniqueId());
         rooms.forget(event.getPlayer().getUniqueId());

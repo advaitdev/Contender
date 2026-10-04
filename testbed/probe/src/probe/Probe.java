@@ -182,6 +182,11 @@ public class Probe extends JavaPlugin implements Listener {
                     }
                     s.sendMessage(a[1] + ": " + copies + " ready copies checked, " + checked + " blocks compared, " + bad + " copies differ");
                 }
+                case "cansee" -> {
+                    // cansee <player>: whether the player can see each entity riding them
+                    Player who = Bukkit.getPlayer(a[1]);
+                    for (var rider : who.getPassengers()) s.sendMessage(rider.getType() + " " + rider.getUniqueId() + " visibleByDefault=" + rider.isVisibleByDefault() + " canSee=" + who.canSee(rider));
+                }
                 case "dirtyall" -> c().getArenas().copies(a[1]).forEach(copy -> { if (copy.status() == me.advait.contender.arena.ArenaCopy.Status.IN_USE) copy.markDirty(); });
                 case "game" -> {
                     var type = c().getMinigames().type(a[1]);

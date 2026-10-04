@@ -47,6 +47,9 @@ final class VoteRoomHold {
         held.removeIf(id -> Bukkit.getPlayer(id) == null);
     }
 
+    /** Whether this player is being held in the voting room right now. */
+    boolean holds(UUID player) { return held.contains(player); }
+
     void releaseAll() {
         for (UUID id : held) {
             Player player = Bukkit.getPlayer(id);

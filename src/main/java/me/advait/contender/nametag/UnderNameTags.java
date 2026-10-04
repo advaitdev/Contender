@@ -70,6 +70,8 @@ public final class UnderNameTags extends Module {
                 shown.remove(id);
             }
             me.advait.contender.display.Riders.keep(player, display);
+            // Players never see their own line. A hide made right as the display spawns doesn't always stick.
+            if (player.canSee(display)) player.hideEntity(plugin, display);
             if (!text.equals(shown.get(id))) {
                 display.text(text);
                 shown.put(id, text);

@@ -377,6 +377,9 @@ final class VoteReveal implements Activity, Listener {
         tasks.later(Math.max(140, (notBefore - System.currentTimeMillis()) / 50 + 5), this::finish);
     }
 
+    /** Standing in the lineup (or walking to it). */
+    boolean inLine(UUID id) { return line.contains(id); }
+
     private void release(UUID id) {
         line.remove(id);
         spots.remove(id);

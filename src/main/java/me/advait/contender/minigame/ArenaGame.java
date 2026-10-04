@@ -1,5 +1,7 @@
 package me.advait.contender.minigame;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.arena.ArenaActivity;
 import me.advait.contender.arena.ArenaCopy;
@@ -110,7 +112,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         player.setAllowFlight(false);
         player.setFlying(false);
         if (player.isInsideVehicle()) player.leaveVehicle();
-        player.teleport(spawn);
+        Teleports.to(player, spawn);
         player.setVelocity(new Vector());
         player.setFallDistance(0);
         player.closeInventory();
@@ -139,7 +141,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
         // Knocked off the map or below its floor: watch from the spectator spawn instead of under the arena.
-        if (offMap(player.getLocation()) && spectatorSpawn() != null) player.teleport(watchSpot());
+        if (offMap(player.getLocation()) && spectatorSpawn() != null) Teleports.to(player, watchSpot());
         else player.setVelocity(new Vector(0, 0.3, 0));
     }
 
@@ -229,7 +231,7 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
         if (!(event.getEntity() instanceof Player victim) || !ours(victim)) return;
         if (!fighting(victim)) {
             event.setCancelled(true);
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(watchSpot()));
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> Teleports.to(victim, watchSpot()));
             return;
         }
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) { event.setCancelled(true); fell(victim, knocker(victim)); return; }

@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.manhunt;
 
+import me.advait.contender.util.Teleports;
+
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
@@ -77,7 +79,7 @@ public final class ManhuntType implements MinigameType, Listener, AutoCloseable 
         if (world.ready()) buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Visit the End", TEXT), DialogText.muted("Look around before the game. Everything stays frozen."), true, WIDE, (p, view) -> {
             if (!plugin.getRegistry().isFree(p.getUniqueId())) throw new IllegalStateException("Leave what you're doing first.");
             p.closeDialog();
-            p.teleport(world.spawn(0));
+            Teleports.to(p, world.spawn(0));
         }));
         dialogs.show(player, "Manhunt Setup", List.of(DialogBody.plainMessage(DialogText.lines(
                 DialogText.detail("End", status()),

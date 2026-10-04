@@ -1,5 +1,7 @@
 package me.advait.contender.lobby;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.role.PlayerRole;
 import org.bukkit.Bukkit;
@@ -92,7 +94,7 @@ public final class LobbyService {
         if (lobby == null) return false;
         if (player.isDead()) return false;
         if (player.isInsideVehicle()) player.leaveVehicle();
-        if (!player.teleport(lobby)) return false;
+        if (!Teleports.to(player, lobby)) return false;
         player.setFallDistance(0);
         player.setFireTicks(0);
         player.setFreezeTicks(0);

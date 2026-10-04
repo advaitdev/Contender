@@ -1,5 +1,7 @@
 package me.advait.contender.minigame;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
 import me.advait.contender.activity.ActivityRegistry;
@@ -101,7 +103,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
     /** Called when a claimed participant comes back while the game runs. Default: watch from the spectator spawn. */
     protected void playerReturned(Player player, Participant participant) {
         player.setGameMode(GameMode.SPECTATOR);
-        player.teleport(watchSpot());
+        Teleports.to(player, watchSpot());
     }
 
     /** Ends the game when its win condition is met. Default: one or no players left. */
@@ -461,7 +463,7 @@ public abstract class Minigame implements Stage, Activity, Spectatable, Listener
         plugin.getDeathEffect().play(player);
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
-        if (offMap(player.getLocation()) && spectatorSpawn() != null) player.teleport(watchSpot());
+        if (offMap(player.getLocation()) && spectatorSpawn() != null) Teleports.to(player, watchSpot());
         else player.setVelocity(new Vector(0, 0.3, 0));
         if (message != null) broadcast(message);
         Sounds.ELIMINATED.play(audience());

@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.games;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
@@ -98,7 +100,7 @@ public final class GauntletGame extends ArenaGame {
         queue.addAll(order);
         for (Player player : players) {
             bench(player);
-            player.teleport(watchSpot());
+            Teleports.to(player, watchSpot());
         }
         broadcast(Msg.text("Order: " + String.join(", ", order.stream().map(id -> participant(id).name).toList()), DialogPalette.MUTED));
     }

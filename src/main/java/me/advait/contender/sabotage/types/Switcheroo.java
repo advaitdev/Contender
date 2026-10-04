@@ -1,5 +1,7 @@
 package me.advait.contender.sabotage.types;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
 import me.advait.contender.dialog.DialogIcon;
@@ -49,8 +51,8 @@ public final class Switcheroo implements Sabotage {
         if (!first.getWorld().equals(second.getWorld())) return;
         Location a = first.getLocation(), b = second.getLocation();
         Vector va = first.getVelocity(), vb = second.getVelocity();
-        first.teleport(b);
-        second.teleport(a);
+        Teleports.to(first, b);
+        Teleports.to(second, a);
         first.setVelocity(vb);
         second.setVelocity(va);
         for (Player player : List.of(first, second)) {

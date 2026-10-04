@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.race;
 
+import me.advait.contender.util.Teleports;
+
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
@@ -124,7 +126,7 @@ public final class RaceEditor implements Listener, me.advait.contender.activity.
         }
         if (course.world() != null && !player.getWorld().equals(course.world()) && (course.start() != null || course.size() > 0)) {
             Location target = course.startLocation() != null ? course.startLocation() : course.checkpoints().getFirst().at(course.world());
-            player.teleport(target);
+            Teleports.to(player, target);
         }
         Session previous = sessions.get(player.getUniqueId());
         if (previous == null) {

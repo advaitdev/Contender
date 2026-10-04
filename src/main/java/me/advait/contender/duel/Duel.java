@@ -1,5 +1,7 @@
 package me.advait.contender.duel;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
 import me.advait.contender.activity.ActivityRegistry;
@@ -670,7 +672,7 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         if (player.isInsideVehicle()) player.leaveVehicle();
         service.allowTeleport(player.getUniqueId());
         try {
-            if (!player.teleport(destination)) return false;
+            if (!Teleports.to(player, destination)) return false;
         } finally { service.endTeleport(player.getUniqueId()); }
         player.setFallDistance(0);
         player.setVelocity(new Vector());

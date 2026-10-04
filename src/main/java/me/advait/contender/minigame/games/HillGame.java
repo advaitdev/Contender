@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.games;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
@@ -186,7 +188,7 @@ public final class HillGame extends ArenaGame {
         player.setVelocity(new org.bukkit.util.Vector());
         player.setFallDistance(0);
         player.setFireTicks(0);
-        player.teleport(ring.get(new Random().nextInt(ring.size())));
+        Teleports.to(player, ring.get(new Random().nextInt(ring.size())));
         protect(player, 40);
         Sounds.WHOOSH.play(player);
     }

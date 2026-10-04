@@ -1,5 +1,7 @@
 package me.advait.contender.vote;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.role.PlayerRole;
 import org.bukkit.Bukkit;
@@ -89,7 +91,7 @@ final class VoteRooms {
 
     private void move(Player player, Location spot, VoteService.RoomMode mode) {
         Location from = player.getLocation();
-        if (!player.teleport(spot)) return;
+        if (!Teleports.to(player, spot)) return;
         if (mode == VoteService.RoomMode.RETURN) {
             returns.put(player.getUniqueId(), from);
             sentTo.put(player.getUniqueId(), spot);
@@ -108,7 +110,7 @@ final class VoteRooms {
             Location room = sentTo.get(id);
             if (player == null || player.isDead() || !plugin.getRegistry().isFree(id) || room == null || location.getWorld() == null) return;
             if (!near(player, room) && (stage == null || !near(player, stage))) return;
-            player.teleport(location);
+            Teleports.to(player, location);
         });
         sentTo.clear();
     }

@@ -1,5 +1,7 @@
 package me.advait.contender.vote;
 
+import me.advait.contender.util.Teleports;
+
 import io.papermc.paper.entity.LookAnchor;
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
@@ -116,7 +118,7 @@ final class VoteReveal implements Activity, Listener {
             boolean far = !player.getWorld().equals(spot.getWorld()) || player.getLocation().distanceSquared(spot) > WALK_RANGE * WALK_RANGE;
             if (far) {
                 moving = true;
-                try { player.teleport(spot); } finally { moving = false; }
+                try { Teleports.to(player, spot); } finally { moving = false; }
                 placed.add(player.getUniqueId());
             }
         }
@@ -227,7 +229,7 @@ final class VoteReveal implements Activity, Listener {
                         snap.setYaw(player.getLocation().getYaw());
                         snap.setPitch(player.getLocation().getPitch());
                         moving = true;
-                        try { player.teleport(snap); } finally { moving = false; }
+                        try { Teleports.to(player, snap); } finally { moving = false; }
                     }
                     player.setVelocity(new Vector(0, Math.min(0, player.getVelocity().getY()), 0));
                     face(player, target);

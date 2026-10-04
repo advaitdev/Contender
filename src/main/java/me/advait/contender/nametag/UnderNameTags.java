@@ -23,13 +23,14 @@ import java.util.*;
  * A line under a player's name: what their game says about them (Manhunt's Runner or Hunter), and "17 ❤" when
  * their kit turns on Health Under Name, for example "Runner · 17 ❤".
  *
- * Each line is a text display that follows its player, between their head and their name. The scoreboard's
- * below-name line would be simpler, but the game only draws it within 10 blocks. Players don't see their own.
+ * Each line is a text display riding its player, between their head and their name, so it moves exactly with
+ * them. The scoreboard's below-name line would be simpler, but the game only draws it within 10 blocks. Players
+ * don't see their own.
  */
 public final class UnderNameTags extends Module {
     private static final Component HEART = Component.text("❤", NamedTextColor.RED);
     private static final Component DIVIDER = Component.text(" · ", NamedTextColor.GRAY);
-    /** How far above the top of the head the line sits, so it ends just under the name tag. */
+    /** How far above the passenger seat (the top of the head) the line sits, so it ends just under the name tag. */
     private static final double ABOVE_HEAD = 0.09;
     /** A little smaller than a name tag, so it fits between the head and the name. */
     private static final float SCALE = 0.85f;
@@ -61,16 +62,14 @@ public final class UnderNameTags extends Module {
             if (text == null) continue;
             UUID id = player.getUniqueId();
             active.add(id);
-            Location at = player.getLocation().add(0, player.getHeight() + ABOVE_HEAD, 0);
             TextDisplay display = displays.get(id);
             if (display == null || !display.isValid() || !display.getWorld().equals(player.getWorld())) {
                 if (display != null) display.remove();
-                display = spawn(player, at);
+                display = spawn(player, player.getLocation());
                 displays.put(id, display);
                 shown.remove(id);
-            } else {
-                display.teleport(at);
             }
+            me.advait.contender.display.Riders.keep(player, display);
             if (!text.equals(shown.get(id))) {
                 display.text(text);
                 shown.put(id, text);
@@ -110,9 +109,7 @@ public final class UnderNameTags extends Module {
             created.setDefaultBackground(true);
             created.setSeeThrough(true);
             created.setBrightness(new Display.Brightness(15, 15));
-            created.setTransformation(me.advait.contender.display.Holograms.scaled(SCALE));
-            // Players move smoothly over 3 ticks on other screens; match it so the line keeps up.
-            created.setTeleportDuration(3);
+            created.setTransformation(me.advait.contender.display.Holograms.transform(0, (float) ABOVE_HEAD, 0, SCALE, 0));
         });
         owner.hideEntity(plugin, display);
         return display;

@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.combo;
 
+import me.advait.contender.util.Teleports;
+
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
@@ -125,7 +127,7 @@ public final class ComboGame extends ArenaGame {
         // Turns follow the roster, which is in the order the director listed the players.
         for (Player player : players) {
             bench(player);
-            player.teleport(watchSpot());
+            Teleports.to(player, watchSpot());
         }
         for (Participant participant : roster.values()) participant.value = "Waiting";
         // Everyone online, so directors and the crew see it too, not just the players.
@@ -335,7 +337,7 @@ public final class ComboGame extends ArenaGame {
             Player online = Bukkit.getPlayer(id);
             if (online != null) {
                 bench(online);
-                online.teleport(watchSpot());
+                Teleports.to(online, watchSpot());
             }
             nextTurn = tick + 50;
             plugin.getStages().refreshDisplays();

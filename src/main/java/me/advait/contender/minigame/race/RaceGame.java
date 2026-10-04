@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.race;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
@@ -105,7 +107,7 @@ public final class RaceGame extends Minigame {
         Location start = course.startLocation();
         for (Player player : players) {
             normalize(player);
-            player.teleport(start);
+            Teleports.to(player, start);
             if (kit == null) RaceKit.give(player); else RaceKit.give(player, kit);
             progress.put(player.getUniqueId(), 0);
         }
@@ -208,7 +210,7 @@ public final class RaceGame extends Minigame {
     }
 
     private void returnPlayer(Player player) {
-        player.teleport(returnPoint(player));
+        Teleports.to(player, returnPoint(player));
         player.setVelocity(new Vector());
         player.setFallDistance(0);
         player.setFireTicks(0);

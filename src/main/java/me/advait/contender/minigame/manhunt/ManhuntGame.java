@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.manhunt;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.core.Msg;
 import me.advait.contender.core.Sounds;
@@ -113,7 +115,7 @@ public final class ManhuntGame extends Minigame {
             player.setGameMode(GameMode.SURVIVAL);
             player.setAllowFlight(false);
             player.setFlying(false);
-            player.teleport(spawn);
+            Teleports.to(player, spawn);
             player.setVelocity(new Vector());
             player.setFallDistance(0);
             player.setFireTicks(0);
@@ -193,7 +195,7 @@ public final class ManhuntGame extends Minigame {
 
     @Override protected void playerReturned(Player player, Participant participant) {
         player.setGameMode(GameMode.SPECTATOR);
-        player.teleport(spawns.getOrDefault(player.getUniqueId(), spectatorSpawn()));
+        Teleports.to(player, spawns.getOrDefault(player.getUniqueId(), spectatorSpawn()));
     }
 
     @Override protected void announceResults() {
@@ -247,7 +249,7 @@ public final class ManhuntGame extends Minigame {
         if (!(event.getEntity() instanceof Player victim) || !ours(victim)) return;
         if (!active(victim)) {
             event.setCancelled(true);
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> victim.teleport(watchSpot()));
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) tasks.later(1, () -> Teleports.to(victim, watchSpot()));
             return;
         }
         if (source != null && !source.equals(victim) && ours(source) && team(source.getUniqueId()) == team(victim.getUniqueId())) { event.setCancelled(true); return; }

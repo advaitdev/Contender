@@ -1,5 +1,7 @@
 package me.advait.contender.minigame.race;
 
+import me.advait.contender.util.Teleports;
+
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
@@ -172,7 +174,7 @@ public final class RaceType implements MinigameType, AutoCloseable {
         buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Go to Start", TEXT), null, true, WIDE, (p, view) -> {
             var start = require(id).startLocation();
             if (start == null) throw new IllegalStateException("Set the start first.");
-            p.teleport(start);
+            Teleports.to(p, start);
             p.closeDialog();
         }));
         buttons.add(dialogs.button(player, DialogIcon.BOARD.label("Rules", TEXT), null, true, WIDE, (p, view) -> rules(p, id)));

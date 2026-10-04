@@ -135,12 +135,15 @@ public final class JuggernautGame extends ArenaGame {
         player.setGlowing(true);
         player.setFireTicks(0);
         Holograms.remove(crown);
-        crown = Holograms.text(player.getLocation().add(0, player.getHeight() + 0.6, 0), Component.text("Juggernaut", theme.primary()), 0.01f,
+        // Rides the Juggernaut (Riders), floating above their name.
+        crown = Holograms.text(player.getLocation(), Component.text("Juggernaut", theme.primary()), 0.01f,
                 Display.Billboard.CENTER, theme.background(0), "juggernaut");
-        crown.setTeleportDuration(2);
+        crown.setTransformation(Holograms.transform(0, CROWN_HEIGHT, 0, 0.01f, 0));
+        crown.setTeleportDuration(0);
         player.hideEntity(plugin, crown);
+        me.advait.contender.display.Riders.keep(player, crown);
         TextDisplay created = crown;
-        tasks.later(2, () -> Holograms.animate(created, Holograms.scaled(1.4f), 6));
+        tasks.later(2, () -> Holograms.animate(created, Holograms.transform(0, CROWN_HEIGHT, 0, 1.4f, 0), 6));
         Component name = plugin.getNameTagManager().displayName(player);
         broadcast(from == null ? name.append(Msg.text(" is the first Juggernaut.", DialogPalette.TEXT))
                 : name.append(Msg.text(" took down ", DialogPalette.TEXT)).append(plugin.getNameTagManager().displayName(from))
@@ -163,12 +166,13 @@ public final class JuggernautGame extends ArenaGame {
         player.setGlowing(false);
     }
 
+    /** How far above the top of the Juggernaut's head the crown floats, above their name. */
+    private static final float CROWN_HEIGHT = 0.6f;
+
     private void follow() {
         Player player = juggernaut == null ? null : Bukkit.getPlayer(juggernaut);
         if (player == null || crown == null || !crown.isValid()) return;
-        Location at = player.getLocation().add(0, player.getHeight() + 0.6, 0);
-        if (!at.getWorld().equals(crown.getWorld())) return;
-        crown.teleport(at);
+        me.advait.contender.display.Riders.keep(player, crown);
     }
 
     // ---- Play ----------------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 package me.advait.contender.interview;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
 import me.advait.contender.activity.ActivityRegistry;
@@ -133,7 +135,7 @@ public final class InterviewService extends Module implements Activity {
         returns.putIfAbsent(player.getUniqueId(), new Return(player.getLocation(), player.getGameMode()));
         save();
         if (player.isInsideVehicle()) player.leaveVehicle();
-        if (!player.teleport(destination)) throw new IllegalStateException("Could not move " + player.getName() + " into the interview room.");
+        if (!Teleports.to(player, destination)) throw new IllegalStateException("Could not move " + player.getName() + " into the interview room.");
         if (player.getGameMode() == GameMode.SPECTATOR && plugin.getRoleManager().getRole(player.getUniqueId()) != me.advait.contender.role.PlayerRole.SPECTATOR) {
             player.setGameMode(GameMode.ADVENTURE);
         }
@@ -159,7 +161,7 @@ public final class InterviewService extends Module implements Activity {
         Location destination = saved.location();
         World world = destination.getWorld();
         if (world == null || plugin.getArenas().isArenaWorld(world)) destination = plugin.getLobby().location();
-        if (destination != null && player.teleport(destination)) {
+        if (destination != null && Teleports.to(player, destination)) {
             player.setGameMode(saved.mode() == GameMode.SPECTATOR && plugin.getRoleManager().getRole(player.getUniqueId()) != me.advait.contender.role.PlayerRole.SPECTATOR
                     ? GameMode.SURVIVAL : saved.mode());
             plugin.getLobby().applyRoleMode(player);

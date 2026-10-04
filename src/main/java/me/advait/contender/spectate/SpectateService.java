@@ -1,5 +1,7 @@
 package me.advait.contender.spectate;
 
+import me.advait.contender.util.Teleports;
+
 import me.advait.contender.Contender;
 import me.advait.contender.activity.Activity;
 import me.advait.contender.activity.ActivityRegistry;
@@ -85,7 +87,7 @@ public final class SpectateService extends Module implements Activity {
 
     private boolean move(Player player, Location destination) {
         moving.add(player.getUniqueId());
-        try { return player.teleport(destination); }
+        try { return Teleports.to(player, destination); }
         finally { moving.remove(player.getUniqueId()); }
     }
 

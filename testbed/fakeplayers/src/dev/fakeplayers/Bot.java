@@ -214,7 +214,7 @@ public class Bot extends ServerPlayer {
 
     /** Chase and punch the nearest player. Returns false if nobody is near. */
     private boolean fightTick() {
-        Player target = this.level().getNearestPlayer(this.getX(), this.getY(), this.getZ(), 24.0,
+        Player target = this.level().getNearestPlayer(this.getX(), this.getY(), this.getZ(), 64.0,
                 e -> e != this && e.isAlive() && !e.isSpectator() && !((Player) e).isCreative() && !e.isInvisible());
         if (target == null) return false;
         double dx = target.getX() - this.getX(), dz = target.getZ() - this.getZ();

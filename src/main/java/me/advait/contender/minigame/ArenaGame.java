@@ -74,8 +74,25 @@ public abstract class ArenaGame extends Minigame implements ArenaActivity {
 
 
     /** Spawn points around the middle of the arena, one per player. */
+    /**
+     * At least {@code count} spawn spots: the map's FFA spawns in a random order (repeated when there are more
+     * players than spawns), or a ring through both team spawns when the map has none. Picking one at random
+     * picks a random FFA spawn.
+     */
     protected List<Location> spawnRing(int count) {
-        return SpawnRing.around(arena.layout().getTeam1Spawn(), arena.layout().getTeam2Spawn(), Math.max(2, count));
+        return spawnSpots(arena.layout(), count);
+    }
+
+    public static List<Location> spawnSpots(ArenaMap layout, int count) {
+        List<Location> ffa = layout.getFfaSpawns();
+        if (ffa.isEmpty()) return SpawnRing.around(layout.getTeam1Spawn(), layout.getTeam2Spawn(), Math.max(2, count));
+        List<Location> spots = new ArrayList<>();
+        while (spots.size() < Math.max(1, count)) {
+            List<Location> round = new ArrayList<>(ffa);
+            Collections.shuffle(round);
+            for (Location spot : round) spots.add(spot.clone());
+        }
+        return spots;
     }
 
     /** The middle of the arena between the two team spawns. */

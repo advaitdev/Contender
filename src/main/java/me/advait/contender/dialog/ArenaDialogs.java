@@ -75,7 +75,7 @@ public final class ArenaDialogs {
                     result.whenComplete((map, failure) -> {
                         if (!p.isOnline()) return;
                         if (failure != null) Dialogs.error(p, Dialogs.message(failure));
-                        else { Dialogs.tell(p, map.getDisplayName() + " saved. Now set both team spawns."); edit(p, map.getId()); }
+                        else { Dialogs.tell(p, map.getDisplayName() + " saved. Now set both team spawns."); spawns(p, map.getId()); }
                     });
                 }), NAV);
         dialogs.show(player, "New Map", List.of(DialogBody.plainMessage(DialogText.lines(
@@ -92,30 +92,11 @@ public final class ArenaDialogs {
                 DialogText.lines(
                         spawnLine("Team 1 spawn", map.getTeam1Point() != null),
                         spawnLine("Team 2 spawn", map.getTeam2Point() != null),
-                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS),
-                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS)),
-                DialogText.detail("Copies", plugin.getArenas().readiness(id), plugin.getArenas().ready(id) > 0 ? SUCCESS : WARNING),
-                DialogText.muted("Stand on a spawn and face the right way, then click its button."));
+                        DialogText.detail("FFA spawns", ffaCount(map), map.getFfaPoints().isEmpty() ? MUTED : SUCCESS)),
+                DialogText.detail("Copies", plugin.getArenas().readiness(id), plugin.getArenas().ready(id) > 0 ? SUCCESS : WARNING));
         List<ActionButton> buttons = new ArrayList<>();
-        for (String side : List.of("1", "2", "spectator")) {
-            String label = side.equals("spectator") ? "Set Spectator Spawn Here" : "Set Team " + side + " Spawn Here";
-            buttons.add(dialogs.button(player, DialogIcon.SPAWN.label(label, TEXT), null, true, WIDE, (p, view) -> {
-                plugin.getArenas().setSpawn(map(id), side, p.getLocation());
-                Dialogs.tell(p, side.equals("spectator") ? "Spectator spawn saved." : "Team " + side + " spawn saved.");
-                edit(p, id);
-            }));
-        }
-        buttons.add(dialogs.button(player, DialogIcon.CROWN.label("Set Hill Here", TEXT),
-                DialogText.muted("King of the Hill's hill is a circle around where you stand. Without one, it's the middle of the map."), true, WIDE, (p, view) -> {
-                    plugin.getArenas().setSpawn(map(id), "hill", p.getLocation());
-                    Dialogs.tell(p, "Hill saved. It's a circle around this spot.");
-                    edit(p, id);
-                }));
-        if (map.getHillPoint() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Middle for the Hill", TEXT), null, true, WIDE, (p, view) -> {
-            plugin.getArenas().clearHill(map(id));
-            Dialogs.tell(p, "The hill is back in the middle of the map.");
-            edit(p, id);
-        }));
+        buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Spawns", ACCENT), DialogText.muted("Team spawns, FFA spawns, the spectator spawn and the hill."),
+                true, WIDE, (p, view) -> spawns(p, id)));
         buttons.add(dialogs.button(player, DialogIcon.SAVE.label("Save Current Blocks", TEXT), DialogText.muted("Use after changing the original map. Copies update automatically."), true, WIDE, (p, view) -> {
             var result = plugin.getArenas().saveBlocks(map(id));
             p.closeDialog();
@@ -131,6 +112,62 @@ public final class ArenaDialogs {
         buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Refresh", TEXT), DialogText.muted("Update the copy progress."), true, WIDE, (p, view) -> edit(p, id)));
         dialogs.show(player, map.getDisplayName(), List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV,
                 dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)));
+    }
+
+    private static String ffaCount(ArenaMap map) {
+        int count = map.getFfaPoints().size();
+        return count == 0 ? "None, so a ring between the team spawns" : count + (count == 1 ? " spawn" : " spawns");
+    }
+
+    /** Stand somewhere and click: team spawns, FFA spawns (as many as you like), the spectator spawn and the hill. */
+    public void spawns(Player player, String id) {
+        ArenaMap map = map(id);
+        Component body = DialogText.paragraphs(
+                DialogText.lines(
+                        spawnLine("Team 1 spawn", map.getTeam1Point() != null),
+                        spawnLine("Team 2 spawn", map.getTeam2Point() != null),
+                        DialogText.detail("FFA spawns", ffaCount(map), map.getFfaPoints().isEmpty() ? MUTED : SUCCESS),
+                        DialogText.detail("Spectator spawn", map.getSpectatorPoint() == null ? "Uses team 1" : "Set", map.getSpectatorPoint() == null ? MUTED : SUCCESS),
+                        DialogText.detail("Hill", map.getHillPoint() == null ? "Middle of the map" : "Set", map.getHillPoint() == null ? MUTED : SUCCESS)),
+                DialogText.muted("Stand on a spot and face the right way, then click its button."));
+        List<ActionButton> buttons = new ArrayList<>();
+        for (String side : List.of("1", "2")) {
+            buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Set Team " + side + " Spawn Here", TEXT), null, true, WIDE, (p, view) -> {
+                plugin.getArenas().setSpawn(map(id), side, p.getLocation());
+                Dialogs.tell(p, "Team " + side + " spawn saved.");
+                spawns(p, id);
+            }));
+        }
+        buttons.add(dialogs.button(player, DialogIcon.PLAYERS.label("Add FFA Spawn Here", TEXT),
+                DialogText.muted("Free-for-all games start and respawn players at a random FFA spawn. Add as many as you like."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().setSpawn(map(id), "ffa", p.getLocation());
+                    Dialogs.tell(p, "FFA spawn " + map(id).getFfaPoints().size() + " saved.");
+                    spawns(p, id);
+                }));
+        if (!map.getFfaPoints().isEmpty()) buttons.add(dialogs.button(player, DialogIcon.CLOSE.label("Remove All FFA Spawns", DANGER),
+                DialogText.muted("Free-for-all games go back to a ring between the team spawns."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().clearFfaSpawns(map(id));
+                    Dialogs.tell(p, "FFA spawns removed.");
+                    spawns(p, id);
+                }));
+        buttons.add(dialogs.button(player, DialogIcon.SPAWN.label("Set Spectator Spawn Here", TEXT), null, true, WIDE, (p, view) -> {
+            plugin.getArenas().setSpawn(map(id), "spectator", p.getLocation());
+            Dialogs.tell(p, "Spectator spawn saved.");
+            spawns(p, id);
+        }));
+        buttons.add(dialogs.button(player, DialogIcon.CROWN.label("Set Hill Here", TEXT),
+                DialogText.muted("King of the Hill's hill is a circle around where you stand. Without one, it's the middle of the map."), true, WIDE, (p, view) -> {
+                    plugin.getArenas().setSpawn(map(id), "hill", p.getLocation());
+                    Dialogs.tell(p, "Hill saved. It's a circle around this spot.");
+                    spawns(p, id);
+                }));
+        if (map.getHillPoint() != null) buttons.add(dialogs.button(player, DialogIcon.REFRESH.label("Use the Middle for the Hill", TEXT), null, true, WIDE, (p, view) -> {
+            plugin.getArenas().clearHill(map(id));
+            Dialogs.tell(p, "The hill is back in the middle of the map.");
+            spawns(p, id);
+        }));
+        dialogs.show(player, "Spawns", List.of(DialogBody.plainMessage(body, 320)), List.of(), buttons, 1, NAV,
+                dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> edit(p, id)));
     }
 
     private static Component spawnLine(String label, boolean set) {

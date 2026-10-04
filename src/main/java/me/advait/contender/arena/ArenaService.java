@@ -441,8 +441,16 @@ public final class ArenaService extends Module {
             case "2" -> map.setTeam2Spawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "spectator" -> map.setSpectatorSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             case "hill" -> map.setHill(location.getX(), location.getY(), location.getZ());
+            case "ffa" -> map.addFfaSpawn(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             default -> throw new IllegalArgumentException("Choose team 1, team 2, spectator, or hill.");
         }
+        maps.save(map);
+        rebuildPool(map);
+    }
+
+    /** Free-for-all games go back to the ring through the team spawns. */
+    public void clearFfaSpawns(ArenaMap map) {
+        map.clearFfaSpawns();
         maps.save(map);
         rebuildPool(map);
     }

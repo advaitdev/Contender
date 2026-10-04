@@ -67,6 +67,14 @@ public class MapManager {
                 );
             }
 
+            for (var point : section.getMapList("ffa-spawns")) {
+                try {
+                    map.addFfaSpawn(((Number) point.get("x")).doubleValue(), ((Number) point.get("y")).doubleValue(), ((Number) point.get("z")).doubleValue(),
+                            point.get("yaw") instanceof Number yaw ? yaw.floatValue() : 0, point.get("pitch") instanceof Number pitch ? pitch.floatValue() : 0);
+                } catch (RuntimeException invalid) {
+                    plugin.getLogger().warning("Skipping an invalid FFA spawn on map " + id + ".");
+                }
+            }
             ConfigurationSection hill = section.getConfigurationSection("hill");
             if (hill != null) map.setHill(hill.getDouble("x"), hill.getDouble("y"), hill.getDouble("z"));
 
@@ -126,6 +134,8 @@ public class MapManager {
             writeSpawn(config, path + ".team2-spawn", entry.getTeam2Point());
             writeSpawn(config, path + ".spectator-spawn", entry.getSpectatorPoint());
             writeSpawn(config, path + ".hill", entry.getHillPoint());
+            if (!entry.getFfaPoints().isEmpty()) config.set(path + ".ffa-spawns", entry.getFfaPoints().stream()
+                    .map(point -> java.util.Map.of("x", point.x(), "y", point.y(), "z", point.z(), "yaw", (double) point.yaw(), "pitch", (double) point.pitch())).toList());
             BlockBounds b = entry.getBounds();
             if (b != null) {
                 config.set(path + ".rollback-region.corner1.x", b.minX());

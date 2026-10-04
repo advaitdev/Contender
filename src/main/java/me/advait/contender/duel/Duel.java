@@ -229,7 +229,8 @@ public final class Duel implements Activity, ArenaActivity, me.advait.contender.
         if (settings.freeForAll()) {
             List<UUID> order = new ArrayList<>(teamOf.keySet());
             Collections.shuffle(order);
-            List<Location> ring = SpawnRing.around(layout.getTeam1Spawn(), layout.getTeam2Spawn(), order.size());
+            // The map's FFA spawns, shuffled, or a ring through the team spawns.
+            List<Location> ring = me.advait.contender.minigame.ArenaGame.spawnSpots(layout, order.size());
             for (int i = 0; i < order.size(); i++) spawns.put(order.get(i), ring.get(i));
         } else {
             for (DuelTeam team : teams) {

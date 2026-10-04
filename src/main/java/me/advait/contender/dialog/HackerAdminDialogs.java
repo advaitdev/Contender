@@ -56,7 +56,8 @@ public final class HackerAdminDialogs {
         body.add(DialogBody.plainMessage(DialogText.lines(
                 DialogText.detail("Who picks the hacks", hackers.mode() == HackerService.Mode.SELF ? "Each hacker" : "You, for each event"),
                 hackers.mode() == HackerService.Mode.DIRECTOR
-                        ? DialogText.detail("Hacks", hackers.planActive() ? "On now" : "Turn on when the next event starts", hackers.planActive() ? SUCCESS : MUTED)
+                        ? DialogText.lines(DialogText.detail("Hacks", hackers.planActive() ? "On now" : "Turn on when the next event starts", hackers.planActive() ? SUCCESS : MUTED),
+                                DialogText.detail("Between events", hackers.ownBetweenEvents() ? "Their own hacks" : "No hacks"))
                         : DialogText.muted("Hackers change their hacks with /hacks.")), 360));
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(button(player, DialogIcon.PLAYERS, "Choose Hackers", ACCENT, "Pick or remove the secret hackers.", p -> choose(p, new LinkedHashSet<>(hackers.hackers().keySet()), 0)));
@@ -68,15 +69,34 @@ public final class HackerAdminDialogs {
                     hackers.planActive() ? "Turn Hacks Off Now" : "Turn Hacks On Now", TEXT,
                     "Hacks also switch on and off with each event.", p -> { plugin.getHackers().activatePlan(!plugin.getHackers().planActive()); open(p); }));
         }
-        buttons.add(button(player, DialogIcon.REFRESH, hackers.mode() == HackerService.Mode.SELF ? "Let Me Pick Each Event's Hacks" : "Let Hackers Pick Their Own",
-                TEXT, "Switch who controls the hacks.", p -> {
-                    plugin.getHackers().setMode(plugin.getHackers().mode() == HackerService.Mode.SELF ? HackerService.Mode.DIRECTOR : HackerService.Mode.SELF);
-                    open(p);
-                }));
+        buttons.add(button(player, DialogIcon.REFRESH, "Who Picks the Hacks", TEXT, "You for each event, or each hacker.", this::whoPicks));
         buttons.add(button(player, DialogIcon.SKULL, "Sabotage Settings", TEXT, "Turn sabotages on and choose which ones hackers can use.",
                 p -> new SabotageDialogs(plugin).settings(p, this::open)));
         dialogs.show(player, "Hacker Controls", body, List.of(), buttons, 1, NAV, back == null ? null
                 : dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> back.accept(p)));
+    }
+
+    /** Each hacker picks, or you pick each event's hacks (with hackers' own hacks, or none, between events). */
+    private void whoPicks(Player player) {
+        HackerService hackers = plugin.getHackers();
+        record Choice(String label, String hint, HackerService.Mode mode, boolean ownBetween) { }
+        List<Choice> choices = List.of(
+                new Choice("Hackers Pick Their Own", "Each hacker sets their hacks with /hacks, any time.", HackerService.Mode.SELF, true),
+                new Choice("You Pick, Their Own Between Events", "Your hacks switch on with each event. Between events, hackers use their own.", HackerService.Mode.DIRECTOR, true),
+                new Choice("You Pick, No Hacks Between Events", "Your hacks switch on with each event. Between events, nobody has hacks.", HackerService.Mode.DIRECTOR, false));
+        List<ActionButton> buttons = new ArrayList<>();
+        for (Choice choice : choices) {
+            boolean current = hackers.mode() == choice.mode() && (choice.mode() == HackerService.Mode.SELF || hackers.ownBetweenEvents() == choice.ownBetween());
+            Component label = DialogIcon.PLAYERS.label(choice.label(), current ? ACCENT : TEXT);
+            if (current) label = label.append(Component.space()).append(DialogIcon.SAVE.sprite());
+            buttons.add(dialogs.button(player, label, DialogText.muted(choice.hint()), true, WIDE, (p, view) -> {
+                if (plugin.getHackers().mode() != choice.mode()) plugin.getHackers().setMode(choice.mode());
+                if (choice.mode() == HackerService.Mode.DIRECTOR) plugin.getHackers().setOwnBetweenEvents(choice.ownBetween());
+                whoPicks(p);
+            }));
+        }
+        dialogs.show(player, "Who Picks the Hacks", List.of(DialogBody.plainMessage(DialogText.muted("Hackers are told when this changes."), 320)),
+                List.of(), buttons, 1, NAV, dialogs.button(player, DialogIcon.BACK.label("Back", MUTED), null, true, NAV, (p, view) -> open(p)));
     }
 
     private ActionButton button(Player player, DialogIcon icon, String label, net.kyori.adventure.text.format.TextColor color, String hint,

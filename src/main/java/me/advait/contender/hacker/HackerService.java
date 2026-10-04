@@ -46,6 +46,8 @@ public final class HackerService extends Module implements StageService.Listener
     private HackSettings sharedPlan = HackSettings.defaults();
     private Mode mode = Mode.SELF;
     private boolean planActive;
+    /** In DIRECTOR mode, whether hackers use (and can change) their own hacks between events. */
+    private boolean ownBetweenEvents = true;
 
     public HackerService(Contender plugin) {
         super(plugin);
@@ -68,6 +70,10 @@ public final class HackerService extends Module implements StageService.Listener
 
     public Mode mode() { return mode; }
     public boolean planActive() { return planActive; }
+    public boolean ownBetweenEvents() { return ownBetweenEvents; }
+
+    /** Whether hackers can change their own hacks right now: always when they pick, or between events if allowed. */
+    public boolean choosingOwn() { return mode == Mode.SELF || !planActive && ownBetweenEvents; }
     public HackSettings sharedPlan() { return sharedPlan; }
     public HackSettings plan(UUID hacker) { return plans.getOrDefault(hacker, sharedPlan); }
     public boolean hasOwnPlan(UUID hacker) { return plans.containsKey(hacker); }
@@ -83,7 +89,8 @@ public final class HackerService extends Module implements StageService.Listener
     public HackSettings effective(UUID id) {
         if (!isEnabled() || !isHacker(id)) return null;
         if (mode == Mode.SELF) return hackers.get(id).own();
-        return planActive ? plan(id) : null;
+        if (planActive) return plan(id);
+        return ownBetweenEvents ? hackers.get(id).own() : null;
     }
 
     public void refresh() {
@@ -127,7 +134,7 @@ public final class HackerService extends Module implements StageService.Listener
     public void setOwn(Player player, HackSettings settings) {
         Profile current = hackers.get(player.getUniqueId());
         if (current == null || !isHacker(player.getUniqueId())) throw new IllegalStateException("Only hackers can change hacks.");
-        if (mode == Mode.DIRECTOR) throw new IllegalStateException("The director is choosing hacks for this event.");
+        if (!choosingOwn()) throw new IllegalStateException("The director is choosing hacks for this event.");
         hackers.put(player.getUniqueId(), new Profile(current.name(), settings));
         save();
         refresh();
@@ -162,6 +169,18 @@ public final class HackerService extends Module implements StageService.Listener
         if (planActive) tellPlan(Set.of(hacker));
     }
 
+    /** In DIRECTOR mode: whether hackers use their own hacks between events, or none. */
+    public void setOwnBetweenEvents(boolean allowed) {
+        ownBetweenEvents = allowed;
+        save();
+        refresh();
+        if (mode != Mode.DIRECTOR || planActive) return;
+        for (UUID id : hackers.keySet()) {
+            Player player = plugin.getServer().getPlayer(id);
+            if (player != null && isHacker(id)) Msg.hint(player, allowed ? "Between events you can pick your own hacks with /hacks." : "Your hacks are off until the next event.");
+        }
+    }
+
     /** Turns the plan on or off without waiting for an event to start or end. */
     public void activatePlan(boolean active) {
         if (mode != Mode.DIRECTOR) throw new IllegalStateException("Switch to director-chosen hacks first.");
@@ -172,7 +191,8 @@ public final class HackerService extends Module implements StageService.Listener
         if (active) tellPlan(hackers.keySet());
         else for (UUID id : hackers.keySet()) {
             Player player = plugin.getServer().getPlayer(id);
-            if (player != null && isHacker(id)) Msg.hint(player, "Your hacks are off.");
+            if (player != null && isHacker(id)) Msg.hint(player, ownBetweenEvents
+                    ? "The event's hacks are off. Your own hacks are back on; change them with /hacks." : "Your hacks are off.");
         }
     }
 
@@ -203,6 +223,7 @@ public final class HackerService extends Module implements StageService.Listener
         Component subtitle = teammates.isEmpty() ? Component.empty() : Component.text("Your teammates: " + String.join(", ", teammates), NamedTextColor.RED);
         Msg.title(player, Component.text("You are the hacker.", NamedTextColor.RED), subtitle, 6, 100, 12);
         player.sendMessage(Msg.text(mode == Mode.SELF ? "Open /hacks to choose your hacks. Only you can see them."
+                : ownBetweenEvents ? "The director will choose your hacks for each event. Between events, pick your own with /hacks."
                 : "The director will choose your hacks for each event. Check /hacks to see them.", DialogPalette.MUTED));
         unannounced.remove(id);
         save();
@@ -215,6 +236,7 @@ public final class HackerService extends Module implements StageService.Listener
         try { mode = Mode.valueOf(yaml.getString("mode", "SELF").toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException invalid) { mode = Mode.SELF; }
         planActive = false;
+        ownBetweenEvents = yaml.getBoolean("own-between-events", true);
         sharedPlan = read(yaml.getConfigurationSection("plan.shared"));
         ConfigurationSection perPlayer = yaml.getConfigurationSection("plan.players");
         if (perPlayer != null) for (String key : perPlayer.getKeys(false)) {
@@ -247,6 +269,7 @@ public final class HackerService extends Module implements StageService.Listener
     private void save() {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("mode", mode.name().toLowerCase(Locale.ROOT));
+        yaml.set("own-between-events", ownBetweenEvents);
         write(yaml, "plan.shared", sharedPlan);
         plans.forEach((id, settings) -> write(yaml, "plan.players." + id, settings));
         hackers.forEach((id, profile) -> {

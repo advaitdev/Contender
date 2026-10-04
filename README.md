@@ -115,7 +115,9 @@ Set the two marks once with `/setinterviewerposition` and `/setintervieweepositi
 There are two modes:
 
 - **Hackers choose.** Hackers open `/hacks` and set their own.
-- **Director chooses.** You pick each hacker's hacks in **Hacks for This Event**. They switch on when an event starts and off when it ends, and hackers can only look.
+- **Director chooses.** You pick each hacker's hacks in **Hacks for This Event**. They switch on when an event starts and off when it ends, and hackers can only look while an event runs. Between events, hackers use and change their own hacks with `/hacks` (**You Pick, Their Own Between Events**, the default), or have none (**You Pick, No Hacks Between Events**).
+
+Switch between these in `/hackers` → **Who Picks the Hacks**.
 
 ### Sabotage
 

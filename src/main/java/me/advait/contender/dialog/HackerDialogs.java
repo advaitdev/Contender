@@ -30,11 +30,14 @@ public final class HackerDialogs {
             Dialogs.error(player, "Only the hackers can open this menu.");
             return;
         }
-        if (hackers.mode() == HackerService.Mode.SELF) {
+        if (hackers.choosingOwn()) {
             List<HackEditor.Extra> extras = plugin.getSabotage().available(player)
                     ? List.of(new HackEditor.Extra(DialogIcon.SKULL, "Sabotage", "Change the rules for everyone in this event.", p -> new SabotageDialogs(plugin).open(p)))
                     : List.of();
-            new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", List.of(),
+            // Between events in director mode: these are theirs until the director's hacks take over.
+            List<Component> header = hackers.mode() == HackerService.Mode.SELF ? List.of()
+                    : List.of(DialogText.muted("Between events, so these are up to you. The director's hacks take over when the next event starts."));
+            new HackEditor(plugin, false).grid(player, new HackEditor.Target("Hacks", header,
                     p -> require(p).profile(p.getUniqueId()).own(),
                     (p, settings) -> require(p).setOwn(p, settings), null, extras));
             return;
@@ -50,6 +53,7 @@ public final class HackerDialogs {
         Component state = hackers.planActive()
                 ? text("On now", SUCCESS)
                 : text("Off until the next event starts", MUTED);
+        if (hackers.planActive() && hackers.ownBetweenEvents()) state = DialogText.lines(state, DialogText.muted("You can pick your own again once this event ends."));
         body.add(DialogBody.plainMessage(DialogText.lines(DialogText.muted("The director chooses your hacks for each event."), state), 320));
         body.add(DialogBody.plainMessage(DialogText.lines(text(hackers.planActive() ? "Your hacks" : "Planned for next event", ACCENT),
                 text(plan.active().isEmpty() ? "Nothing yet" : String.join("\n", plan.active().stream()

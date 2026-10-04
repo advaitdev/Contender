@@ -53,6 +53,10 @@ public final class ArenaService extends Module {
     private final Map<ArenaCopy, List<CompletableFuture<Void>>> urgent = new LinkedHashMap<>();
     private final Map<Integer, String> trusted = new HashMap<>();
     private ArenaCopy pasting;
+    /** Background paste time spent on each map since startup, so big maps can't hold small ones up. */
+    private final Map<String, Long> pasteMillis = new HashMap<>();
+    /** How long each map's last background paste took. */
+    private final Map<String, Long> lastPasteMillis = new HashMap<>();
     private static final long PASTE_LOG_MILLIS = Long.getLong("contender.pasteLogMillis", 2000);
     private boolean closed;
 
@@ -81,6 +85,11 @@ public final class ArenaService extends Module {
         applyRules(world);
         readState();
         for (ArenaMap map : maps.getMaps()) rebuildPool(map);
+        int total = pools.values().stream().mapToInt(List::size).sum();
+        long reused = pools.values().stream().flatMap(List::stream).filter(copy -> copy.status() == ArenaCopy.Status.READY).count();
+        if (total > 0) plugin.getLogger().info(reused == total ? "Reusing all " + total + " arena copies from the last clean shutdown."
+                : "Reusing " + reused + " of " + total + " arena copies; pasting the rest in the background."
+                + (reused == 0 ? " (Copies are only reused after a clean /stop.)" : ""));
         // Copies saved on a clean stop are reused without pasting, so nothing would read the schematics until the
         // first round reset of the show, which would then wait for it. Read them now in the background instead.
         for (ArenaMap map : maps.getMaps()) if (map.isComplete()) template(map);
@@ -136,6 +145,24 @@ public final class ArenaService extends Module {
         return null;
     }
 
+    /** How many blocks the player's WorldEdit selection holds, or -1 without one. */
+    public long selectionVolume(Player player) {
+        try {
+            var actor = BukkitAdapter.adapt(player);
+            return WorldEdit.getInstance().getSessionManager().get(actor).getSelection(actor.getWorld()).getVolume();
+        } catch (Exception none) {
+            return -1;
+        }
+    }
+
+    /** A sensible copy count for a map this big: big maps take long to paste, and few games use them at once. */
+    public int suggestedCopies(long volume) {
+        int normal = Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100);
+        if (volume > 4_000_000) return Math.min(normal, 2);
+        if (volume > 1_000_000) return Math.min(normal, 4);
+        return normal;
+    }
+
     /** A one-line status for dialogs and error messages. */
     public String readiness(String mapId) {
         ArenaMap map = maps.getMap(mapId);
@@ -148,7 +175,11 @@ public final class ArenaService extends Module {
         StringBuilder text = new StringBuilder(ready + " of " + copies.size() + " ready");
         if (inUse > 0) text.append(", ").append(inUse).append(" in use");
         long waiting = copies.stream().filter(c -> c.status() == ArenaCopy.Status.WAITING || c.status() == ArenaCopy.Status.PASTING).count();
-        if (waiting > 0) text.append(", ").append(waiting).append(" preparing");
+        if (waiting > 0) {
+            text.append(", ").append(waiting).append(" preparing");
+            Long last = lastPasteMillis.get(mapId);
+            if (last != null && last >= 1000) text.append(" (about ").append(Math.round(last / 1000.0)).append("s each)");
+        }
         String failure = templateFailures.get(mapId);
         if (failure == null) failure = copies.stream().map(ArenaCopy::failure).filter(Objects::nonNull).findFirst().orElse(null);
         if (failure != null) text.append(". Retrying: ").append(failure);
@@ -250,20 +281,32 @@ public final class ArenaService extends Module {
         paste(next, template, clipboard, forRound);
     }
 
+    /**
+     * The next copy to paste in the background. Every map gets its first two ready copies before any map gets
+     * more; after that the map with the least paste time spent so far goes next, so a huge map fills slowly in
+     * the background while small maps fill quickly.
+     */
     private ArenaCopy nextBackgroundCopy(long now) {
         ArenaCopy best = null;
-        int bestReady = Integer.MAX_VALUE;
+        int bestTier = Integer.MAX_VALUE;
+        long bestSpent = Long.MAX_VALUE;
         for (var entry : pools.entrySet()) {
-            if (saving.contains(entry.getKey()) || templateFailures.containsKey(entry.getKey()) && !templateRetryDue(entry.getKey(), now)) continue;
-            int readyCount = ready(entry.getKey());
+            String mapId = entry.getKey();
+            if (saving.contains(mapId) || templateFailures.containsKey(mapId) && !templateRetryDue(mapId, now)) continue;
+            ArenaCopy candidate = null;
             for (ArenaCopy copy : entry.getValue()) {
                 boolean needsPaste = copy.status() == ArenaCopy.Status.WAITING
                         || copy.status() == ArenaCopy.Status.FAILED && copy.retryDue(now);
-                if (needsPaste && !copy.retired() && empty(copy) && readyCount < bestReady) {
-                    best = copy;
-                    bestReady = readyCount;
-                    break;
-                }
+                if (needsPaste && !copy.retired() && empty(copy)) { candidate = copy; break; }
+            }
+            if (candidate == null) continue;
+            int readyCount = ready(mapId);
+            int tier = readyCount == 0 ? 0 : readyCount < 2 ? 1 : 2;
+            long spent = pasteMillis.getOrDefault(mapId, 0L);
+            if (tier < bestTier || tier == bestTier && spent < bestSpent) {
+                best = candidate;
+                bestTier = tier;
+                bestSpent = spent;
             }
         }
         return best;
@@ -337,6 +380,10 @@ public final class ArenaService extends Module {
                 trusted.put(copy.slot(), schematic);
             }
             long millis = (System.nanoTime() - started) / 1_000_000;
+            if (!forRound) {
+                pasteMillis.merge(copy.mapId(), millis, Long::sum);
+                lastPasteMillis.put(copy.mapId(), millis);
+            }
             if (millis > PASTE_LOG_MILLIS) plugin.getLogger().info("Pasted " + copy.mapId() + " copy " + copy.slot() + " in " + millis + " ms (loading chunks "
                     + (stages[0] - started) / 1_000_000 + " ms, pasting " + (stages[1] - stages[0]) / 1_000_000 + " ms).");
             tasks.later(1, this::work);

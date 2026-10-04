@@ -64,13 +64,27 @@ public final class InterviewService extends Module implements Activity {
 
     public void setPosition(String role, Location location) {
         if (plugin.getArenas().isArenaWorld(location.getWorld())) throw new IllegalArgumentException("Set interview positions outside the arena world.");
-        plugin.getConfig().set("interview." + role, location);
+        // Plain coordinates, so the spot still loads when its world isn't loaded yet at startup.
+        var config = plugin.getConfig();
+        String path = "interview." + role;
+        config.set(path, null);
+        config.set(path + ".world", location.getWorld().getName());
+        config.set(path + ".x", location.getX());
+        config.set(path + ".y", location.getY());
+        config.set(path + ".z", location.getZ());
+        config.set(path + ".yaw", (double) location.getYaw());
+        config.set(path + ".pitch", (double) location.getPitch());
         plugin.saveConfig();
     }
 
+    /** The saved spot, or null when it isn't set or its world isn't loaded. */
     public Location position(String role) {
-        Location location = plugin.getConfig().getLocation("interview." + role);
-        return location == null || location.getWorld() == null ? null : location;
+        var section = plugin.getConfig().getConfigurationSection("interview." + role);
+        if (section == null) return null;
+        org.bukkit.World world = plugin.getServer().getWorld(section.getString("world", ""));
+        if (world == null) return null;
+        return new Location(world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
+                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"));
     }
 
     // ---- Interviews ----------------------------------------------------------------------------

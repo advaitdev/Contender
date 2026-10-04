@@ -155,6 +155,33 @@ public class Probe extends JavaPlugin implements Listener {
                     for (var copy : c().getArenas().copies(a[1])) line.append(' ').append(copy.slot()).append('=').append(copy.status()).append(copy.isDirty() ? "*" : "");
                     s.sendMessage(line.toString());
                 }
+                case "verifycopies" -> {
+                    // verifycopies <map> [samples]: compares random blocks in each READY copy with the original map
+                    var map = c().getMapManager().getMap(a[1]);
+                    int samples = a.length > 2 ? Integer.parseInt(a[2]) : 3000;
+                    var source = Bukkit.getWorld(map.getWorldName());
+                    var bounds = map.getBounds();
+                    var random = new java.util.Random(7);
+                    int copies = 0, bad = 0, checked = 0;
+                    for (var copy : c().getArenas().copies(a[1])) {
+                        if (copy.status() != me.advait.contender.arena.ArenaCopy.Status.READY) continue;
+                        copies++;
+                        var target = Bukkit.getWorld(copy.layout().getWorldName());
+                        int dx = copy.layout().getBounds().minX() - bounds.minX(), dy = copy.layout().getBounds().minY() - bounds.minY(), dz = copy.layout().getBounds().minZ() - bounds.minZ();
+                        int mismatches = 0;
+                        for (int i = 0; i < samples; i++) {
+                            int x = bounds.minX() + random.nextInt(bounds.maxX() - bounds.minX() + 1);
+                            int y = bounds.minY() + random.nextInt(bounds.maxY() - bounds.minY() + 1);
+                            int z = bounds.minZ() + random.nextInt(bounds.maxZ() - bounds.minZ() + 1);
+                            var original = source.getBlockAt(x, y, z).getBlockData();
+                            var pasted = target.getBlockAt(x + dx, y + dy, z + dz).getBlockData();
+                            checked++;
+                            if (!original.equals(pasted)) mismatches++;
+                        }
+                        if (mismatches > 0) { bad++; s.sendMessage("copy " + copy.slot() + ": " + mismatches + " of " + samples + " blocks differ"); }
+                    }
+                    s.sendMessage(a[1] + ": " + copies + " ready copies checked, " + checked + " blocks compared, " + bad + " copies differ");
+                }
                 case "dirtyall" -> c().getArenas().copies(a[1]).forEach(copy -> { if (copy.status() == me.advait.contender.arena.ArenaCopy.Status.IN_USE) copy.markDirty(); });
                 case "game" -> {
                     var type = c().getMinigames().type(a[1]);

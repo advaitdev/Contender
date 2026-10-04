@@ -78,11 +78,16 @@ public final class ArenaDialogs {
                         else { Dialogs.tell(p, map.getDisplayName() + " saved. Now set both team spawns."); spawns(p, map.getId()); }
                     });
                 }), NAV);
-        dialogs.show(player, "New Map", List.of(DialogBody.plainMessage(DialogText.lines(
+        long volume = plugin.getArenas().selectionVolume(player);
+        int copies = plugin.getArenas().suggestedCopies(volume);
+        Component intro = DialogText.lines(
                 DialogText.muted("Saves everything inside your WorldEdit selection, including"),
-                DialogText.muted("air above the floor and any decorations. Spawns come next.")), 320)), List.of(
+                DialogText.muted("air above the floor and any decorations. Spawns come next."));
+        // Big maps paste slowly, so they start with fewer copies.
+        if (volume > 1_000_000) intro = DialogText.lines(intro, text(String.format(java.util.Locale.ROOT, "Big selection (%,d blocks), so it starts with %d copies.", volume, copies), WARNING));
+        dialogs.show(player, "New Map", List.of(DialogBody.plainMessage(intro, 320)), List.of(
                 Dialogs.text("name", "Map name", "", 64),
-                Dialogs.number("copies", "Arena copies (matches at once)", Math.clamp(plugin.getConfig().getInt("arenas.copies-per-map", 20), 1, 100), 1, 100, 1)),
+                Dialogs.number("copies", "Arena copies (matches at once)", copies, 1, 100, 1)),
                 buttons, 2, NAV, null);
     }
 

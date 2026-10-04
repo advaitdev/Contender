@@ -78,9 +78,28 @@ public final class Contender extends JavaPlugin {
     private StageBoard board;
     private VoiceService voice;
 
+    /**
+     * Older versions saved interview spots as Bukkit locations, which can't be read while their world isn't loaded
+     * yet, and are then dropped. Turn them into plain coordinates before the config is first read.
+     */
+    private void unwrapSavedLocations() {
+        java.io.File file = new java.io.File(getDataFolder(), "config.yml");
+        try {
+            String text = java.nio.file.Files.readString(file.toPath());
+            String unwrapped = text.replaceAll("(?m)^[ \\t]*==: org\\.bukkit\\.Location[ \\t]*\\r?\\n", "");
+            if (!unwrapped.equals(text)) {
+                java.nio.file.Files.writeString(file.toPath(), unwrapped);
+                getLogger().info("Converted saved interview spots to plain coordinates.");
+            }
+        } catch (java.io.IOException failure) {
+            getLogger().warning("Could not check config.yml for saved locations: " + failure.getMessage());
+        }
+    }
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        unwrapSavedLocations();
         roles = new RoleManager(this);
         tiers = new TierService(this);
         lobby = new LobbyService(this);

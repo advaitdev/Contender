@@ -102,15 +102,20 @@ public final class SnapshotStore {
         for (Object effect : saved.getList("effects", List.of())) {
             if (effect instanceof PotionEffect potion) player.addPotionEffect(potion);
         }
-        GameMode mode;
-        try { mode = GameMode.valueOf(saved.getString("mode", "SURVIVAL")); }
-        catch (IllegalArgumentException invalid) { mode = GameMode.SURVIVAL; }
+        GameMode savedMode;
+        try { savedMode = GameMode.valueOf(saved.getString("mode", "SURVIVAL")); }
+        catch (IllegalArgumentException invalid) { savedMode = GameMode.SURVIVAL; }
+        GameMode mode = savedMode;
         if (plugin.getRoleManager().getRole(player.getUniqueId()) == PlayerRole.SPECTATOR) mode = GameMode.SPECTATOR;
         else if (mode == GameMode.SPECTATOR) mode = GameMode.SURVIVAL;
         player.setGameMode(mode);
-        boolean flight = mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR || saved.getBoolean("flight");
+        // Flight only carries over if they could fly in Survival or Adventure (another plugin's /fly). Spectator and
+        // Creative always fly, so a snapshot taken in those modes must not leave someone flying in Survival.
+        boolean walking = mode == GameMode.SURVIVAL || mode == GameMode.ADVENTURE;
+        boolean carried = (savedMode == GameMode.SURVIVAL || savedMode == GameMode.ADVENTURE) && saved.getBoolean("flight");
+        boolean flight = !walking || carried;
         player.setAllowFlight(flight);
-        if (flight) player.setFlying(mode == GameMode.SPECTATOR || saved.getBoolean("flying"));
+        player.setFlying(flight && (mode == GameMode.SPECTATOR || carried && saved.getBoolean("flying")));
         var maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
         double max = maxHealth == null ? 20 : maxHealth.getValue();
         player.setHealth(Math.max(1, Math.min(max, saved.getDouble("health", max))));

@@ -108,6 +108,12 @@ public final class LobbyService {
         PlayerRole role = plugin.getRoleManager().getRole(player.getUniqueId());
         if (role == PlayerRole.SPECTATOR) { player.setGameMode(GameMode.SPECTATOR); return; }
         if (player.getGameMode() == GameMode.SPECTATOR) player.setGameMode(GameMode.SURVIVAL);
+        // Contestants never fly in the lobby. This also clears anyone left flying by an older bug.
+        boolean walking = player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE;
+        if (role == PlayerRole.CONTESTANT && walking && !player.isOp() && player.getAllowFlight()) {
+            player.setFlying(false);
+            player.setAllowFlight(false);
+        }
     }
 
     public boolean teleportOnJoin() { return plugin.getConfig().getBoolean("lobby.teleport-on-join", true); }
